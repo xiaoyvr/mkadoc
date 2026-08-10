@@ -1,0 +1,19 @@
+{
+  "name": "mkadoc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "mkadoc": "./bin/mkadoc.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@asciidoctor/core": "^4.0.8",
+    "asciidoctor-kroki": "^1.0.1",
+    "chokidar": "^4.0.3",
+    "live-server": "^1.2.2",
+    "yaml": "^2.8.0"
+  }
+}
