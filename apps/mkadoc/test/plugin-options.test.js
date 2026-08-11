@@ -1,39 +1,58 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { z } from 'zod'
+import krokiDiagramPlugin from '../src/builtins/kroki-diagram.js'
 import navPlugin from '../src/builtins/nav.js'
 import shikiPlugin from '../src/builtins/shiki.js'
 import { createHost } from '../src/plugin/host.js'
 import { loadPlugins } from '../src/plugin/load.js'
-import { resolvePluginOptions } from '../src/plugin/options.js'
+import { parsePluginOptions } from '../src/plugin/options.js'
 import { smokeFixture, withTempProject } from './helpers/project.js'
 
-describe('resolvePluginOptions', () => {
-  it('merges defaults and rejects unknown keys', () => {
-    assert.deepEqual(resolvePluginOptions('mkadoc:nav', {}, { nav: 'docs/_nav.adoc' }), {
+describe('parsePluginOptions', () => {
+  const schema = z
+    .object({
+      nav: z.string().min(1).default('docs/_nav.adoc'),
+    })
+    .strict()
+
+  it('applies defaults and rejects unknown keys', () => {
+    assert.deepEqual(parsePluginOptions('mkadoc:nav', schema, {}), {
       nav: 'docs/_nav.adoc',
     })
-    assert.deepEqual(
-      resolvePluginOptions('mkadoc:nav', { nav: 'x.adoc' }, { nav: 'docs/_nav.adoc' }),
-      { nav: 'x.adoc' },
+    assert.deepEqual(parsePluginOptions('mkadoc:nav', schema, { nav: 'x.adoc' }), {
+      nav: 'x.adoc',
+    })
+    assert.throws(
+      () => parsePluginOptions('mkadoc:nav', schema, { nope: true }),
+      /mkadoc:nav: \(root\): Unrecognized key: "nope"/,
     )
     assert.throws(
-      () => resolvePluginOptions('mkadoc:nav', { nope: true }, { nav: 'docs/_nav.adoc' }),
-      /mkadoc:nav: unknown option: nope/,
-    )
-    assert.throws(
-      () => resolvePluginOptions('mkadoc:nav', [], { nav: 'docs/_nav.adoc' }),
-      /options must be a mapping/,
+      () => parsePluginOptions('mkadoc:nav', schema, []),
+      /mkadoc:nav: \(root\): Invalid input: expected object, received array/,
     )
   })
 })
 
 describe('plugin-owned option validation', () => {
   it('nav factory rejects unknown options', () => {
-    assert.throws(() => navPlugin({ thme: 'x' }), /mkadoc:nav: unknown option/)
+    assert.throws(() => navPlugin({ thme: 'x' }), /mkadoc:nav:.*Unrecognized key: "thme"/)
   })
 
   it('shiki factory rejects unknown options', () => {
-    assert.throws(() => shikiPlugin({ thme: 'nord' }), /mkadoc:shiki: unknown option: thme/)
+    assert.throws(() => shikiPlugin({ thme: 'nord' }), /mkadoc:shiki:.*Unrecognized key: "thme"/)
+  })
+
+  it('kroki factory requires server_url', () => {
+    assert.throws(() => krokiDiagramPlugin({}), /mkadoc:kroki-diagram:.*server_url/)
+    assert.throws(() => krokiDiagramPlugin({ server_url: '' }), /mkadoc:kroki-diagram:.*server_url/)
+  })
+
+  it('kroki factory rejects unknown options', () => {
+    assert.throws(
+      () => krokiDiagramPlugin({ server_url: 'http://127.0.0.1:8080', nope: true }),
+      /mkadoc:kroki-diagram:.*Unrecognized key: "nope"/,
+    )
   })
 
   it('loadPlugins surfaces plugin option errors', async () => {
@@ -49,7 +68,7 @@ describe('plugin-owned option validation', () => {
       })
       await assert.rejects(
         () => loadPlugins({ 'mkadoc:nav': { bogus: true } }, host),
-        /mkadoc:nav: unknown option: bogus/,
+        /mkadoc:nav:.*Unrecognized key: "bogus"/,
       )
     })
   })

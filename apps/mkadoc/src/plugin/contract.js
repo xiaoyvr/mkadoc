@@ -14,9 +14,9 @@
  *
  * There is no third-party / path-based plugin loading.
  *
- * Options: each plugin owns defaults and validates its option keys (see
- * `resolvePluginOptions` in `options.js`). Core config only allowlists locators
- * (`locators.js`); plugin option fields are opaque to Zod.
+ * Options: each plugin owns a Zod schema and validates via `parsePluginOptions`
+ * (`options.js`). Core config only allowlists locators (`locators.js`); plugin
+ * option fields are opaque to the project ConfigSchema.
  *
  * @typedef {'full' | 'incremental' | 'assets'} BuildMode
  *

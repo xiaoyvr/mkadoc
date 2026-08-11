@@ -1,24 +1,19 @@
+import { formatConfigZodError } from '../config-schema.js'
 import { userError } from '../errors.js'
 
 /**
- * Merge plugin options with defaults; reject unknown keys (plugin-owned validation).
+ * Validate plugin options with a Zod schema (defaults + strict unknown keys).
  *
- * @template {Record<string, unknown>} T
+ * @template {import('zod').ZodType} S
  * @param {string} locator
+ * @param {S} schema
  * @param {unknown} raw
- * @param {T} defaults
- * @returns {T}
+ * @returns {import('zod').infer<S>}
  */
-export function resolvePluginOptions(locator, raw, defaults) {
-  const opts = raw == null ? {} : raw
-  if (typeof opts !== 'object' || Array.isArray(opts)) {
-    throw userError(`mkadoc: ${locator}: options must be a mapping`)
+export function parsePluginOptions(locator, schema, raw) {
+  const result = schema.safeParse(raw ?? {})
+  if (!result.success) {
+    throw userError(`mkadoc: ${locator}: ${formatConfigZodError(result.error)}`)
   }
-  const unknown = Object.keys(opts).filter((key) => !Object.hasOwn(defaults, key))
-  if (unknown.length) {
-    throw userError(
-      `mkadoc: ${locator}: unknown option${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}`,
-    )
-  }
-  return { ...defaults, ...opts }
+  return result.data
 }

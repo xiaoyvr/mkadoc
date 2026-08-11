@@ -1,14 +1,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { load } from '@asciidoctor/core'
+import { z } from 'zod'
 import { resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
-import { resolvePluginOptions } from '../plugin/options.js'
+import { parsePluginOptions } from '../plugin/options.js'
 
-const DEFAULTS = {
-  nav: 'docs/_nav.adoc',
-  css_href: '/styles/nav.css',
-  js_href: '/styles/nav.js',
-}
+const OptionsSchema = z
+  .object({
+    nav: z.string().min(1).default('docs/_nav.adoc'),
+    css_href: z.string().min(1).default('/styles/nav.css'),
+    js_href: z.string().min(1).default('/styles/nav.js'),
+  })
+  .strict()
 
 /**
  * Load _nav.adoc, extract tagged passthrough blocks via the Asciidoctor AST,
@@ -61,7 +64,7 @@ export default function navPlugin(rawOptions = {}) {
     nav,
     css_href: cssHref,
     js_href: jsHref,
-  } = resolvePluginOptions('mkadoc:nav', rawOptions, DEFAULTS)
+  } = parsePluginOptions('mkadoc:nav', OptionsSchema, rawOptions)
 
   return {
     name: 'nav',

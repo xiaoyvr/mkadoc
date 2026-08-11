@@ -35,7 +35,8 @@ const AssetSchema = z
 
 /**
  * Plugin option values are opaque here — each plugin validates/defaults its own
- * options at load time. Core only allowlists builtin locators.
+ * options with Zod at load time (`parsePluginOptions`). Core only allowlists
+ * builtin locators.
  */
 const PluginsSchema = z.preprocess(
   (v) => (v == null ? {} : v),

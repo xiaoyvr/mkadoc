@@ -1,26 +1,34 @@
 import path from 'node:path'
 import { SyntaxHighlighter, SyntaxHighlighterBase } from '@asciidoctor/core'
 import { createHighlighter } from 'shiki'
+import { z } from 'zod'
 import { resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
-import { resolvePluginOptions } from '../plugin/options.js'
+import { parsePluginOptions } from '../plugin/options.js'
 
-const DEFAULTS = {
-  theme: 'github-light-default',
-  langs: [
-    'bash',
-    'shellscript',
-    'nix',
-    'javascript',
-    'json',
-    'yaml',
-    'ruby',
-    'python',
-    'plaintext',
-  ],
-  css_href: '/styles/shiki.css',
-}
+const DEFAULT_LANGS = [
+  'bash',
+  'shellscript',
+  'nix',
+  'javascript',
+  'json',
+  'yaml',
+  'ruby',
+  'python',
+  'plaintext',
+]
 
-const DEFAULT_THEME = DEFAULTS.theme
+const OptionsSchema = z
+  .object({
+    theme: z.string().min(1).default('github-light-default'),
+    langs: z
+      .array(z.string().min(1))
+      .default([...DEFAULT_LANGS])
+      .transform((langs) => (langs.length ? langs : [...DEFAULT_LANGS])),
+    css_href: z.string().min(1).default('/styles/shiki.css'),
+  })
+  .strict()
+
+const DEFAULT_THEME = 'github-light-default'
 
 const LANG_ALIASES = {
   sh: 'shellscript',
@@ -168,11 +176,11 @@ export function getShikiRuntimeSnapshot() {
  * @returns {import('../plugin/contract.js').MkadocPlugin}
  */
 export default function shikiPlugin(rawOptions = {}) {
-  const options = resolvePluginOptions('mkadoc:shiki', rawOptions, DEFAULTS)
-  const theme = options.theme
-  const langs =
-    Array.isArray(options.langs) && options.langs.length ? options.langs : DEFAULTS.langs
-  const cssHref = options.css_href
+  const {
+    theme,
+    langs,
+    css_href: cssHref,
+  } = parsePluginOptions('mkadoc:shiki', OptionsSchema, rawOptions)
 
   return {
     name: 'shiki',

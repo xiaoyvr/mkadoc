@@ -107,18 +107,18 @@ Contract (typedefs + lifecycle): `src/plugin/contract.js`.
 
 | `mkadoc:nav` | Sidebar from `_nav.adoc`; extracts CSS/JS passthrough blocks; header docinfo.
 | `mkadoc:shiki` | Build-time syntax highlighting for `[source]` blocks.
-| `mkadoc:kroki-diagram` | Diagram blocks via Kroki (`server_url`, default `http://127.0.0.1:8080`).
+| `mkadoc:kroki-diagram` | Diagram blocks via Kroki (requires `server_url`).
 |===
 
 `css_href` / `js_href` (nav, shiki) are **site-root paths** (e.g. `/styles/nav.css`).
 They control both the `<link>`/`<script>` href and the write path under `output/`
 (via `resolveSiteAsset` in `src/fs-utils.js`). Defaults stay under `/styles/`.
 
-Plugin defaults (owned by each factory):
+Plugin options are validated with Zod in each factory (`parsePluginOptions`):
 
 * `mkadoc:nav` — `nav: docs/_nav.adoc`, `css_href: /styles/nav.css`, `js_href: /styles/nav.js`
 * `mkadoc:shiki` — `theme: github-light-default`, bundled `langs`, `css_href: /styles/shiki.css`
-* `mkadoc:kroki-diagram` — `server_url: http://127.0.0.1:8080` (overridable by `KROKI_SERVER_URL`), `data_uri`/`allow_uri_read: true`, `cache_dir: diagram`
+* `mkadoc:kroki-diagram` — required `server_url`; defaults `data_uri`/`allow_uri_read: true`, `cache_dir: diagram`
 
 === Plugin lifecycle
 
