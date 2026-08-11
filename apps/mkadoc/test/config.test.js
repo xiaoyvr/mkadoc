@@ -1,17 +1,14 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import {
-  loadConfig,
-  loadLiterateConfig,
-  parsePort,
-  parseProjectConfig,
-  resolveServeListen,
-} from '../src/config.js'
+import { loadConfig, parsePort, resolveServeListen } from '../src/config.js'
+import { parseProjectConfig } from '../src/config-schema.js'
 import { withTempProject } from './helpers/project.js'
 
-describe('loadLiterateConfig', () => {
+describe('loadConfig (literate AsciiDoc)', () => {
   it('merges multiple [mkadoc-config] YAML blocks', async () => {
-    const source = `= Site
+    await withTempProject(
+      {
+        'mkadoc.adoc': `= Site
 
 [mkadoc-config]
 ----
@@ -30,16 +27,23 @@ plugins:
 serve:
   remote: true
 ----
-`
-    assert.deepEqual(await loadLiterateConfig(source), {
-      source: 'docs',
-      serve: { port: 8000, remote: true },
-      plugins: { 'mkadoc:nav': { nav: 'docs/_nav.adoc' } },
-    })
+`,
+        'docs/.keep': '',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        assert.equal(cfg.source, 'docs')
+        assert.equal(cfg.serve.port, 8000)
+        assert.equal(cfg.serve.remote, true)
+        assert.equal(cfg.plugins['mkadoc:nav'].nav, 'docs/_nav.adoc')
+      },
+    )
   })
 
   it('skips empty config blocks', async () => {
-    const source = `= Site
+    await withTempProject(
+      {
+        'mkadoc.adoc': `= Site
 
 [mkadoc-config]
 ----
@@ -49,12 +53,20 @@ serve:
 ----
 output: site
 ----
-`
-    assert.deepEqual(await loadLiterateConfig(source), { output: 'site' })
+`,
+        'docs/.keep': '',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        assert.equal(cfg.output, 'site')
+      },
+    )
   })
 
   it('rejects non-mapping YAML in a config block', async () => {
-    const source = `= Site
+    await withTempProject(
+      {
+        'mkadoc.adoc': `= Site
 
 [mkadoc-config]
 ----
@@ -62,12 +74,41 @@ output: site
 - a
 - list
 ----
-`
-    await assert.rejects(() => loadLiterateConfig(source), /must be a YAML mapping/)
+`,
+        'docs/.keep': '',
+      },
+      async (root) => {
+        await assert.rejects(() => loadConfig('mkadoc.adoc', root), /must be a YAML mapping/)
+      },
+    )
   })
 
-  it('returns {} when there are no config blocks', async () => {
-    assert.deepEqual(await loadLiterateConfig('= Just a doc\n\nHello.\n'), {})
+  it('replaces arrays from later config blocks instead of concatenating', async () => {
+    await withTempProject(
+      {
+        'mkadoc.adoc': `= Site
+
+[mkadoc-config]
+----
+assets:
+  - from: a
+    to: b
+----
+
+[mkadoc-config]
+----
+assets:
+  - from: c
+    to: d
+----
+`,
+        'docs/.keep': '',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        assert.deepEqual(cfg.assets, [{ from: 'c', to: 'd' }])
+      },
+    )
   })
 })
 
@@ -143,7 +184,6 @@ describe('parseProjectConfig (zod schema)', () => {
     })
     assert.equal(cfg.plugins['mkadoc:nav'].nav, 'docs/_nav.adoc')
     assert.equal(cfg.plugins['mkadoc:shiki'].theme, 'nord')
-    // Typos are opaque to core; plugins reject them at load time.
     assert.equal(cfg.plugins['mkadoc:shiki'].thme, 'typo')
   })
 

@@ -2,7 +2,6 @@ import krokiDiagram from '../builtins/kroki-diagram.js'
 import nav from '../builtins/nav.js'
 import shiki, { afterPluginsLoaded } from '../builtins/shiki.js'
 import { userError } from '../errors.js'
-import './contract.js'
 import { BUILTIN_LOCATORS } from './locators.js'
 
 /** @type {Record<string, import('./contract.js').MkadocPluginFactory>} */
@@ -25,6 +24,7 @@ for (const locator of BUILTIN_LOCATORS) {
 function createPluginRunner(loaded, host) {
   return {
     list: loaded,
+
     /**
      * @param {import('./contract.js').BuildContext} ctx
      */
@@ -34,7 +34,6 @@ function createPluginRunner(loaded, host) {
       }
     },
     async check() {
-      /** @type {{ locator: string, ok: boolean, message?: string }[]} */
       const results = []
       for (const { locator, plugin } of loaded) {
         if (!plugin.check) continue
@@ -68,26 +67,7 @@ export async function loadPlugins(pluginsConfig, host) {
     loaded.push({ locator, plugin })
   }
 
-  // Drop process-global Shiki runtime when the plugin is no longer enabled
-  // (e.g. config reload under `mkadoc serve`).
   afterPluginsLoaded(loaded.map(({ locator }) => locator))
 
-  return createPluginRunner(loaded, host)
-}
-
-/**
- * Test helper: load an ordered list of plugin instances (bypass builtin registry).
- * @param {import('./contract.js').MkadocPlugin[]} plugins
- * @param {import('./contract.js').MkadocHost} host
- */
-export async function loadPluginInstances(plugins, host) {
-  /** @type {{ locator: string, plugin: import('./contract.js').MkadocPlugin }[]} */
-  const loaded = []
-  for (const plugin of plugins) {
-    const locator = plugin.locator || plugin.name
-    plugin.locator = locator
-    if (plugin.setup) await plugin.setup(host)
-    loaded.push({ locator, plugin })
-  }
   return createPluginRunner(loaded, host)
 }

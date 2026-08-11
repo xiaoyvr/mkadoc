@@ -2,13 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import {
-  copyAssetDirs,
-  relToRoot,
-  sameFileContent,
-  walkDir,
-  writeIfChanged,
-} from '../src/fs-utils.js'
+import { copyAssetDirs, relToRoot, walkDir, writeIfChanged } from '../src/fs-utils.js'
 import { withTempProject } from './helpers/project.js'
 
 describe('fs-utils', () => {
@@ -29,25 +23,6 @@ describe('fs-utils', () => {
       assert.equal(writeIfChanged(file, 'two'), true)
       assert.equal(fs.readFileSync(file, 'utf8'), 'two')
     })
-  })
-
-  it('sameFileContent compares size then bytes', async () => {
-    await withTempProject(
-      {
-        'a.txt': 'hello',
-        'b.txt': 'hello',
-        'c.txt': 'world',
-      },
-      async (root) => {
-        const a = path.join(root, 'a.txt')
-        const b = path.join(root, 'b.txt')
-        const c = path.join(root, 'c.txt')
-        const missing = path.join(root, 'missing.txt')
-        assert.equal(sameFileContent(a, b), true)
-        assert.equal(sameFileContent(a, c), false)
-        assert.equal(sameFileContent(a, missing), false)
-      },
-    )
   })
 
   it('walkDir visits files and respects shouldEnterDir / missing skip', async () => {

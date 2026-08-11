@@ -2,18 +2,6 @@ import { z } from 'zod'
 import { userError } from './errors.js'
 import { BUILTIN_LOCATORS } from './plugin/locators.js'
 
-/**
- * Parsed project config (Zod output), before runtime fields are attached.
- *
- * @typedef {object} ProjectConfig
- * @property {string} source
- * @property {string} output
- * @property {string} cache
- * @property {{ from: string, to: string }[]} assets
- * @property {Record<string, Record<string, unknown>>} plugins
- * @property {{ remote: boolean, port: number }} serve
- */
-
 const portSchema = z.preprocess((value) => {
   if (value === undefined || value === null || value === '') return undefined
   return Number(value)
@@ -33,11 +21,6 @@ const AssetSchema = z
   })
   .strict()
 
-/**
- * Plugin option values are opaque here — each plugin validates/defaults its own
- * options with Zod at load time (`parsePluginOptions`). Core only allowlists
- * builtin locators.
- */
 const PluginsSchema = z.preprocess(
   (v) => (v == null ? {} : v),
   z.record(z.string(), z.record(z.string(), z.unknown())).superRefine((plugins, ctx) => {
@@ -53,12 +36,7 @@ const PluginsSchema = z.preprocess(
   }),
 )
 
-/**
- * Project config mapping (before runtime fields like `root` are attached).
- * Unknown top-level / `serve.*` keys are rejected (`.strict()`).
- * Unknown plugin *locators* are rejected; plugin option fields are not.
- */
-export const ConfigSchema = z
+const ConfigSchema = z
   .object({
     source: z.string().min(1).default('docs'),
     output: z.string().min(1).default('site'),
@@ -69,9 +47,6 @@ export const ConfigSchema = z
   })
   .strict()
 
-/**
- * @param {import('zod').ZodError} err
- */
 export function formatConfigZodError(err) {
   return err.issues
     .map((issue) => {
@@ -81,11 +56,6 @@ export function formatConfigZodError(err) {
     .join('; ')
 }
 
-/**
- * Validate and apply defaults to a raw config mapping.
- * @param {unknown} raw
- * @returns {ProjectConfig}
- */
 export function parseProjectConfig(raw) {
   const result = ConfigSchema.safeParse(raw ?? {})
   if (!result.success) {

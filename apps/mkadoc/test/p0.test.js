@@ -2,9 +2,8 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { build, convertAdocFile } from '../src/build.js'
+import { build } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
-import { escapeHtmlAttr } from '../src/html-utils.js'
 import { createHost } from '../src/plugin/host.js'
 import { smokeFixture, withTempProject } from './helpers/project.js'
 
@@ -55,27 +54,7 @@ describe('P0: publish clean', () => {
   })
 })
 
-describe('P0: page-level convert errors', () => {
-  it('convertAdocFile names the page in the error', async () => {
-    await assert.rejects(
-      () =>
-        convertAdocFile('docs/missing.adoc', '/no/such/docs/missing.adoc', {
-          mkdirs: true,
-        }),
-      (err) => {
-        assert.match(String(err.message), /failed to convert docs\/missing\.adoc/)
-        assert.ok(err.cause)
-        return true
-      },
-    )
-  })
-})
-
 describe('P0: docinfo attribute escaping', () => {
-  it('escapeHtmlAttr escapes &, quotes, and brackets', () => {
-    assert.equal(escapeHtmlAttr('a&b="x"<y>'), 'a&amp;b=&quot;x&quot;&lt;y&gt;')
-  })
-
   it('writeHeadDocinfo escapes attribute values', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.yml', root)
@@ -101,7 +80,6 @@ describe('P0: docinfo attribute escaping', () => {
       assert.match(body, /href="\/styles\/x\.css&quot; onload=&quot;alert\(1\)"/)
       assert.match(body, /src="\/styles\/x\.js&quot;&gt;&lt;img src=x onerror=alert\(1\)&gt;&lt;"/)
       assert.match(body, /data-x="a&amp;b"/)
-      // Quote break-out must not create a real onload attribute.
       assert.doesNotMatch(body, /onload="alert/)
     })
   })

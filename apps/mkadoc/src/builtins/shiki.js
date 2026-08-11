@@ -38,20 +38,11 @@ const LANG_ALIASES = {
   js: 'javascript',
 }
 
-/**
- * Process-global runtime for the Asciidoctor `shiki` adapter.
- * Adapter registration cannot be removed from Asciidoctor’s factory, so we
- * swap between an active adapter and an inactive stub that fails clearly.
- */
 const shared = {
-  /** @type {import('shiki').Highlighter | null} */
   highlighter: null,
-  /** @type {string | null} */
   key: null,
   theme: DEFAULT_THEME,
-  /** @type {{ bg: string, fg: string }} */
   colors: { bg: '#ffffff', fg: '#1f2328' },
-  /** @type {'absent' | 'active' | 'inactive'} */
   adapterState: 'absent',
 }
 
@@ -62,11 +53,6 @@ function langListFor(langs) {
 }
 
 class ActiveShikiHighlighter extends SyntaxHighlighterBase {
-  /**
-   * @param {string} name
-   * @param {string} [backend]
-   * @param {{ document?: { hasAttribute: Function, getAttribute: Function } }} [opts]
-   */
   constructor(name, backend, opts = {}) {
     super(name, backend, opts)
     this.name = 'shiki'
@@ -101,11 +87,6 @@ class ActiveShikiHighlighter extends SyntaxHighlighterBase {
 }
 
 class InactiveShikiHighlighter extends SyntaxHighlighterBase {
-  /**
-   * @param {string} name
-   * @param {string} [backend]
-   * @param {object} [opts]
-   */
   constructor(name, backend, opts = {}) {
     super(name, backend, opts)
     this.name = 'shiki'
@@ -124,16 +105,12 @@ class InactiveShikiHighlighter extends SyntaxHighlighterBase {
 
 function ensureActiveAdapter() {
   if (shared.adapterState === 'active') return
-  // Asciidoctor 4: register(adapter, ...names) — process-global; overwrites prior entry.
+
   SyntaxHighlighter.register(ActiveShikiHighlighter, 'shiki')
   shared.adapterState = 'active'
 }
 
-/**
- * Dispose the Highlighter and park an inactive adapter under the `shiki` name.
- * Safe to call when Shiki was never enabled.
- */
-export function disposeShikiRuntime() {
+function disposeShikiRuntime() {
   shared.highlighter?.dispose()
   shared.highlighter = null
   shared.key = null
@@ -142,39 +119,13 @@ export function disposeShikiRuntime() {
   shared.adapterState = 'inactive'
 }
 
-/**
- * Called after builtins are loaded so a config reload that drops `mkadoc:shiki`
- * does not leave a live Highlighter (or active adapter) in the serve process.
- * @param {string[]} locators
- */
 export function afterPluginsLoaded(locators = []) {
   if (!locators.includes('mkadoc:shiki')) {
     disposeShikiRuntime()
   }
 }
 
-/**
- * Test/introspection snapshot of the process-global runtime.
- */
-export function getShikiRuntimeSnapshot() {
-  return {
-    adapterState: shared.adapterState,
-    hasHighlighter: Boolean(shared.highlighter),
-    key: shared.key,
-    theme: shared.theme,
-    colors: { ...shared.colors },
-  }
-}
-
-/**
- * Build-time Shiki highlighter (same registration model as tani/asciidoctor-shiki).
- *
- * Theme background/foreground are taken from the loaded Shiki theme (not hardcoded)
- * and written to site/styles/shiki.css so listing blocks match the token colors.
- *
- * @param {Record<string, unknown>} [rawOptions]
- * @returns {import('../plugin/contract.js').MkadocPlugin}
- */
+/** @type {import('../plugin/contract.js').MkadocPluginFactory} */
 export default function shikiPlugin(rawOptions = {}) {
   const {
     theme,
@@ -215,7 +166,6 @@ export default function shikiPlugin(rawOptions = {}) {
 
       ensureActiveAdapter()
 
-      // Keep adapter defaults in sync when theme changes without re-registering.
       shared.theme = theme
 
       host.addAttributes({

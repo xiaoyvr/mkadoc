@@ -13,18 +13,7 @@ const OptionsSchema = z
   })
   .strict()
 
-/**
- * Load _nav.adoc, extract tagged passthrough blocks via the Asciidoctor AST,
- * remove them from the tree, and convert the remaining sidebar body.
- *
- * Tagged blocks:
- *   [mkadoc-nav-css]++++ … ++++  → style mkadoc-nav-css
- *   [mkadoc-nav-js]++++ … ++++   → style mkadoc-nav-js
- *
- * @param {string} source
- * @returns {Promise<{ css: string, js: string, html: string }>}
- */
-export async function extractNavChrome(source) {
+async function extractNavChrome(source) {
   const doc = await load(source, {
     safe: 'unsafe',
     standalone: false,
@@ -36,7 +25,7 @@ export async function extractNavChrome(source) {
 
   function take(style) {
     let text = ''
-    // Collect first, then mutate — findBy iteration is not safe to splice mid-loop.
+
     const matched = [...doc.findBy((b) => b.getStyle() === style)]
     for (const block of matched) {
       const chunk = block.getSource?.() ?? (block.lines || []).join('\n')
@@ -55,10 +44,7 @@ export async function extractNavChrome(source) {
   return { css, js, html: String(html) }
 }
 
-/**
- * @param {Record<string, unknown>} [rawOptions]
- * @returns {import('../plugin/contract.js').MkadocPlugin}
- */
+/** @type {import('../plugin/contract.js').MkadocPluginFactory} */
 export default function navPlugin(rawOptions = {}) {
   const {
     nav,

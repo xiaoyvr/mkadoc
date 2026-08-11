@@ -7,26 +7,15 @@ import { copyAssetDirs, relToRoot, walkDir } from './fs-utils.js'
 import { createHost } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
 
-/** Soft cap so Asciidoctor/Kroki are not overwhelmed on large machines. */
 const MAX_CONVERT_CONCURRENCY = 4
 
-/**
- * @returns {number}
- */
-export function defaultConvertConcurrency() {
+function defaultConvertConcurrency() {
   const n =
     typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length
   return Math.max(1, Math.min(MAX_CONVERT_CONCURRENCY, n || 1))
 }
 
-/**
- * Run async work over `items` with at most `limit` in flight.
- * @template T
- * @param {T[]} items
- * @param {number} limit
- * @param {(item: T, index: number) => Promise<unknown>} fn
- */
-export async function mapPool(items, limit, fn) {
+async function mapPool(items, limit, fn) {
   if (items.length === 0) return
   const workers = Math.min(Math.max(1, limit), items.length)
   let next = 0
@@ -60,12 +49,7 @@ function prepareDirs(cfg) {
   fs.mkdirSync(path.join(cfg.root, cfg.docinfoDir), { recursive: true })
 }
 
-/**
- * Asset dirs to copy: configured `assets` plus implicit `<source>/styles` → `<output>/styles`.
- * @param {Pick<import('./config.js').MkadocConfig, 'source' | 'output' | 'assets'>} cfg
- * @returns {{ from: string, to: string }[]}
- */
-export function assetCopyItems(cfg) {
+function assetCopyItems(cfg) {
   const source = cfg.source.replace(/\/$/, '')
   const output = cfg.output.replace(/\/$/, '')
   const implicitFrom = `${source}/styles`
@@ -94,13 +78,7 @@ function listPages(cfg) {
   return pages
 }
 
-/**
- * Convert one AsciiDoc page; rethrow with the page path in the message.
- * @param {string} page root-relative page path (for errors)
- * @param {string} absPath
- * @param {object} opts asciidoctor convertFile options
- */
-export async function convertAdocFile(page, absPath, opts) {
+async function convertAdocFile(page, absPath, opts) {
   try {
     await convertFile(absPath, opts)
   } catch (err) {
@@ -109,12 +87,6 @@ export async function convertAdocFile(page, absPath, opts) {
   }
 }
 
-/**
- * @param {import('./config.js').MkadocConfig} cfg
- * @param {import('./plugin/contract.js').MkadocHost} host
- * @param {string[]} pages
- * @param {{ concurrency?: number }} [opts]
- */
 async function buildPages(cfg, host, pages, { concurrency } = {}) {
   const attrs = { ...host.attributes }
   if (host.wantsDocinfo()) {
@@ -139,12 +111,7 @@ async function buildPages(cfg, host, pages, { concurrency } = {}) {
   })
 }
 
-/**
- * Remove HTML whose source `.adoc` no longer exists.
- * Skips `output/styles/` (generated/copied assets).
- * @param {import('./config.js').MkadocConfig} cfg
- */
-export function pruneStaleHtml(cfg) {
+function pruneStaleHtml(cfg) {
   const outRoot = path.join(cfg.root, cfg.output)
   const stylesPrefix = path.join(cfg.output, 'styles').split(path.sep).join('/')
 
@@ -177,14 +144,7 @@ function cleanupArtifacts(cfg) {
   })
 }
 
-/**
- * Decide rebuild mode from changed paths.
- * @param {import('./config.js').MkadocConfig} cfg
- * @param {Pick<import('./plugin/contract.js').MkadocHost, 'assetPrefixes' | 'classifyPath'>} host
- * @param {{ forceFull?: boolean, paths?: string[] }} [opts]
- * @returns {import('./plugin/contract.js').BuildContext}
- */
-export function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
+function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
   if (forceFull || paths.length === 0) {
     return { mode: 'full', pages: [] }
   }
@@ -199,7 +159,7 @@ export function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
       assetsOnly = true
       continue
     }
-    // Core generic assets: <source>/styles/
+
     const src = cfg.source.replace(/\/$/, '')
     if (p.startsWith(`${src}/styles/`)) {
       assetsOnly = true
@@ -215,11 +175,6 @@ export function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
   return { mode: 'incremental', pages }
 }
 
-/**
- * @param {import('./config.js').MkadocConfig} cfg
- * @param {{ forceFull?: boolean, paths?: string[], clean?: boolean, concurrency?: number }} [opts]
- * @returns {Promise<import('./plugin/contract.js').BuildMode>}
- */
 export async function build(cfg, opts = {}) {
   if (opts.clean) cleanOutput(cfg)
 
@@ -232,8 +187,7 @@ export async function build(cfg, opts = {}) {
   await plugins.contributeChrome(ctx)
 
   if (mode !== 'assets') host.writeHeadDocinfo()
-  // Always copy: incremental may batch page + asset edits, and sameFileContent
-  // skips unchanged files. Includes implicit <source>/styles → <output>/styles.
+
   copyAssetDirs(cfg.root, assetCopyItems(cfg))
 
   switch (mode) {
@@ -249,8 +203,7 @@ export async function build(cfg, opts = {}) {
     case 'incremental':
       console.log(`mkadoc: incremental ${pages.join(' ')}`)
       await buildPages(cfg, host, pages, { concurrency: opts.concurrency })
-      // Also prune: a delete batched with page edits is incremental, and would
-      // otherwise leave orphan HTML for the removed sources.
+
       pruneStaleHtml(cfg)
       break
   }

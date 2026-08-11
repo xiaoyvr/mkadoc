@@ -4,12 +4,12 @@ import path from 'node:path'
 import { after, describe, it } from 'node:test'
 import { SyntaxHighlighter } from '@asciidoctor/core'
 import { build } from '../src/build.js'
-import { disposeShikiRuntime, getShikiRuntimeSnapshot } from '../src/builtins/shiki.js'
+import { afterPluginsLoaded } from '../src/builtins/shiki.js'
 import { loadConfig } from '../src/config.js'
 import { smokeFixture, withTempProject } from './helpers/project.js'
 
 after(() => {
-  disposeShikiRuntime()
+  afterPluginsLoaded([])
 })
 
 function shikiFixture(theme = 'github-light-default') {
@@ -39,8 +39,6 @@ describe('shiki process-global runtime', () => {
       const css1 = fs.readFileSync(path.join(root, 'site/styles/shiki.css'), 'utf8')
       const html1 = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8')
       assert.match(html1, /pre.*shiki|class="shiki"/)
-      assert.equal(getShikiRuntimeSnapshot().adapterState, 'active')
-      assert.equal(getShikiRuntimeSnapshot().hasHighlighter, true)
 
       fs.writeFileSync(
         path.join(root, 'mkadoc.yml'),
@@ -57,8 +55,7 @@ plugins:
       const css2 = fs.readFileSync(path.join(root, 'site/styles/shiki.css'), 'utf8')
       assert.notEqual(css1, css2)
       assert.match(css2, /nord/i)
-      assert.equal(getShikiRuntimeSnapshot().theme, 'nord')
-      assert.equal(getShikiRuntimeSnapshot().adapterState, 'active')
+      assert.match(fs.readFileSync(path.join(root, 'site/index.html'), 'utf8'), /shiki/)
     })
   })
 
@@ -66,8 +63,6 @@ plugins:
     await withTempProject(shikiFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.yml', root)
       await build(cfg, { forceFull: true })
-      assert.equal(getShikiRuntimeSnapshot().hasHighlighter, true)
-      assert.equal(getShikiRuntimeSnapshot().adapterState, 'active')
 
       fs.writeFileSync(
         path.join(root, 'mkadoc.yml'),
@@ -80,10 +75,6 @@ plugins: {}
       const cfg2 = await loadConfig('mkadoc.yml', root)
       await build(cfg2, { forceFull: true })
 
-      const snap = getShikiRuntimeSnapshot()
-      assert.equal(snap.hasHighlighter, false)
-      assert.equal(snap.adapterState, 'inactive')
-      // Inactive adapter stays registered under the process-global name.
       const Adapter = SyntaxHighlighter.for('shiki')
       assert.ok(Adapter)
       const instance = new Adapter('shiki')
@@ -105,7 +96,6 @@ plugins: {}
 `,
       )
       await build(await loadConfig('mkadoc.yml', root), { forceFull: true })
-      assert.equal(getShikiRuntimeSnapshot().adapterState, 'inactive')
 
       fs.writeFileSync(
         path.join(root, 'mkadoc.yml'),
@@ -118,11 +108,7 @@ plugins:
 `,
       )
       await build(await loadConfig('mkadoc.yml', root), { forceFull: true })
-      const snap = getShikiRuntimeSnapshot()
-      assert.equal(snap.adapterState, 'active')
-      assert.equal(snap.hasHighlighter, true)
       const html = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8')
-      // Shiki may split tokens across spans (`echo</span><span> hello`).
       assert.match(html, /echo[\s\S]*hello/)
       assert.match(html, /shiki/)
     })

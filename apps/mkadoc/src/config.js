@@ -6,22 +6,21 @@ import { parseProjectConfig } from './config-schema.js'
 import { userError } from './errors.js'
 
 /**
- * Runtime project config used by build/serve/check/host.
+ * Runtime project config exposed to plugins as `host.config`.
  *
- * @typedef {import('./config-schema.js').ProjectConfig & {
- *   root: string,
- *   configPath: string,
- *   docinfoDir: string,
- * }} MkadocConfig
+ * @typedef {object} MkadocConfig
+ * @property {string} root
+ * @property {string} configPath
+ * @property {string} source
+ * @property {string} output
+ * @property {string} cache
+ * @property {string} docinfoDir
+ * @property {{ from: string, to: string }[]} assets
+ * @property {Record<string, Record<string, unknown>>} plugins
+ * @property {{ remote: boolean, port: number }} serve
  */
 
-/**
- * Deep-merge plain objects; arrays and scalars from `next` replace.
- * @param {Record<string, unknown>} base
- * @param {unknown} next
- * @returns {unknown}
- */
-export function deepMerge(base, next) {
+function deepMerge(base, next) {
   if (!next || typeof next !== 'object' || Array.isArray(next)) return next
   const out = { ...base }
   for (const [key, value] of Object.entries(next)) {
@@ -41,11 +40,7 @@ export function deepMerge(base, next) {
   return out
 }
 
-/**
- * Extract and deep-merge YAML from `[mkadoc-config]` listing blocks.
- * @param {string} source
- */
-export async function loadLiterateConfig(source) {
+async function loadLiterateConfig(source) {
   const doc = await load(source, { safe: 'unsafe', standalone: false })
   let merged = {}
 
@@ -63,11 +58,6 @@ export async function loadLiterateConfig(source) {
   return merged
 }
 
-/**
- * Parse and validate a TCP port from config or CLI.
- * @param {unknown} raw
- * @param {string} [label]
- */
 export function parsePort(raw, label = 'serve.port') {
   const port = Number(raw)
   if (!Number.isInteger(port) || port <= 0 || port > 65535) {
@@ -76,11 +66,6 @@ export function parsePort(raw, label = 'serve.port') {
   return port
 }
 
-/**
- * Resolve listen address from serve config (`remote` + `port` only).
- *
- * @param {{ remote?: boolean, port?: number }} serve
- */
 export function resolveServeListen(serve = {}) {
   const port = parsePort(serve.port ?? 8000)
   const remote = Boolean(serve.remote)
@@ -88,12 +73,6 @@ export function resolveServeListen(serve = {}) {
   return { host, port, remote }
 }
 
-/**
- * @param {unknown} raw
- * @param {string} root
- * @param {string} abs
- * @returns {MkadocConfig}
- */
 function finalizeConfig(raw, root, abs) {
   const cfg = parseProjectConfig(raw)
   return {
@@ -104,13 +83,6 @@ function finalizeConfig(raw, root, abs) {
   }
 }
 
-/**
- * Load project config from a literate AsciiDoc file (`mkadoc.adoc`) or YAML.
- *
- * @param {string} configPath
- * @param {string} [root]
- * @returns {Promise<MkadocConfig>}
- */
 export async function loadConfig(configPath, root = process.cwd()) {
   const abs = path.resolve(root, configPath)
   if (!fs.existsSync(abs)) {
@@ -139,5 +111,3 @@ export async function loadConfig(configPath, root = process.cwd()) {
 export function defaultConfigPath() {
   return 'mkadoc.adoc'
 }
-
-export { parseProjectConfig } from './config-schema.js'

@@ -62,13 +62,7 @@ async function cmdServe(cfg, values) {
   })
 }
 
-/**
- * @returns {Promise<number>}
- */
 async function main() {
-  // Nix shells set SOURCE_DATE_EPOCH for reproducibility; Asciidoctor would
-  // then stamp every page with that fixed time. Drop it so the HTML footer
-  // uses each .adoc file's real mtime.
   delete process.env.SOURCE_DATE_EPOCH
 
   const { values, positionals } = parseArgs({
@@ -95,7 +89,6 @@ async function main() {
   const configPath = values.config || defaultConfigPath()
   const cfg = await loadConfig(configPath, root)
 
-  // CLI overrides (serve)
   if (values.remote) cfg.serve.remote = true
   if (values.port !== undefined) cfg.serve.port = parsePort(values.port, '--port')
 
@@ -123,7 +116,6 @@ main()
     if (code) process.exit(code)
   })
   .catch((err) => {
-    // User errors (bad config/args/convert): message only. Unexpected: full stack.
     console.error(formatCliError(err))
     process.exit(1)
   })

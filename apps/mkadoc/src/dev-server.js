@@ -6,11 +6,6 @@ import handler from 'serve-handler'
 
 const RELOAD_SCRIPT = `<script>(function(){try{var es=new EventSource("/__mkadoc/events");es.onmessage=function(){location.reload()};}catch(e){}})();</script>`
 
-/**
- * @param {string} root
- * @param {string} pathname
- * @returns {string | null}
- */
 function resolveHtmlFile(root, pathname) {
   let rel = decodeURIComponent((pathname || '/').split('?')[0])
   if (!rel.startsWith('/')) rel = `/${rel}`
@@ -26,9 +21,6 @@ function resolveHtmlFile(root, pathname) {
   return abs
 }
 
-/**
- * @param {string} url
- */
 function openBrowser(url) {
   const platform = process.platform
   if (platform === 'darwin') {
@@ -40,20 +32,8 @@ function openBrowser(url) {
   }
 }
 
-/**
- * Static file server for `site/` with SSE-based live reload.
- *
- * @param {{
- *   root: string,
- *   host: string,
- *   port: number,
- *   open?: boolean,
- * }} opts
- * @returns {Promise<{ close: () => Promise<void>, reload: () => void, url: string }>}
- */
 export async function createDevServer(opts) {
   const { root, host, port, open = false } = opts
-  /** @type {Set<import('node:http').ServerResponse>} */
   const clients = new Set()
 
   const server = http.createServer(async (req, res) => {
@@ -128,9 +108,7 @@ export async function createDevServer(opts) {
     for (const client of clients) {
       try {
         client.end()
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
     clients.clear()
     await new Promise((resolve, reject) => {

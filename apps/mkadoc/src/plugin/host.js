@@ -3,7 +3,6 @@ import path from 'node:path'
 import { Extensions } from '@asciidoctor/core'
 import { relToRoot, writeIfChanged } from '../fs-utils.js'
 import { escapeHtmlAttr } from '../html-utils.js'
-import './contract.js'
 
 /**
  * @param {import('../config.js').MkadocConfig} cfg
@@ -11,19 +10,13 @@ import './contract.js'
  */
 export function createHost(cfg) {
   const registry = Extensions.create()
-  /** @type {Record<string, unknown>} */
   const attributes = {}
-  /** @type {{ rel: string, href: string, [k: string]: unknown }[]} */
   const headLinks = []
-  /** @type {{ src: string, [k: string]: unknown }[]} */
   const headScripts = []
-  /** @type {((p: string) => 'full' | null | undefined)[]} */
   const classifiers = []
-  /** @type {string[]} */
   const assetPrefixes = []
   let headerProvided = false
 
-  /** @type {import('./contract.js').MkadocHost} */
   const host = {
     config: cfg,
     root: cfg.root,
@@ -111,8 +104,6 @@ export function createHost(cfg) {
     },
 
     wantsDocinfo() {
-      // Only enable docinfo when a plugin contributed chrome this build.
-      // Do not reuse stale cache/docinfo from a previous plugin-enabled run.
       return headerProvided || headLinks.length > 0 || headScripts.length > 0
     },
 

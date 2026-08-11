@@ -3,10 +3,6 @@ import path from 'node:path'
 import { createHost } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
 
-/**
- * @param {import('./config.js').MkadocConfig} cfg
- * @returns {Promise<number>} process exit code
- */
 export async function check(cfg) {
   let failed = false
 

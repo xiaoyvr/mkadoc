@@ -99,7 +99,8 @@ trees rebuild faster; order is not significant.
 Only **built-in** locators are supported (`mkadoc:*`).
 They are not npm package names; unknown locators fail at load time.
 Load order follows config key order.
-Contract (typedefs + lifecycle): `src/plugin/contract.js`.
+Plugin authoring types: `src/plugin/contract.js` (`MkadocPluginFactory` / `MkadocHost`).
+Annotate a factory with `/** @type {import('../plugin/contract.js').MkadocPluginFactory} */`.
 
 [cols="1,3"]
 |===

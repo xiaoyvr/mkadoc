@@ -12,10 +12,7 @@ const OptionsSchema = z
   })
   .strict()
 
-/**
- * @param {Record<string, unknown>} [rawOptions]
- * @returns {import('../plugin/contract.js').MkadocPlugin}
- */
+/** @type {import('../plugin/contract.js').MkadocPluginFactory} */
 export default function krokiDiagramPlugin(rawOptions = {}) {
   const {
     server_url: serverUrl,

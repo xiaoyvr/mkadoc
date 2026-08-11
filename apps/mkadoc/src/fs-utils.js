@@ -1,11 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-/**
- * Normalize a path to a repo-root-relative POSIX path.
- * @param {string} p
- * @param {string} root
- */
 export function relToRoot(p, root) {
   let out = p
   if (path.isAbsolute(out)) {
@@ -16,11 +11,7 @@ export function relToRoot(p, root) {
   return out.split(path.sep).join('/')
 }
 
-/**
- * @param {string} a
- * @param {string} b
- */
-export function sameFileContent(a, b) {
+function sameFileContent(a, b) {
   if (!fs.existsSync(b)) return false
   const sa = fs.statSync(a)
   const sb = fs.statSync(b)
@@ -28,12 +19,6 @@ export function sameFileContent(a, b) {
   return fs.readFileSync(a).equals(fs.readFileSync(b))
 }
 
-/**
- * Write UTF-8 text only when content changed.
- * @param {string} filePath
- * @param {string} content
- * @returns {boolean} true if a write occurred
- */
 export function writeIfChanged(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   if (fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf8') === content) {
@@ -43,15 +28,6 @@ export function writeIfChanged(filePath, content) {
   return true
 }
 
-/**
- * Map a site-root href (e.g. `/styles/nav.css`) to a path under `output/`.
- * The same href is used for `<link>`/`<script>` and for the on-disk write target.
- *
- * @param {string} root project root
- * @param {string} output output dir relative to root
- * @param {string} href root-absolute site path (leading `/`)
- * @returns {{ href: string, absPath: string, relPath: string }}
- */
 export function resolveSiteAsset(root, output, href) {
   const raw = String(href ?? '').trim()
   if (!raw.startsWith('/') || raw.startsWith('//')) {
@@ -75,17 +51,6 @@ export function resolveSiteAsset(root, output, href) {
   return { href: `/${relPath}`, absPath, relPath }
 }
 
-/**
- * Recursively walk a directory tree.
- * Missing roots are skipped by default (`missing: 'skip'`).
- *
- * @param {string} dir absolute directory path
- * @param {{
- *   missing?: 'skip' | 'throw',
- *   shouldEnterDir?: (full: string, name: string) => boolean,
- *   onFile?: (full: string, name: string) => void,
- * }} [opts]
- */
 export function walkDir(dir, { missing = 'skip', shouldEnterDir, onFile } = {}) {
   if (!fs.existsSync(dir)) {
     if (missing === 'skip') return
@@ -102,14 +67,6 @@ export function walkDir(dir, { missing = 'skip', shouldEnterDir, onFile } = {}) 
   }
 }
 
-/**
- * Recursively copy files from each `{ from, to }` directory under `root`.
- * Preserves relative paths; skips missing sources and unchanged files.
- * Skips `node_modules` and `.git` directory names while walking.
- *
- * @param {string} root
- * @param {{ from: string, to: string }[]} items
- */
 export function copyAssetDirs(root, items = []) {
   for (const item of items) {
     const from = path.join(root, item.from)

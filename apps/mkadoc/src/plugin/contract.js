@@ -1,22 +1,6 @@
 /**
- * Plugin contract for mkadoc builtins (`mkadoc:*` only).
- *
- * Lifecycle:
- * 1. **Load** — `createHost(cfg)` then `loadPlugins(...)`.
- *    For each enabled plugin (config key order): factory(options) → `setup(host)`.
- *    `setup` may register classifiers, asset prefixes, cache dirs, Asciidoctor
- *    extensions, and document attributes.
- * 2. **Per build** — after `decideMode`, core calls `contributeChrome(host, ctx)`
- *    on each plugin (same order). Plugins may write header/CSS/JS and call
- *    `contributeHead`. Then core writes head docinfo, copies assets when needed,
- *    and converts pages.
- * 3. **Check** — `mkadoc check` calls optional `check(host)` on each plugin.
- *
- * There is no third-party / path-based plugin loading.
- *
- * Options: each plugin owns a Zod schema and validates via `parsePluginOptions`
- * (`options.js`). Core config only allowlists locators (`locators.js`); plugin
- * option fields are opaque to the project ConfigSchema.
+ * Plugin authoring contract (`mkadoc:*` builtins).
+ * Factories annotate with `@type {import('./contract.js').MkadocPluginFactory}`.
  *
  * @typedef {'full' | 'incremental' | 'assets'} BuildMode
  *

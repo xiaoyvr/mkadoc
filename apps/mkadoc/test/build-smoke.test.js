@@ -42,14 +42,45 @@ describe('build smoke (no plugins)', () => {
       const indexMtime = mtimeMs(root, 'site/index.html')
 
       fs.writeFileSync(path.join(root, 'docs/guide.adoc'), `= Smoke Guide\n\nMARKER_GUIDE_V2\n`)
-      // Ensure mtime granularity won't hide a missed rebuild.
       await new Promise((r) => setTimeout(r, 20))
 
-      const mode = await build(cfg, { paths: ['docs/guide.adoc'] })
+      const mode = await build(cfg, { paths: [path.join(root, 'docs/guide.adoc')] })
       assert.equal(mode, 'incremental')
       assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
       assert.equal(read(root, 'site/index.html'), indexBefore)
       assert.equal(mtimeMs(root, 'site/index.html'), indexMtime)
+    })
+  })
+
+  it('multiple page paths rebuild incrementally', async () => {
+    await withTempProject(smokeFixture(), async (root) => {
+      const cfg = await loadConfig('mkadoc.yml', root)
+      await build(cfg, { forceFull: true })
+
+      fs.writeFileSync(path.join(root, 'docs/index.adoc'), `= Smoke Index\n\nMARKER_INDEX_V2\n`)
+      fs.writeFileSync(path.join(root, 'docs/guide.adoc'), `= Smoke Guide\n\nMARKER_GUIDE_V2\n`)
+      const mode = await build(cfg, { paths: ['docs/index.adoc', 'docs/guide.adoc'] })
+      assert.equal(mode, 'incremental')
+      assert.match(read(root, 'site/index.html'), /MARKER_INDEX_V2/)
+      assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
+    })
+  })
+
+  it('unknown non-page path alone forces a full rebuild', async () => {
+    await withTempProject(smokeFixture(), async (root) => {
+      const cfg = await loadConfig('mkadoc.yml', root)
+      await build(cfg, { forceFull: true })
+      const mode = await build(cfg, { paths: ['README.md'] })
+      assert.equal(mode, 'full')
+    })
+  })
+
+  it('config path change forces a full rebuild', async () => {
+    await withTempProject(smokeFixture(), async (root) => {
+      const cfg = await loadConfig('mkadoc.yml', root)
+      await build(cfg, { forceFull: true })
+      const mode = await build(cfg, { paths: ['mkadoc.yml'] })
+      assert.equal(mode, 'full')
     })
   })
 

@@ -3,13 +3,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { after, describe, it } from 'node:test'
 import { build } from '../src/build.js'
-import { disposeShikiRuntime } from '../src/builtins/shiki.js'
+import { afterPluginsLoaded } from '../src/builtins/shiki.js'
 import { loadConfig } from '../src/config.js'
 import { resolveSiteAsset } from '../src/fs-utils.js'
 import { smokeFixture, withTempProject } from './helpers/project.js'
 
 after(() => {
-  disposeShikiRuntime()
+  afterPluginsLoaded([])
 })
 
 describe('resolveSiteAsset', () => {
@@ -50,11 +50,21 @@ plugins:
 .nav { color: blue; }
 ++++
 
+[mkadoc-nav-css]
+++++
+.extra { margin: 0; }
+++++
+
 * <<index.adoc,Home>>
 
 [mkadoc-nav-js]
 ++++
 console.log('nav');
+++++
+
+[mkadoc-nav-js]
+++++
+console.log('extra');
 ++++
 `,
       }),
@@ -62,9 +72,21 @@ console.log('nav');
         const cfg = await loadConfig('mkadoc.yml', root)
         await build(cfg, { forceFull: true })
 
-        assert.match(fs.readFileSync(path.join(root, 'site/assets/nav.css'), 'utf8'), /\.nav/)
-        assert.match(fs.readFileSync(path.join(root, 'site/assets/nav.js'), 'utf8'), /console\.log/)
+        const css = fs.readFileSync(path.join(root, 'site/assets/nav.css'), 'utf8')
+        const js = fs.readFileSync(path.join(root, 'site/assets/nav.js'), 'utf8')
+        assert.match(css, /\.nav/)
+        assert.match(css, /\.extra/)
+        assert.match(js, /console\.log\('nav'\)/)
+        assert.match(js, /console\.log\('extra'\)/)
         assert.equal(fs.existsSync(path.join(root, 'site/styles/nav.css')), false)
+
+        const header = fs.readFileSync(
+          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
+          'utf8',
+        )
+        assert.match(header, /Home/)
+        assert.doesNotMatch(header, /\.nav \{ color: blue; \}/)
+        assert.doesNotMatch(header, /console\.log\('nav'\)/)
 
         const docinfo = fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8')
         assert.match(docinfo, /href="\/assets\/nav\.css"/)

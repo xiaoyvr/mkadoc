@@ -6,18 +6,7 @@ import { createDevServer } from './dev-server.js'
 
 const WATCH_EXTS = new Set(['.adoc', '.css', '.js', '.html', '.yml', '.yaml'])
 
-/**
- * @param {import('./config.js').MkadocConfig} cfg
- * @param {{
- *   open?: boolean,
- *   configPath?: string,
- *   buildFn?: typeof build,
- *   createServer?: typeof createDevServer,
- * }} [opts]
- * @returns {Promise<{ close: () => Promise<void> }>}
- */
 export async function serve(cfg, opts = {}) {
-  /** @type {import('./config.js').MkadocConfig} */
   let current = cfg
   const buildFn = opts.buildFn || build
   const createServer = opts.createServer || createDevServer
@@ -32,12 +21,10 @@ export async function serve(cfg, opts = {}) {
   await buildFn(current, { forceFull: true })
 
   let timer = null
-  /** @type {Set<string>} */
   const pending = new Set()
   let building = false
   let rebuildQueued = false
-  // Drop FS events while a build is writing output, plus a short settle window
-  // afterward so copy/write noise cannot schedule a follow-up rebuild.
+
   let ignoreUntil = 0
   let closed = false
 
@@ -50,7 +37,6 @@ export async function serve(cfg, opts = {}) {
     console.log('mkadoc: reloaded config')
   }
 
-  /** @type {{ close: () => Promise<void>, reload: () => void } | null} */
   let devServer = null
 
   async function flush() {
@@ -65,12 +51,11 @@ export async function serve(cfg, opts = {}) {
     ignoreUntil = Number.POSITIVE_INFINITY
     try {
       await reloadConfigIfNeeded(paths)
-      // Config edits always force a full rebuild so theme/plugin changes apply.
+
       const configTouched = paths.some(
         (p) => path.resolve(p) === configAbs || path.resolve(current.root, p) === configAbs,
       )
-      // A queued flush with no paths is a no-op (can happen if events arrived
-      // while ignoreUntil suppressed scheduling during the previous build).
+
       if (!configTouched && paths.length === 0) return
       await buildFn(current, configTouched ? { forceFull: true } : { paths })
       devServer?.reload()
@@ -106,15 +91,10 @@ export async function serve(cfg, opts = {}) {
     }, 100)
   }
 
-  // Watch docs/ recursively. Watch the config's parent directory at depth 0
-  // (not the file inode) so editor atomic save/rename keeps delivering events.
   const docsWatcher = watch(watchRoot, {
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
-    ignored: [
-      /(^|[/\\])\../, // dotfiles
-      '**/node_modules/**',
-    ],
+    ignored: [/(^|[/\\])\../, '**/node_modules/**'],
   })
 
   const configWatcher = watch(configDir, {
@@ -148,8 +128,6 @@ export async function serve(cfg, opts = {}) {
     }
   })
 
-  // Wait until both watchers are ready so callers (and tests) can mutate
-  // sources without racing ignoreInitial / startup.
   await watchersReady
 
   devServer = await createServer({
