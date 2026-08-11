@@ -57,6 +57,11 @@ async function cmdCheck(cfg) {
 }
 
 async function main() {
+  // Nix shells set SOURCE_DATE_EPOCH for reproducibility; Asciidoctor would
+  // then stamp every page with that fixed time. Drop it so the HTML footer
+  // uses each .adoc file's real mtime.
+  delete process.env.SOURCE_DATE_EPOCH
+
   const { values, positionals } = parseArgs({
     args: process.argv.slice(2),
     allowPositionals: true,

@@ -39,7 +39,7 @@
                   ];
                 };
 
-                npmDepsHash = "sha256-OCIJFCsZsYoY5h/t2kLqTwp5ER/yhJnd7KKg3BQuBzo=";
+                npmDepsHash = "sha256-a5GM6humsvM5dN7PhtZ/QJYnWuzWNle0QwfWt2MAq54=";
 
                 dontNpmBuild = true;
 

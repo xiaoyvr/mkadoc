@@ -1,9 +1,11 @@
 import krokiDiagram from '../plugins/kroki-diagram.js'
 import nav from '../plugins/nav.js'
+import shiki from '../plugins/shiki.js'
 
 const BUILTINS = {
   'mkadoc:kroki-diagram': krokiDiagram,
   'mkadoc:nav': nav,
+  'mkadoc:shiki': shiki,
 }
 
 /**
