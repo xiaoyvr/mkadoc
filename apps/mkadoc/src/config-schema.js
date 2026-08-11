@@ -1,4 +1,18 @@
 import { z } from 'zod'
+import { userError } from './errors.js'
+import { BUILTIN_LOCATORS } from './plugin/locators.js'
+
+/**
+ * Parsed project config (Zod output), before runtime fields are attached.
+ *
+ * @typedef {object} ProjectConfig
+ * @property {string} source
+ * @property {string} output
+ * @property {string} cache
+ * @property {{ from: string, to: string }[]} assets
+ * @property {Record<string, Record<string, unknown>>} plugins
+ * @property {{ remote: boolean, port: number }} serve
+ */
 
 const portSchema = z.preprocess((value) => {
   if (value === undefined || value === null || value === '') return undefined
@@ -19,43 +33,29 @@ const AssetSchema = z
   })
   .strict()
 
-const NavPluginSchema = z
-  .object({
-    nav: z.string().optional(),
-    css_href: z.string().optional(),
-    js_href: z.string().optional(),
-  })
-  .strict()
-
-const ShikiPluginSchema = z
-  .object({
-    theme: z.string().optional(),
-    langs: z.array(z.string()).optional(),
-    css_href: z.string().optional(),
-  })
-  .strict()
-
-const KrokiPluginSchema = z
-  .object({
-    server_url: z.string().optional(),
-    data_uri: z.boolean().optional(),
-    allow_uri_read: z.boolean().optional(),
-    cache_dir: z.string().optional(),
-  })
-  .strict()
-
-/** Only built-in locators; unknown plugin keys fail validation. */
-const PluginsSchema = z
-  .object({
-    'mkadoc:nav': NavPluginSchema.optional(),
-    'mkadoc:shiki': ShikiPluginSchema.optional(),
-    'mkadoc:kroki-diagram': KrokiPluginSchema.optional(),
-  })
-  .strict()
+/**
+ * Plugin option values are opaque here — each plugin validates/defaults its own
+ * options at load time. Core only allowlists builtin locators.
+ */
+const PluginsSchema = z.preprocess(
+  (v) => (v == null ? {} : v),
+  z.record(z.string(), z.record(z.string(), z.unknown())).superRefine((plugins, ctx) => {
+    for (const key of Object.keys(plugins)) {
+      if (!BUILTIN_LOCATORS.includes(key)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Unknown plugin "${key}"`,
+          path: [key],
+        })
+      }
+    }
+  }),
+)
 
 /**
  * Project config mapping (before runtime fields like `root` are attached).
- * Unknown top-level / `serve.*` / plugin keys are rejected (`.strict()`).
+ * Unknown top-level / `serve.*` keys are rejected (`.strict()`).
+ * Unknown plugin *locators* are rejected; plugin option fields are not.
  */
 export const ConfigSchema = z
   .object({
@@ -63,7 +63,7 @@ export const ConfigSchema = z
     output: z.string().min(1).default('site'),
     cache: z.string().min(1).default('.cache/asciidoctor'),
     assets: z.array(AssetSchema).default([]),
-    plugins: z.preprocess((v) => (v == null ? {} : v), PluginsSchema),
+    plugins: PluginsSchema,
     serve: z.preprocess((v) => (v == null ? {} : v), ServeSchema),
   })
   .strict()
@@ -83,11 +83,12 @@ export function formatConfigZodError(err) {
 /**
  * Validate and apply defaults to a raw config mapping.
  * @param {unknown} raw
+ * @returns {ProjectConfig}
  */
 export function parseProjectConfig(raw) {
   const result = ConfigSchema.safeParse(raw ?? {})
   if (!result.success) {
-    throw new Error(`mkadoc: invalid config: ${formatConfigZodError(result.error)}`)
+    throw userError(`mkadoc: invalid config: ${formatConfigZodError(result.error)}`)
   }
   return result.data
 }

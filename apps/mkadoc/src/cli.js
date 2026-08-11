@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util'
 import { build } from './build.js'
 import { check } from './check.js'
 import { defaultConfigPath, loadConfig, parsePort } from './config.js'
+import { formatCliError } from './errors.js'
 import { serve } from './serve.js'
 
 const HELP = `mkadoc — build and serve AsciiDoc as a static site
@@ -122,6 +123,7 @@ main()
     if (code) process.exit(code)
   })
   .catch((err) => {
-    console.error(err?.stack || err)
+    // User errors (bad config/args/convert): message only. Unexpected: full stack.
+    console.error(formatCliError(err))
     process.exit(1)
   })

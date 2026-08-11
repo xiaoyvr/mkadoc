@@ -133,16 +133,18 @@ describe('parseProjectConfig (zod schema)', () => {
     )
   })
 
-  it('accepts known plugin option objects', () => {
+  it('accepts known plugin option objects without validating fields', () => {
     const cfg = parseProjectConfig({
       plugins: {
         'mkadoc:nav': { nav: 'docs/_nav.adoc' },
-        'mkadoc:shiki': { theme: 'nord' },
+        'mkadoc:shiki': { theme: 'nord', thme: 'typo' },
         'mkadoc:kroki-diagram': { server_url: 'http://127.0.0.1:8080' },
       },
     })
     assert.equal(cfg.plugins['mkadoc:nav'].nav, 'docs/_nav.adoc')
     assert.equal(cfg.plugins['mkadoc:shiki'].theme, 'nord')
+    // Typos are opaque to core; plugins reject them at load time.
+    assert.equal(cfg.plugins['mkadoc:shiki'].thme, 'typo')
   })
 
   it('loadConfig surfaces schema errors from YAML files', async () => {

@@ -1,20 +1,26 @@
 import path from 'node:path'
 import { SyntaxHighlighter, SyntaxHighlighterBase } from '@asciidoctor/core'
 import { createHighlighter } from 'shiki'
-import { writeIfChanged } from '../fs-utils.js'
+import { resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
+import { resolvePluginOptions } from '../plugin/options.js'
 
-const DEFAULT_THEME = 'github-light-default'
-const DEFAULT_LANGS = [
-  'bash',
-  'shellscript',
-  'nix',
-  'javascript',
-  'json',
-  'yaml',
-  'ruby',
-  'python',
-  'plaintext',
-]
+const DEFAULTS = {
+  theme: 'github-light-default',
+  langs: [
+    'bash',
+    'shellscript',
+    'nix',
+    'javascript',
+    'json',
+    'yaml',
+    'ruby',
+    'python',
+    'plaintext',
+  ],
+  css_href: '/styles/shiki.css',
+}
+
+const DEFAULT_THEME = DEFAULTS.theme
 
 const LANG_ALIASES = {
   sh: 'shellscript',
@@ -158,15 +164,15 @@ export function getShikiRuntimeSnapshot() {
  * Theme background/foreground are taken from the loaded Shiki theme (not hardcoded)
  * and written to site/styles/shiki.css so listing blocks match the token colors.
  *
- * @param {object} options
- * @param {string} [options.theme]
- * @param {string[]} [options.langs]
- * @param {string} [options.css_href]
+ * @param {Record<string, unknown>} [rawOptions]
+ * @returns {import('../plugin/contract.js').MkadocPlugin}
  */
-export default function shikiPlugin(options = {}) {
-  const theme = options.theme || DEFAULT_THEME
-  const langs = Array.isArray(options.langs) && options.langs.length ? options.langs : DEFAULT_LANGS
-  const cssHref = options.css_href || '/styles/shiki.css'
+export default function shikiPlugin(rawOptions = {}) {
+  const options = resolvePluginOptions('mkadoc:shiki', rawOptions, DEFAULTS)
+  const theme = options.theme
+  const langs =
+    Array.isArray(options.langs) && options.langs.length ? options.langs : DEFAULTS.langs
+  const cssHref = options.css_href
 
   return {
     name: 'shiki',
@@ -190,7 +196,10 @@ export default function shikiPlugin(options = {}) {
         }
       }
 
-      host.registerAssetPrefix(path.posix.join(host.config.output.replace(/\\/g, '/'), 'styles'))
+      const cssAsset = resolveSiteAsset(host.root, host.config.output, cssHref)
+      const assetDir = path.posix.dirname(cssAsset.relPath)
+      const out = host.config.output.replace(/\\/g, '/').replace(/\/$/, '')
+      host.registerAssetPrefix(assetDir === '.' ? out : path.posix.join(out, assetDir))
 
       if (!shared.highlighter) {
         throw new Error('mkadoc:shiki: highlighter not initialized (setup failed)')
@@ -208,7 +217,7 @@ export default function shikiPlugin(options = {}) {
     },
 
     async contributeChrome(host) {
-      const cssPath = path.join(host.root, host.config.output, 'styles', path.basename(cssHref))
+      const cssAsset = resolveSiteAsset(host.root, host.config.output, cssHref)
       const css = `/* Generated from Shiki theme: ${theme} — do not edit. */
 .listingblock > .content > pre.shiki,
 .listingblock > .content > pre.shiki code {
@@ -216,9 +225,9 @@ export default function shikiPlugin(options = {}) {
   color: ${shared.colors.fg};
 }
 `
-      writeIfChanged(cssPath, css)
+      writeIfChanged(cssAsset.absPath, css)
       host.contributeHead({
-        links: [{ rel: 'stylesheet', href: cssHref }],
+        links: [{ rel: 'stylesheet', href: cssAsset.href }],
       })
     },
 

@@ -4,8 +4,8 @@ import path from 'node:path'
 import { after, describe, it } from 'node:test'
 import { SyntaxHighlighter } from '@asciidoctor/core'
 import { build } from '../src/build.js'
+import { disposeShikiRuntime, getShikiRuntimeSnapshot } from '../src/builtins/shiki.js'
 import { loadConfig } from '../src/config.js'
-import { disposeShikiRuntime, getShikiRuntimeSnapshot } from '../src/plugins/shiki.js'
 import { smokeFixture, withTempProject } from './helpers/project.js'
 
 after(() => {

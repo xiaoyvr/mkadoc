@@ -14,6 +14,10 @@
  *
  * There is no third-party / path-based plugin loading.
  *
+ * Options: each plugin owns defaults and validates its option keys (see
+ * `resolvePluginOptions` in `options.js`). Core config only allowlists locators
+ * (`locators.js`); plugin option fields are opaque to Zod.
+ *
  * @typedef {'full' | 'incremental' | 'assets'} BuildMode
  *
  * @typedef {{ mode: BuildMode, pages: string[] }} BuildContext
@@ -21,7 +25,7 @@
  * @typedef {{ ok: boolean, message?: string }} CheckResult
  *
  * @typedef {object} MkadocHost
- * @property {object} config
+ * @property {import('../config.js').MkadocConfig} config
  * @property {string} root
  * @property {unknown} registry
  * @property {Record<string, unknown>} attributes
@@ -49,7 +53,7 @@
  * @property {(host: MkadocHost, ctx: BuildContext) => void | Promise<void>} [contributeChrome]
  * @property {(host: MkadocHost) => CheckResult | Promise<CheckResult>} [check]
  *
- * @typedef {(options?: object) => MkadocPlugin} MkadocPluginFactory
+ * @typedef {(options?: Record<string, unknown>) => MkadocPlugin} MkadocPluginFactory
  */
 
 export {}

@@ -1,7 +1,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { load } from '@asciidoctor/core'
-import { writeIfChanged } from '../fs-utils.js'
+import { resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
+import { resolvePluginOptions } from '../plugin/options.js'
+
+const DEFAULTS = {
+  nav: 'docs/_nav.adoc',
+  css_href: '/styles/nav.css',
+  js_href: '/styles/nav.js',
+}
 
 /**
  * Load _nav.adoc, extract tagged passthrough blocks via the Asciidoctor AST,
@@ -46,12 +53,15 @@ export async function extractNavChrome(source) {
 }
 
 /**
- * @param {object} options
+ * @param {Record<string, unknown>} [rawOptions]
+ * @returns {import('../plugin/contract.js').MkadocPlugin}
  */
-export default function navPlugin(options = {}) {
-  const nav = options.nav || 'docs/_nav.adoc'
-  const cssHref = options.css_href || '/styles/nav.css'
-  const jsHref = options.js_href || '/styles/nav.js'
+export default function navPlugin(rawOptions = {}) {
+  const {
+    nav,
+    css_href: cssHref,
+    js_href: jsHref,
+  } = resolvePluginOptions('mkadoc:nav', rawOptions, DEFAULTS)
 
   return {
     name: 'nav',
@@ -65,31 +75,30 @@ export default function navPlugin(options = {}) {
     async contributeChrome(host, { mode }) {
       if (mode === 'assets') return
 
-      const stylesDir = path.join(host.root, host.config.output, 'styles')
-      const cssPath = path.join(stylesDir, path.basename(cssHref))
-      const jsPath = path.join(stylesDir, path.basename(jsHref))
+      const cssAsset = resolveSiteAsset(host.root, host.config.output, cssHref)
+      const jsAsset = resolveSiteAsset(host.root, host.config.output, jsHref)
 
       const needChrome =
         mode === 'full' ||
         !host.headerDocinfoExists() ||
-        !fs.existsSync(cssPath) ||
-        !fs.existsSync(jsPath)
+        !fs.existsSync(cssAsset.absPath) ||
+        !fs.existsSync(jsAsset.absPath)
 
       if (needChrome) {
         const source = fs.readFileSync(path.resolve(host.root, nav), 'utf8')
         const { css, js, html } = await extractNavChrome(source)
-        if (css) writeIfChanged(cssPath, css)
-        if (js) writeIfChanged(jsPath, js)
+        if (css) writeIfChanged(cssAsset.absPath, css)
+        if (js) writeIfChanged(jsAsset.absPath, js)
         await host.writeHeaderDocinfo(html)
       }
 
       const links = []
       const scripts = []
-      if (fs.existsSync(cssPath)) {
-        links.push({ rel: 'stylesheet', href: cssHref })
+      if (fs.existsSync(cssAsset.absPath)) {
+        links.push({ rel: 'stylesheet', href: cssAsset.href })
       }
-      if (fs.existsSync(jsPath)) {
-        scripts.push({ src: jsHref, defer: true })
+      if (fs.existsSync(jsAsset.absPath)) {
+        scripts.push({ src: jsAsset.href, defer: true })
       }
       host.contributeHead({ links, scripts })
       host.markHeaderProvided()

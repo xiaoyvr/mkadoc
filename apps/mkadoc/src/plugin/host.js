@@ -6,7 +6,7 @@ import { escapeHtmlAttr } from '../html-utils.js'
 import './contract.js'
 
 /**
- * @param {object} cfg
+ * @param {import('../config.js').MkadocConfig} cfg
  * @returns {import('./contract.js').MkadocHost}
  */
 export function createHost(cfg) {

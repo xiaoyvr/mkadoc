@@ -4,7 +4,7 @@ import { createHost } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
 
 /**
- * @param {object} cfg
+ * @param {import('./config.js').MkadocConfig} cfg
  * @returns {Promise<number>} process exit code
  */
 export async function check(cfg) {

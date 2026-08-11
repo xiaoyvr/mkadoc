@@ -50,16 +50,17 @@ Typical keys:
 source: docs
 output: site
 cache: .cache/asciidoctor
-assets: []   # optional { from, to } dir copies (flat files)
+assets: []   # optional { from, to } recursive dir copies
 plugins: {}
 serve:
   remote: false
   port: 8000
 ----
 
-Config is validated with **Zod** (`src/config-schema.js`): unknown top-level keys, unknown `serve.*` keys (e.g. `host`), and unknown plugin locators are rejected. Only built-in plugin option fields are allowed.
+Config is validated with **Zod** (`src/config-schema.js`): unknown top-level keys, unknown `serve.*` keys (e.g. `host`), and unknown plugin **locators** are rejected. Plugin *option fields* are opaque to core — each plugin applies defaults and rejects unknown keys at load time.
 
-Asset copy always runs (all build modes). In addition to `assets:`, mkadoc always
+Asset copy always runs (all build modes) and is **recursive** (relative paths
+preserved; `node_modules` / `.git` skipped). In addition to `assets:`, mkadoc always
 copies `<source>/styles/` → `<output>/styles/` (skipped if already listed).
 
 See the repo-root `mkadoc.adoc` for a full example used by this dotfiles site.
@@ -83,6 +84,9 @@ so a batched page + CSS edit still updates `output/styles/`.
 After **full** and **incremental** builds, stale HTML (source `.adoc` gone) is pruned.
 Pages whose names start with `_` are partials, not site pages.
 
+Page converts run with a small worker pool (up to 4, bounded by CPU count) so larger
+trees rebuild faster; order is not significant.
+
 == Serve
 
 * Watches `source/` and the config file (parent dir, depth 0, so atomic saves still notify).
@@ -105,6 +109,16 @@ Contract (typedefs + lifecycle): `src/plugin/contract.js`.
 | `mkadoc:shiki` | Build-time syntax highlighting for `[source]` blocks.
 | `mkadoc:kroki-diagram` | Diagram blocks via Kroki (`server_url`, default `http://127.0.0.1:8080`).
 |===
+
+`css_href` / `js_href` (nav, shiki) are **site-root paths** (e.g. `/styles/nav.css`).
+They control both the `<link>`/`<script>` href and the write path under `output/`
+(via `resolveSiteAsset` in `src/fs-utils.js`). Defaults stay under `/styles/`.
+
+Plugin defaults (owned by each factory):
+
+* `mkadoc:nav` — `nav: docs/_nav.adoc`, `css_href: /styles/nav.css`, `js_href: /styles/nav.js`
+* `mkadoc:shiki` — `theme: github-light-default`, bundled `langs`, `css_href: /styles/shiki.css`
+* `mkadoc:kroki-diagram` — `server_url: http://127.0.0.1:8080` (overridable by `KROKI_SERVER_URL`), `data_uri`/`allow_uri_read: true`, `cache_dir: diagram`
 
 === Plugin lifecycle
 
@@ -134,7 +148,7 @@ Plugin-facing host helpers: `registerExtension`, `addAttributes`, `contributeHea
 The Shiki engine is cached in-process so rebuilds do not leak Highlighter instances.
 Asciidoctor’s `shiki` adapter name is process-global; mkadoc swaps an **active** vs
 **inactive** adapter and disposes the Highlighter when the plugin is dropped from config
-(`src/plugins/shiki.js`).
+(`src/builtins/shiki.js`).
 
 Practical rules while `serve` is running:
 
@@ -158,8 +172,9 @@ apps/mkadoc/
     check.js
     fs-utils.js
     html-utils.js
-    plugin/          # host + loader + contract
-    plugins/         # builtins
+    plugin/          # host + loader + contract + options helpers
+    builtins/        # builtin mkadoc:* plugins
+                     # JSDoc types: MkadocConfig (config.js), Host/Plugin (plugin/contract.js)
   test/              # node:test suite (`npm test`)
   biome.json         # lint + format
   flake.nix          # Nix package
@@ -176,6 +191,9 @@ npm run check   # lint + test
 ----
 
 Lint/format: Biome (`biome.json`). Node `>= 20`.
+
+CLI errors: expected failures (`mkadoc: …`, bad args, bad config) print the message
+only; unexpected exceptions still dump a stack (`src/errors.js`).
 
 Nix (from this directory):
 

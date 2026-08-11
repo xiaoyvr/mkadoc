@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { extractNavChrome } from '../src/plugins/nav.js'
+import { extractNavChrome } from '../src/builtins/nav.js'
 
 describe('extractNavChrome', () => {
   it('extracts css/js, converts sidebar HTML, and strips tagged blocks', async () => {

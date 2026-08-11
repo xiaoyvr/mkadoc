@@ -1,13 +1,21 @@
-import krokiDiagram from '../plugins/kroki-diagram.js'
-import nav from '../plugins/nav.js'
-import shiki, { afterPluginsLoaded } from '../plugins/shiki.js'
+import krokiDiagram from '../builtins/kroki-diagram.js'
+import nav from '../builtins/nav.js'
+import shiki, { afterPluginsLoaded } from '../builtins/shiki.js'
+import { userError } from '../errors.js'
 import './contract.js'
+import { BUILTIN_LOCATORS } from './locators.js'
 
 /** @type {Record<string, import('./contract.js').MkadocPluginFactory>} */
 const BUILTINS = {
   'mkadoc:kroki-diagram': krokiDiagram,
   'mkadoc:nav': nav,
   'mkadoc:shiki': shiki,
+}
+
+for (const locator of BUILTIN_LOCATORS) {
+  if (!BUILTINS[locator]) {
+    throw new Error(`mkadoc: missing factory for builtin locator ${locator}`)
+  }
 }
 
 /**
@@ -39,7 +47,7 @@ function createPluginRunner(loaded, host) {
 }
 
 /**
- * @param {Record<string, object> | null | undefined} pluginsConfig
+ * @param {Record<string, Record<string, unknown>> | null | undefined} pluginsConfig
  * @param {import('./contract.js').MkadocHost} host
  */
 export async function loadPlugins(pluginsConfig, host) {
@@ -50,7 +58,7 @@ export async function loadPlugins(pluginsConfig, host) {
   for (const [locator, options] of entries) {
     const factory = BUILTINS[locator]
     if (!factory) {
-      throw new Error(
+      throw userError(
         `mkadoc: unknown plugin "${locator}" (only built-in mkadoc:* plugins are supported)`,
       )
     }

@@ -1,14 +1,24 @@
 import path from 'node:path'
 import asciidoctorKroki from 'asciidoctor-kroki'
+import { resolvePluginOptions } from '../plugin/options.js'
+
+const DEFAULTS = {
+  server_url: 'http://127.0.0.1:8080',
+  data_uri: true,
+  allow_uri_read: true,
+  cache_dir: 'diagram',
+}
 
 /**
- * @param {object} options
+ * @param {Record<string, unknown>} [rawOptions]
+ * @returns {import('../plugin/contract.js').MkadocPlugin}
  */
-export default function krokiDiagramPlugin(options = {}) {
-  const serverUrl = process.env.KROKI_SERVER_URL || options.server_url || 'http://127.0.0.1:8080'
-  const dataUri = options.data_uri !== false
-  const allowUriRead = options.allow_uri_read !== false
-  const cacheName = options.cache_dir || 'diagram'
+export default function krokiDiagramPlugin(rawOptions = {}) {
+  const options = resolvePluginOptions('mkadoc:kroki-diagram', rawOptions, DEFAULTS)
+  const serverUrl = process.env.KROKI_SERVER_URL || options.server_url
+  const dataUri = options.data_uri
+  const allowUriRead = options.allow_uri_read
+  const cacheName = options.cache_dir
 
   let diagramDir = ''
 

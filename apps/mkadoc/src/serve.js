@@ -7,7 +7,7 @@ import { createDevServer } from './dev-server.js'
 const WATCH_EXTS = new Set(['.adoc', '.css', '.js', '.html', '.yml', '.yaml'])
 
 /**
- * @param {object} cfg
+ * @param {import('./config.js').MkadocConfig} cfg
  * @param {{
  *   open?: boolean,
  *   configPath?: string,
@@ -17,6 +17,7 @@ const WATCH_EXTS = new Set(['.adoc', '.css', '.js', '.html', '.yml', '.yaml'])
  * @returns {Promise<{ close: () => Promise<void> }>}
  */
 export async function serve(cfg, opts = {}) {
+  /** @type {import('./config.js').MkadocConfig} */
   let current = cfg
   const buildFn = opts.buildFn || build
   const createServer = opts.createServer || createDevServer
