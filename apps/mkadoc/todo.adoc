@@ -1,0 +1,244 @@
+= mkadoc — architecture review todos
+:toc:
+
+Senior tech-lead review of `apps/mkadoc/`, focused on code quality, maintainability, and smells.
+Priorities: *P0* = correctness / design debt that blocks safe growth; *P1* = maintainability; *P2* = polish.
+
+== Verdict
+
+Solid small CLI (~1.3k LOC src) with clear command boundaries and decent core tests—but the plugin host is an informal bag of hooks, asset/incremental behavior is inconsistent, and Shiki’s process-global state is a latent serve footgun.
+Prioritize contract + correctness before polish.
+
+== Architecture (context)
+
+`cli` → `loadConfig` (literate AsciiDoc / YAML + Zod) → `build` / `serve` / `check`.
+Build loads builtins via `plugin/load` + `plugin/host`, runs Asciidoctor convert, prunes stale HTML.
+Serve watches `source/` + config and rebuilds with SSE reload.
+
+== P0 — correctness / design debt
+
+=== Formalize the plugin contract
+
+* Status: done
+* Why: Hooks are ad hoc (`setup`, `contributeConvert`, `beforeBuild`, `afterChrome`, `check`); `beforeBuild` is unused; `extraDirs` is collected and never consulted.
+* Evidence: `src/plugin/load.js`, `src/plugin/host.js`
+* Direction: Document lifecycle; drop dead surface or wire it intentionally; keep one obvious place that defines the plugin shape.
+
+==== Plan
+
+Goal: make the plugin shape and build lifecycle explicit and small—no new extension system, no third-party plugins. Builtins stay the only supported locators.
+
+===== Current reality (as coded)
+
+Lifecycle today:
+
+. `createHost(cfg)`
+. `loadPlugins(cfg.plugins, host)` — for each enabled plugin, in config key order:
+.. factory(options)
+.. `setup(host)` (optional)
+.. `contributeConvert(host)` (optional) — *also runs at load time*, not at convert time
+. `decideMode(...)`
+. `plugins.beforeBuild(ctx)` — **dead** (no builtin implements it)
+. `plugins.afterChrome(ctx)` — per-build chrome (nav header, shiki CSS, head links)
+. `host.writeHeadDocinfo()` when mode ≠ `assets`
+. copy configured assets when mode is `full` | `assets`
+. convert pages
+
+Dead / unused host surface:
+
+* `beforeBuild` hook (loader + `build.js` call site)
+* `extraDirs` array (pushed by `ensureDir`, never read)
+* `host.convertFile` (never called; build uses `convertAdocFile`)
+* `host.copyAssets` (never called; build calls `copyAssetDirs` directly)
+
+Naming confusion to fix in docs (and lightly in code):
+
+* `contributeConvert` sounds per-page; it is load-time registration of registry/attributes.
+* `afterChrome` sounds post-chrome; chrome is *produced inside* this hook.
+
+===== Recommended approach (minimal churn)
+
+Keep behavior identical for the three builtins; tighten the contract around what already works.
+
+. **Add `src/plugin/contract.js`** as the single source of truth:
+** JSDoc `@typedef`s: `MkadocPlugin`, `MkadocHost`, `BuildContext`, `CheckResult`
+** A short comment block describing phases (load vs per-build vs check)
+** No runtime Zod for plugins (builtins only; validation already lives in `config-schema.js`)
+
+. **Collapse load-time hooks to one:**
+** Merge `setup` + `contributeConvert` into a single `setup(host)`
+** Update nav / shiki / kroki to put registry/attrs work inside `setup`
+** Loader calls only `setup` at load time
+
+. **Rename the per-build chrome hook for clarity:**
+** `afterChrome` → `contributeChrome(host, ctx)`
+** Semantics unchanged: runs once per build after mode is known, before head docinfo write / page convert
+** `ctx`: `{ mode: 'full' | 'incremental' | 'assets', pages: string[] }`
+
+. **Drop dead surface (do not wire “for later”):**
+** Remove `beforeBuild` from loader and `build.js`
+** Remove `extraDirs` tracking; keep `ensureDir` / `cacheDir` as plain mkdir helpers
+** Remove unused `host.convertFile` and `host.copyAssets`
+
+. **Document in `README.adoc` (Plugins section):**
+** Load order = config key order
+** Phase table: `setup` (load) → `contributeChrome` (per build) → `check` (CLI)
+** What host methods plugins are allowed to call (classifier, asset prefix, attrs, extension, head, header docinfo, cacheDir)
+
+. **Tests:**
+** Small unit test that a fake plugin’s `setup` / `contributeChrome` / `check` are invoked in order by the loader/build path (temp project or host stub)
+** Existing suite must stay green (rename/merge is mechanical)
+
+. **Out of scope for this item** (tracked elsewhere):
+** Incremental + assets copy gap (next P0)
+** Shiki process-global registration (next P0)
+** Watching `extraDirs` / assets outside `source/` (watch-list smell)
+** Third-party / file-path plugin loading
+
+===== Target plugin shape
+
+----
+{
+  name: string,                          // required human id
+  setup?(host),                          // load-time: classifiers, prefixes, cache, registry, attrs
+  contributeChrome?(host, ctx),          // per-build: header/CSS/JS/head links
+  check?(host) -> { ok, message? },      // mkadoc check
+}
+----
+
+===== Target host surface (plugin-facing)
+
+Keep (used today):
+
+* `config`, `root`, `registry`, `attributes`, `assetPrefixes`
+* `registerExtension`, `addAttributes`, `contributeHead`
+* `registerClassifier`, `registerAssetPrefix`
+* `ensureDir`, `cacheDir`, `relToRoot`
+* `headerDocinfoPath`, `headerDocinfoExists`, `writeHeaderDocinfo`, `markHeaderProvided`
+* `writeHeadDocinfo`, `wantsDocinfo`, `classifyPath` (core/build-facing; fine to leave on host)
+
+Remove: `convertFile`, `copyAssets`, `extraDirs`, and the `beforeBuild` orchestration API.
+
+===== Acceptance
+
+* README + `contract.js` describe the same lifecycle
+* No references to `beforeBuild` / `afterChrome` / `contributeConvert` remain in src (except git history)
+* `npm test` + `npm run lint` pass
+* `todo.adoc` status for this item → done
+
+===== Effort / risk
+
+* Small diff, mostly renames + deletions across 3 plugins + loader + build + README
+* Risk: low (no behavior change intended); highest touch is nav/shiki chrome timing, already covered indirectly by check/serve tests
+
+=== Fix incremental + assets gap
+
+* Status: done
+* Why: `decideMode` can return `incremental` when pages *and* styles change, but `copyAssetDirs` only runs for `full` / `assets`. Mixed edits can skip asset copy. Also, `<source>/styles/` is treated as assets for mode selection but is not copied unless listed in `assets:`.
+* Evidence: `src/build.js` (`decideMode`, `build`); smoke fixture `docs/styles/site.css` with empty `assets`
+* Direction: Always copy asset dirs (cheap via `sameFileContent`); implicitly map `<source>/styles` → `<output>/styles`.
+
+==== Plan
+
+. Add `assetCopyItems(cfg)` in `build.js` (or `fs-utils.js`):
+** Start from `cfg.assets`
+** Append `{ from: <source>/styles, to: <output>/styles }` if not already present
+. In `build`, call `copyAssetDirs(cfg.root, assetCopyItems(cfg))` for **all** modes (not only `full` | `assets`). Page-only incremental still cheap because unchanged files are skipped.
+. Tests:
+** Incremental with page + `assets:` file → mode `incremental` and output asset updated
+** Incremental with page + `docs/styles/*.css` → output styles updated (implicit map)
+** Strengthen styles-only smoke: `site/styles/site.css` content updates
+. Document implicit styles mapping in README (Build modes / Config).
+. Out of scope: recursive `copyAssetDirs` (P1); watch paths outside `source/`.
+
+=== Contain Shiki process globals
+
+* Status: done
+* Why: Module-level `shared` + one-shot `SyntaxHighlighter.register` means disable/swap under serve needs restart (README already admits it). Easy to regress.
+* Evidence: `src/plugins/shiki.js`, `README.adoc` (serve notes)
+* Direction: Explicit runtime dispose + inactive adapter when Shiki is not loaded; regression tests; update README.
+
+==== Plan
+
+. Refactor `shiki.js` runtime: `ensureActiveAdapter`, `disposeShikiRuntime`, `afterPluginsLoaded(locators)`.
+. On `setup`: create/reuse Highlighter; register **active** adapter (re-register after dispose).
+. On plugin load without `mkadoc:shiki`: dispose Highlighter; register **inactive** adapter that throws a clear error if `:source-highlighter: shiki` is still requested.
+. Call `afterPluginsLoaded` from `loadPlugins`.
+. Tests: theme change in-process; enable → disable → enable without restart.
+. README: theme/lang still hot; enable/disable no longer requires restart.
+
+== P1 — maintainability
+
+=== Plugin integration tests
+
+* Status: open
+* Why: Coverage is strong for mode/config/serve wiring; nav/shiki/kroki are mostly unit/check-only.
+* Evidence: `test/nav-extract.test.js`, `test/check.test.js`; no full-build plugin fixtures
+* Direction: Add build fixtures that assert sidebar docinfo, highlighted HTML, and diagram attributes.
+
+=== Dedupe FS walks
+
+* Status: open
+* Why: Three near-identical `walk()` loops in `build.js` (`listPages`, `pruneStaleHtml`, `cleanupArtifacts`).
+* Evidence: `src/build.js`
+* Direction: Extract one `walkDir` helper (likely in `fs-utils.js`).
+
+=== Clarify `copyAssetDirs` depth
+
+* Status: open
+* Why: Only copies top-level files; nested trees are silently ignored.
+* Evidence: `src/fs-utils.js` (`copyAssetDirs`)
+* Direction: Make recursive, or document flat-only and validate/fail on nested inputs.
+
+=== Align nav `css_href` / `js_href` with write paths
+
+* Status: open
+* Why: Writes always go to `output/styles/<basename>` while head links use the full href—easy to desync.
+* Evidence: `src/plugins/nav.js`
+* Direction: Derive write path from href (or the reverse) from one shared mapping.
+
+=== Single source of truth for plugin defaults
+
+* Status: open
+* Why: Defaults live in factories; Zod schemas are optional fields only. Docs already drift (e.g. Shiki theme prose vs code default).
+* Evidence: `src/config-schema.js`, `src/plugins/*.js`, root `mkadoc.adoc` prose
+* Direction: Co-locate defaults with schema (or export defaults from plugins and reuse in schema/docs).
+
+== P2 — structure / polish
+
+=== Resolve `plugin/` vs `plugins/` naming
+
+* Status: open
+* Why: Host/loader vs builtins is easy to confuse for new contributors.
+* Evidence: `src/plugin/`, `src/plugins/`
+* Direction: Rename to something like `plugin-host` / `builtins` (or similar).
+
+=== Typed boundaries for cfg / host / plugin
+
+* Status: open
+* Why: Host growth stays stringly-typed; call sites rely on tribal knowledge.
+* Evidence: JSDoc `@param {object}` across host/plugins/build
+* Direction: Add JSDoc `@typedef`s (or light TypeScript) for `Config`, `Host`, `Plugin`.
+
+=== Bounded parallel convert for full builds
+
+* Status: open
+* Why: Full builds convert pages strictly sequentially; low-risk win for larger trees.
+* Evidence: `src/build.js` (`buildPages`)
+* Direction: Optional concurrency with a small worker limit; keep order-independent semantics.
+
+=== Normalize CLI error UX
+
+* Status: open
+* Why: Expected failures dump stacks via the CLI catch-all; hard to distinguish user errors from bugs.
+* Evidence: `src/cli.js`
+* Direction: Tag/classify user-facing errors; print message-only for expected failures, stack for unexpected.
+
+== Other smells (watch list)
+
+Not tracked as separate work items unless they grow:
+
+* *Host as god-object lite* — registry, attrs, chrome, FS, convert, classifiers in one mutable bag.
+* *`safe: 'unsafe'` everywhere* — intentional for includes/diagrams; standing trust boundary (project-local only).
+* *Config mutation in CLI* — `cfg.serve.*` patched in place after load; prefer an immutable overlay.
+* *Watch scope* — only `source/` + config; assets outside `source/` will not hot-reload even if listed in `assets:`.

@@ -1,10 +1,7 @@
-import fs from 'node:fs'
 import path from 'node:path'
-import {
-  SyntaxHighlighter,
-  SyntaxHighlighterBase,
-} from '@asciidoctor/core'
+import { SyntaxHighlighter, SyntaxHighlighterBase } from '@asciidoctor/core'
 import { createHighlighter } from 'shiki'
+import { writeIfChanged } from '../fs-utils.js'
 
 const DEFAULT_THEME = 'github-light-default'
 const DEFAULT_LANGS = [
@@ -27,7 +24,11 @@ const LANG_ALIASES = {
   js: 'javascript',
 }
 
-/** Shared across rebuilds so serve does not leak a Highlighter per build. */
+/**
+ * Process-global runtime for the Asciidoctor `shiki` adapter.
+ * Adapter registration cannot be removed from Asciidoctor’s factory, so we
+ * swap between an active adapter and an inactive stub that fails clearly.
+ */
 const shared = {
   /** @type {import('shiki').Highlighter | null} */
   highlighter: null,
@@ -36,22 +37,119 @@ const shared = {
   theme: DEFAULT_THEME,
   /** @type {{ bg: string, fg: string }} */
   colors: { bg: '#ffffff', fg: '#1f2328' },
-  registered: false,
-}
-
-function writeIfChanged(filePath, content) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  if (fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf8') === content) {
-    return false
-  }
-  fs.writeFileSync(filePath, content)
-  return true
+  /** @type {'absent' | 'active' | 'inactive'} */
+  adapterState: 'absent',
 }
 
 function langListFor(langs) {
   const langList = new Set([...langs, 'plaintext'])
   for (const alias of Object.values(LANG_ALIASES)) langList.add(alias)
   return [...langList].sort()
+}
+
+class ActiveShikiHighlighter extends SyntaxHighlighterBase {
+  /**
+   * @param {string} name
+   * @param {string} [backend]
+   * @param {{ document?: { hasAttribute: Function, getAttribute: Function } }} [opts]
+   */
+  constructor(name, backend, opts = {}) {
+    super(name, backend, opts)
+    this.name = 'shiki'
+    this._preClass = 'shiki'
+    const doc = opts.document
+    this.theme =
+      (doc?.hasAttribute('shiki-theme') && doc.getAttribute('shiki-theme')) || shared.theme
+  }
+
+  highlight(_node, source, lang) {
+    const h = shared.highlighter
+    if (!h) {
+      throw new Error(
+        'mkadoc:shiki: highlighter is not active (plugin disabled or disposed; restart serve if this persists)',
+      )
+    }
+    let language = LANG_ALIASES[lang] || lang || 'plaintext'
+    if (!h.getLoadedLanguages().includes(language)) {
+      language = 'plaintext'
+    }
+    const themeName = h.getLoadedThemes().includes(this.theme) ? this.theme : shared.theme
+    return h.codeToHtml(source, {
+      lang: language,
+      theme: themeName,
+      structure: 'inline',
+    })
+  }
+
+  handlesHighlighting() {
+    return true
+  }
+}
+
+class InactiveShikiHighlighter extends SyntaxHighlighterBase {
+  /**
+   * @param {string} name
+   * @param {string} [backend]
+   * @param {object} [opts]
+   */
+  constructor(name, backend, opts = {}) {
+    super(name, backend, opts)
+    this.name = 'shiki'
+  }
+
+  highlight() {
+    throw new Error(
+      'mkadoc:shiki: plugin is not enabled in the current config (source-highlighter=shiki is stale)',
+    )
+  }
+
+  handlesHighlighting() {
+    return true
+  }
+}
+
+function ensureActiveAdapter() {
+  if (shared.adapterState === 'active') return
+  // Asciidoctor 4: register(adapter, ...names) — process-global; overwrites prior entry.
+  SyntaxHighlighter.register(ActiveShikiHighlighter, 'shiki')
+  shared.adapterState = 'active'
+}
+
+/**
+ * Dispose the Highlighter and park an inactive adapter under the `shiki` name.
+ * Safe to call when Shiki was never enabled.
+ */
+export function disposeShikiRuntime() {
+  shared.highlighter?.dispose()
+  shared.highlighter = null
+  shared.key = null
+  if (shared.adapterState === 'absent') return
+  SyntaxHighlighter.register(InactiveShikiHighlighter, 'shiki')
+  shared.adapterState = 'inactive'
+}
+
+/**
+ * Called after builtins are loaded so a config reload that drops `mkadoc:shiki`
+ * does not leave a live Highlighter (or active adapter) in the serve process.
+ * @param {string[]} locators
+ */
+export function afterPluginsLoaded(locators = []) {
+  if (!locators.includes('mkadoc:shiki')) {
+    disposeShikiRuntime()
+  }
+}
+
+/**
+ * Test/introspection snapshot of the process-global runtime.
+ */
+export function getShikiRuntimeSnapshot() {
+  return {
+    adapterState: shared.adapterState,
+    hasHighlighter: Boolean(shared.highlighter),
+    key: shared.key,
+    theme: shared.theme,
+    colors: { ...shared.colors },
+  }
 }
 
 /**
@@ -67,9 +165,7 @@ function langListFor(langs) {
  */
 export default function shikiPlugin(options = {}) {
   const theme = options.theme || DEFAULT_THEME
-  const langs = Array.isArray(options.langs) && options.langs.length
-    ? options.langs
-    : DEFAULT_LANGS
+  const langs = Array.isArray(options.langs) && options.langs.length ? options.langs : DEFAULT_LANGS
   const cssHref = options.css_href || '/styles/shiki.css'
 
   return {
@@ -94,63 +190,13 @@ export default function shikiPlugin(options = {}) {
         }
       }
 
-      host.registerAssetPrefix(
-        path.posix.join(host.config.output.replace(/\\/g, '/'), 'styles'),
-      )
-    },
+      host.registerAssetPrefix(path.posix.join(host.config.output.replace(/\\/g, '/'), 'styles'))
 
-    async contributeConvert(host) {
       if (!shared.highlighter) {
         throw new Error('mkadoc:shiki: highlighter not initialized (setup failed)')
       }
 
-      if (!shared.registered) {
-        class ShikiHighlighter extends SyntaxHighlighterBase {
-          /**
-           * @param {string} name
-           * @param {string} [backend]
-           * @param {{ document?: { hasAttribute: Function, getAttribute: Function } }} [opts]
-           */
-          constructor(name, backend, opts = {}) {
-            super(name, backend, opts)
-            this.name = 'shiki'
-            this._preClass = 'shiki'
-            const doc = opts.document
-            this.theme =
-              (doc &&
-                doc.hasAttribute('shiki-theme') &&
-                doc.getAttribute('shiki-theme')) ||
-              shared.theme
-          }
-
-          highlight(_node, source, lang) {
-            const h = shared.highlighter
-            if (!h) {
-              throw new Error('mkadoc:shiki: highlighter disposed')
-            }
-            let language = LANG_ALIASES[lang] || lang || 'plaintext'
-            if (!h.getLoadedLanguages().includes(language)) {
-              language = 'plaintext'
-            }
-            const themeName = h.getLoadedThemes().includes(this.theme)
-              ? this.theme
-              : shared.theme
-            return h.codeToHtml(source, {
-              lang: language,
-              theme: themeName,
-              structure: 'inline',
-            })
-          }
-
-          handlesHighlighting() {
-            return true
-          }
-        }
-
-        // Asciidoctor 4: register(adapter, ...names)
-        SyntaxHighlighter.register(ShikiHighlighter, 'shiki')
-        shared.registered = true
-      }
+      ensureActiveAdapter()
 
       // Keep adapter defaults in sync when theme changes without re-registering.
       shared.theme = theme
@@ -161,13 +207,8 @@ export default function shikiPlugin(options = {}) {
       })
     },
 
-    async afterChrome(host) {
-      const cssPath = path.join(
-        host.root,
-        host.config.output,
-        'styles',
-        path.basename(cssHref),
-      )
+    async contributeChrome(host) {
+      const cssPath = path.join(host.root, host.config.output, 'styles', path.basename(cssHref))
       const css = `/* Generated from Shiki theme: ${theme} — do not edit. */
 .listingblock > .content > pre.shiki,
 .listingblock > .content > pre.shiki code {

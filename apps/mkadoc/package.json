@@ -6,6 +6,12 @@
   "bin": {
     "mkadoc": "./bin/mkadoc.js"
   },
+  "scripts": {
+    "test": "node --test test/**/*.test.js",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "check": "npm run lint && npm test"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -13,8 +19,12 @@
     "@asciidoctor/core": "^4.0.8",
     "asciidoctor-kroki": "^1.0.1",
     "chokidar": "^4.0.3",
-    "live-server": "^1.2.2",
+    "serve-handler": "^6.1.7",
     "shiki": "^3.0.0",
-    "yaml": "^2.8.0"
+    "yaml": "^2.8.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.8"
   }
 }

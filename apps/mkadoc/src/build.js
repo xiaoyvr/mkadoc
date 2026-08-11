@@ -1,18 +1,9 @@
-import { convertFile } from '@asciidoctor/core'
 import fs from 'node:fs'
 import path from 'node:path'
+import { convertFile } from '@asciidoctor/core'
+import { copyAssetDirs, relToRoot } from './fs-utils.js'
 import { createHost } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
-
-function relToRoot(p, root) {
-  let out = p
-  if (path.isAbsolute(out)) {
-    const prefix = root.endsWith(path.sep) ? root : root + path.sep
-    if (out.startsWith(prefix)) out = out.slice(prefix.length)
-  }
-  if (out.startsWith('./')) out = out.slice(2)
-  return out.split(path.sep).join('/')
-}
 
 function isPage(p, cfg) {
   const src = cfg.source.replace(/\/$/, '')
@@ -34,28 +25,25 @@ function prepareDirs(cfg) {
   fs.mkdirSync(path.join(cfg.root, cfg.docinfoDir), { recursive: true })
 }
 
-function sameFileContent(a, b) {
-  if (!fs.existsSync(b)) return false
-  const sa = fs.statSync(a)
-  const sb = fs.statSync(b)
-  if (sa.size !== sb.size) return false
-  return fs.readFileSync(a).equals(fs.readFileSync(b))
+/**
+ * Asset dirs to copy: configured `assets` plus implicit `<source>/styles` → `<output>/styles`.
+ * @param {{ source: string, output: string, assets?: { from: string, to: string }[] }} cfg
+ * @returns {{ from: string, to: string }[]}
+ */
+export function assetCopyItems(cfg) {
+  const source = cfg.source.replace(/\/$/, '')
+  const output = cfg.output.replace(/\/$/, '')
+  const implicitFrom = `${source}/styles`
+  const implicitTo = `${output}/styles`
+  const items = [...(cfg.assets || [])]
+  const hasImplicit = items.some((a) => a.from === implicitFrom && a.to === implicitTo)
+  if (!hasImplicit) items.push({ from: implicitFrom, to: implicitTo })
+  return items
 }
 
-function copyCoreAssets(cfg) {
-  for (const item of cfg.assets) {
-    const from = path.join(cfg.root, item.from)
-    const to = path.join(cfg.root, item.to)
-    fs.mkdirSync(to, { recursive: true })
-    if (!fs.existsSync(from)) continue
-    for (const ent of fs.readdirSync(from, { withFileTypes: true })) {
-      if (!ent.isFile()) continue
-      const src = path.join(from, ent.name)
-      const dest = path.join(to, ent.name)
-      if (sameFileContent(src, dest)) continue
-      fs.copyFileSync(src, dest)
-    }
-  }
+function cleanOutput(cfg) {
+  fs.rmSync(path.join(cfg.root, cfg.output), { recursive: true, force: true })
+  fs.rmSync(path.join(cfg.root, cfg.cache), { recursive: true, force: true })
 }
 
 function listPages(cfg) {
@@ -75,6 +63,23 @@ function listPages(cfg) {
   return pages
 }
 
+/**
+ * Convert one AsciiDoc page; rethrow with the page path in the message.
+ * @param {string} page root-relative page path (for errors)
+ * @param {string} absPath
+ * @param {object} opts asciidoctor convertFile options
+ */
+export async function convertAdocFile(page, absPath, opts) {
+  try {
+    await convertFile(absPath, opts)
+  } catch (err) {
+    const detail = err?.message || String(err)
+    const wrapped = new Error(`mkadoc: failed to convert ${page}: ${detail}`)
+    wrapped.cause = err
+    throw wrapped
+  }
+}
+
 async function buildPages(cfg, host, pages) {
   const attrs = { ...host.attributes }
   if (host.wantsDocinfo()) {
@@ -87,7 +92,7 @@ async function buildPages(cfg, host, pages) {
   const registry = host.registry
 
   for (const page of pages) {
-    await convertFile(path.join(cfg.root, page), {
+    await convertAdocFile(page, path.join(cfg.root, page), {
       safe: 'unsafe',
       base_dir: baseDir,
       to_dir: toDir,
@@ -98,11 +103,17 @@ async function buildPages(cfg, host, pages) {
   }
 }
 
-function pruneStaleHtml(cfg) {
+/**
+ * Remove HTML whose source `.adoc` no longer exists.
+ * Skips `output/styles/` (generated/copied assets).
+ * @param {object} cfg
+ */
+export function pruneStaleHtml(cfg) {
   const outRoot = path.join(cfg.root, cfg.output)
   const stylesPrefix = path.join(cfg.output, 'styles').split(path.sep).join('/')
 
   function walk(dir) {
+    if (!fs.existsSync(dir)) return
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, ent.name)
       const norm = relToRoot(full, cfg.root)
@@ -116,7 +127,7 @@ function pruneStaleHtml(cfg) {
       }
     }
   }
-  if (fs.existsSync(outRoot)) walk(outRoot)
+  walk(outRoot)
 }
 
 function cleanupArtifacts(cfg) {
@@ -137,7 +148,14 @@ function cleanupArtifacts(cfg) {
   walk(path.join(cfg.root, cfg.output))
 }
 
-function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
+/**
+ * Decide rebuild mode from changed paths.
+ * @param {object} cfg
+ * @param {{ assetPrefixes: string[], classifyPath: (p: string) => 'full' | null }} host
+ * @param {{ forceFull?: boolean, paths?: string[] }} [opts]
+ * @returns {{ mode: 'full' | 'incremental' | 'assets', pages: string[] }}
+ */
+export function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
   if (forceFull || paths.length === 0) {
     return { mode: 'full', pages: [] }
   }
@@ -169,21 +187,24 @@ function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
 }
 
 /**
- * @param {ReturnType<import('./config.js').loadConfig>} cfg
- * @param {{ forceFull?: boolean, paths?: string[] }} opts
+ * @param {Awaited<ReturnType<import('./config.js').loadConfig>>} cfg
+ * @param {{ forceFull?: boolean, paths?: string[], clean?: boolean }} opts
  */
 export async function build(cfg, opts = {}) {
+  if (opts.clean) cleanOutput(cfg)
+
   const host = createHost(cfg)
   const plugins = await loadPlugins(cfg.plugins, host)
   const { mode, pages } = decideMode(cfg, host, opts)
   const ctx = { mode, pages }
 
   prepareDirs(cfg)
-  await plugins.beforeBuild(ctx)
-  await plugins.afterChrome(ctx)
+  await plugins.contributeChrome(ctx)
 
   if (mode !== 'assets') host.writeHeadDocinfo()
-  if (mode === 'full' || mode === 'assets') copyCoreAssets(cfg)
+  // Always copy: incremental may batch page + asset edits, and sameFileContent
+  // skips unchanged files. Includes implicit <source>/styles → <output>/styles.
+  copyAssetDirs(cfg.root, assetCopyItems(cfg))
 
   switch (mode) {
     case 'assets':
@@ -198,6 +219,9 @@ export async function build(cfg, opts = {}) {
     case 'incremental':
       console.log(`mkadoc: incremental ${pages.join(' ')}`)
       await buildPages(cfg, host, pages)
+      // Also prune: a delete batched with page edits is incremental, and would
+      // otherwise leave orphan HTML for the removed sources.
+      pruneStaleHtml(cfg)
       break
   }
 

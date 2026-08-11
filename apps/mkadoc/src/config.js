@@ -1,27 +1,15 @@
-import { load } from '@asciidoctor/core'
 import fs from 'node:fs'
 import path from 'node:path'
+import { load } from '@asciidoctor/core'
 import { parse as parseYaml } from 'yaml'
-
-const DEFAULTS = {
-  source: 'docs',
-  output: 'site',
-  cache: '.cache/asciidoctor',
-  assets: [],
-  plugins: {},
-  serve: {
-    // false → localhost only (127.0.0.1); true → all interfaces (0.0.0.0)
-    remote: false,
-    port: 8000,
-  },
-}
+import { parseProjectConfig } from './config-schema.js'
 
 /**
  * Deep-merge plain objects; arrays and scalars from `next` replace.
  * @param {object} base
  * @param {object} next
  */
-function deepMerge(base, next) {
+export function deepMerge(base, next) {
   if (!next || typeof next !== 'object' || Array.isArray(next)) return next
   const out = { ...base }
   for (const [key, value] of Object.entries(next)) {
@@ -64,46 +52,43 @@ export async function loadLiterateConfig(source) {
 }
 
 /**
- * Resolve listen address from serve config.
- * Prefer `remote` boolean; optional `host` is an advanced override.
- *
- * @param {object} serve
+ * Parse and validate a TCP port from config or CLI.
+ * @param {unknown} raw
+ * @param {string} [label]
  */
-export function resolveServeListen(serve = {}) {
-  const port = Number(serve.port ?? DEFAULTS.serve.port)
-  if (!Number.isFinite(port) || port <= 0) {
-    throw new Error(`mkadoc: invalid serve.port: ${serve.port}`)
+export function parsePort(raw, label = 'serve.port') {
+  const port = Number(raw)
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error(`mkadoc: invalid ${label}: ${raw}`)
   }
-
-  let host
-  if (typeof serve.host === 'string' && serve.host.trim()) {
-    host = serve.host.trim()
-  } else if (serve.remote) {
-    host = '0.0.0.0'
-  } else {
-    host = '127.0.0.1'
-  }
-
-  return {
-    host,
-    port,
-    remote: host !== '127.0.0.1' && host !== '::1',
-  }
+  return port
 }
 
-function finalizeConfig(raw, root, abs) {
-  const cfg = {
-    ...DEFAULTS,
-    ...raw,
-    plugins: raw.plugins ?? DEFAULTS.plugins,
-    assets: raw.assets ?? DEFAULTS.assets,
-    serve: { ...DEFAULTS.serve, ...(raw.serve || {}) },
-  }
+/**
+ * Resolve listen address from serve config (`remote` + `port` only).
+ *
+ * @param {{ remote?: boolean, port?: number }} serve
+ */
+export function resolveServeListen(serve = {}) {
+  const port = parsePort(serve.port ?? 8000)
+  const remote = Boolean(serve.remote)
+  const host = remote ? '0.0.0.0' : '127.0.0.1'
+  return { host, port, remote }
+}
 
-  cfg.root = root
-  cfg.configPath = abs
-  cfg.docinfoDir = path.join(cfg.cache, 'docinfo')
-  return cfg
+/**
+ * @param {unknown} raw
+ * @param {string} root
+ * @param {string} abs
+ */
+function finalizeConfig(raw, root, abs) {
+  const cfg = parseProjectConfig(raw)
+  return {
+    ...cfg,
+    root,
+    configPath: abs,
+    docinfoDir: path.join(cfg.cache, 'docinfo'),
+  }
 }
 
 /**
@@ -127,9 +112,7 @@ export async function loadConfig(configPath, root = process.cwd()) {
   } else if (ext === '.yml' || ext === '.yaml') {
     raw = parseYaml(text) || {}
   } else {
-    throw new Error(
-      `mkadoc: unsupported config type "${ext}" (use mkadoc.adoc or .yml)`,
-    )
+    throw new Error(`mkadoc: unsupported config type "${ext}" (use mkadoc.adoc or .yml)`)
   }
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -142,3 +125,5 @@ export async function loadConfig(configPath, root = process.cwd()) {
 export function defaultConfigPath() {
   return 'mkadoc.adoc'
 }
+
+export { parseProjectConfig } from './config-schema.js'

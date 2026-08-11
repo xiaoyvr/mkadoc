@@ -1,6 +1,7 @@
-import { load } from '@asciidoctor/core'
 import fs from 'node:fs'
 import path from 'node:path'
+import { load } from '@asciidoctor/core'
+import { writeIfChanged } from '../fs-utils.js'
 
 /**
  * Load _nav.adoc, extract tagged passthrough blocks via the Asciidoctor AST,
@@ -25,7 +26,9 @@ export async function extractNavChrome(source) {
 
   function take(style) {
     let text = ''
-    for (const block of doc.findBy((b) => b.getStyle() === style)) {
+    // Collect first, then mutate — findBy iteration is not safe to splice mid-loop.
+    const matched = [...doc.findBy((b) => b.getStyle() === style)]
+    for (const block of matched) {
       const chunk = block.getSource?.() ?? (block.lines || []).join('\n')
       if (chunk) text += chunk.endsWith('\n') ? chunk : `${chunk}\n`
       const parent = block.getParent()
@@ -42,15 +45,6 @@ export async function extractNavChrome(source) {
   return { css, js, html: String(html) }
 }
 
-function writeIfChanged(filePath, content) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  if (fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf8') === content) {
-    return false
-  }
-  fs.writeFileSync(filePath, content)
-  return true
-}
-
 /**
  * @param {object} options
  */
@@ -65,13 +59,10 @@ export default function navPlugin(options = {}) {
     async setup(host) {
       const navRel = host.relToRoot(path.resolve(host.root, nav))
       host.registerClassifier((p) => (p === navRel ? 'full' : null))
-    },
-
-    async contributeConvert(host) {
       host.addAttributes({ icons: 'font' })
     },
 
-    async afterChrome(host, { mode }) {
+    async contributeChrome(host, { mode }) {
       if (mode === 'assets') return
 
       const stylesDir = path.join(host.root, host.config.output, 'styles')

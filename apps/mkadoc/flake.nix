@@ -13,42 +13,81 @@
         "x86_64-linux"
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
+
+      perSystem = system: rec {
+        pkgs = nixpkgs.legacyPackages.${system};
+        lib = pkgs.lib;
+        buildNpmPackage = pkgs.buildNpmPackage.override {
+          nodejs = pkgs.nodejs_24;
+        };
+
+        version = "0.1.0";
+        npmDepsHash = "sha256-+sPh1ts/Rt1D55T8FV5AACcKT5ALxCyzzkmc7fufJ98=";
+
+        packageFileset = lib.fileset.unions [
+          ./bin
+          ./src
+          ./package.json
+          ./package-lock.json
+        ];
+
+        # Includes tests; used only by the check derivation so test-only edits
+        # do not rebuild the installable `mkadoc` package.
+        testFileset = lib.fileset.unions [
+          packageFileset
+          ./test
+        ];
+
+        mkadoc = buildNpmPackage {
+          pname = "mkadoc";
+          inherit version npmDepsHash;
+
+          src = lib.fileset.toSource {
+            root = ./.;
+            fileset = packageFileset;
+          };
+
+          dontNpmBuild = true;
+          npmFlags = [ "--omit=dev" ];
+
+          meta = {
+            description = "Build and serve AsciiDoc as a static site";
+            mainProgram = "mkadoc";
+            platforms = systems;
+          };
+        };
+
+        mkadoc-test = buildNpmPackage {
+          pname = "mkadoc-test";
+          inherit version npmDepsHash;
+
+          src = lib.fileset.toSource {
+            root = ./.;
+            fileset = testFileset;
+          };
+
+          dontNpmBuild = true;
+
+          installPhase = ''
+            runHook preInstall
+            npm test
+            mkdir -p "$out"
+            touch "$out/passed"
+            runHook postInstall
+          '';
+
+          meta = {
+            description = "mkadoc test suite";
+            platforms = systems;
+          };
+        };
+      };
     in
     {
       packages = forAllSystems (
         system:
         let
-          pkgs = nixpkgs.legacyPackages.${system};
-          lib = pkgs.lib;
-
-          mkadoc =
-            (pkgs.buildNpmPackage.override {
-              nodejs = pkgs.nodejs_24;
-            })
-              {
-                pname = "mkadoc";
-                version = "0.1.0";
-
-                src = lib.fileset.toSource {
-                  root = ./.;
-                  fileset = lib.fileset.unions [
-                    ./bin
-                    ./src
-                    ./package.json
-                    ./package-lock.json
-                  ];
-                };
-
-                npmDepsHash = "sha256-a5GM6humsvM5dN7PhtZ/QJYnWuzWNle0QwfWt2MAq54=";
-
-                dontNpmBuild = true;
-
-                meta = {
-                  description = "Build and serve AsciiDoc as a static site";
-                  mainProgram = "mkadoc";
-                  platforms = systems;
-                };
-              };
+          inherit (perSystem system) mkadoc;
         in
         {
           default = mkadoc;
@@ -63,8 +102,14 @@
         };
       });
 
-      checks = forAllSystems (system: {
-        mkadoc = self.packages.${system}.default;
-      });
+      checks = forAllSystems (
+        system:
+        let
+          inherit (perSystem system) mkadoc mkadoc-test;
+        in
+        {
+          inherit mkadoc mkadoc-test;
+        }
+      );
     };
 }

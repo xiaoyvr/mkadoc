@@ -1,20 +1,25 @@
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import { watch } from 'chokidar'
 import { build } from './build.js'
 import { defaultConfigPath, loadConfig, resolveServeListen } from './config.js'
-
-const require = createRequire(import.meta.url)
-const liveServer = require('live-server')
+import { createDevServer } from './dev-server.js'
 
 const WATCH_EXTS = new Set(['.adoc', '.css', '.js', '.html', '.yml', '.yaml'])
 
 /**
  * @param {object} cfg
- * @param {{ open?: boolean, configPath?: string }} [opts]
+ * @param {{
+ *   open?: boolean,
+ *   configPath?: string,
+ *   buildFn?: typeof build,
+ *   createServer?: typeof createDevServer,
+ * }} [opts]
+ * @returns {Promise<{ close: () => Promise<void> }>}
  */
 export async function serve(cfg, opts = {}) {
   let current = cfg
+  const buildFn = opts.buildFn || build
+  const createServer = opts.createServer || createDevServer
   const configPath = opts.configPath || cfg.configPath || defaultConfigPath()
   const configAbs = path.resolve(current.root, configPath)
   const configDir = path.dirname(configAbs)
@@ -23,7 +28,7 @@ export async function serve(cfg, opts = {}) {
   const watchRoot = path.join(current.root, current.source)
 
   console.log('mkadoc: initial full build')
-  await build(current, { forceFull: true })
+  await buildFn(current, { forceFull: true })
 
   let timer = null
   /** @type {Set<string>} */
@@ -33,6 +38,7 @@ export async function serve(cfg, opts = {}) {
   // Drop FS events while a build is writing output, plus a short settle window
   // afterward so copy/write noise cannot schedule a follow-up rebuild.
   let ignoreUntil = 0
+  let closed = false
 
   async function reloadConfigIfNeeded(paths) {
     const touched = paths.some(
@@ -43,7 +49,11 @@ export async function serve(cfg, opts = {}) {
     console.log('mkadoc: reloaded config')
   }
 
+  /** @type {{ close: () => Promise<void>, reload: () => void } | null} */
+  let devServer = null
+
   async function flush() {
+    if (closed) return
     if (building) {
       rebuildQueued = true
       return
@@ -58,18 +68,17 @@ export async function serve(cfg, opts = {}) {
       const configTouched = paths.some(
         (p) => path.resolve(p) === configAbs || path.resolve(current.root, p) === configAbs,
       )
-      await build(
-        current,
-        configTouched || paths.length === 0
-          ? { forceFull: true }
-          : { paths },
-      )
+      // A queued flush with no paths is a no-op (can happen if events arrived
+      // while ignoreUntil suppressed scheduling during the previous build).
+      if (!configTouched && paths.length === 0) return
+      await buildFn(current, configTouched ? { forceFull: true } : { paths })
+      devServer?.reload()
     } catch (err) {
       console.error('mkadoc: rebuild failed:', err?.message || err)
     } finally {
       building = false
       ignoreUntil = Date.now() + 250
-      if (rebuildQueued || pending.size) {
+      if (!closed && (rebuildQueued || pending.size)) {
         rebuildQueued = false
         await flush()
       }
@@ -84,6 +93,7 @@ export async function serve(cfg, opts = {}) {
   }
 
   function schedule(filePath) {
+    if (closed) return
     if (Date.now() < ignoreUntil) return
     if (!isWatchedPath(filePath)) return
     const ext = path.extname(filePath).toLowerCase()
@@ -116,54 +126,59 @@ export async function serve(cfg, opts = {}) {
     },
   })
 
-  const onReady = () => {
-    // Log once when both are ready enough; duplicate ready is fine.
-    const relConfig = path.relative(current.root, configAbs) || configAbs
-    console.log(`mkadoc: watching ${current.source}/ and ${relConfig} only`)
-  }
-  let readyCount = 0
-  const markReady = () => {
-    readyCount += 1
-    if (readyCount === 2) onReady()
-  }
+  const watchersReady = new Promise((resolve) => {
+    let readyCount = 0
+    const markReady = () => {
+      readyCount += 1
+      if (readyCount === 2) {
+        const relConfig = path.relative(current.root, configAbs) || configAbs
+        console.log(`mkadoc: watching ${current.source}/ and ${relConfig} only`)
+        resolve()
+      }
+    }
+    for (const watcher of [docsWatcher, configWatcher]) {
+      watcher.on('ready', markReady)
+      watcher.on('error', (err) => {
+        console.error('mkadoc: watch error:', err?.message || err)
+      })
+      watcher.on('add', schedule)
+      watcher.on('change', schedule)
+      watcher.on('unlink', schedule)
+    }
+  })
 
-  for (const watcher of [docsWatcher, configWatcher]) {
-    watcher.on('ready', markReady)
-    watcher.on('error', (err) => {
-      console.error('mkadoc: watch error:', err?.message || err)
-    })
-    watcher.on('add', schedule)
-    watcher.on('change', schedule)
-    watcher.on('unlink', schedule)
-  }
+  // Wait until both watchers are ready so callers (and tests) can mutate
+  // sources without racing ignoreInitial / startup.
+  await watchersReady
 
-  liveServer.start({
+  devServer = await createServer({
     root: outDir,
     host,
     port,
     open: opts.open ?? false,
-    wait: 200,
-    logLevel: 2,
   })
 
-  const localUrl = `http://127.0.0.1:${port}/`
   if (remote) {
     console.log(
-      `mkadoc: serving on all interfaces port ${port} (local ${localUrl})`,
+      `mkadoc: serving on all interfaces port ${port} (local ${devServer.url || `http://127.0.0.1:${port}/`})`,
     )
   } else {
-    console.log(`mkadoc: serving ${localUrl} (local only)`)
+    console.log(`mkadoc: serving ${devServer.url || `http://127.0.0.1:${port}/`} (local only)`)
   }
 
-  const shutdown = async () => {
+  async function close() {
+    if (closed) return
+    closed = true
     clearTimeout(timer)
-    await Promise.all([docsWatcher.close(), configWatcher.close()])
-    // live-server doesn't expose a clean stop API; exit the process.
-    process.exit(0)
+    timer = null
+    pending.clear()
+    rebuildQueued = false
+    await Promise.all([
+      docsWatcher.close(),
+      configWatcher.close(),
+      devServer?.close?.() ?? Promise.resolve(),
+    ])
   }
-  process.on('SIGINT', shutdown)
-  process.on('SIGTERM', shutdown)
 
-  // Keep the event loop alive (live-server already does; this is explicit).
-  await new Promise(() => {})
+  return { close }
 }
