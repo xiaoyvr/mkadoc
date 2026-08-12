@@ -1,68 +1,56 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { convertFile } from '@asciidoctor/core'
-import { userError } from './errors.js'
+import { decideMode } from './decide-mode.js'
 import { copyAssetDirs, relToRoot, walkDir } from './fs-utils.js'
+import { defaultPoolConcurrency, mapPool } from './map-pool.js'
 import { createHost } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
 
-const MAX_CONVERT_CONCURRENCY = 4
-
-function defaultConvertConcurrency() {
-  const n =
-    typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length
-  return Math.max(1, Math.min(MAX_CONVERT_CONCURRENCY, n || 1))
-}
-
-async function mapPool(items, limit, fn) {
-  if (items.length === 0) return
-  const workers = Math.min(Math.max(1, limit), items.length)
-  let next = 0
-  async function worker() {
-    while (next < items.length) {
-      const index = next
-      next += 1
-      await fn(items[index], index)
-    }
+export async function build(cfg, opts = {}) {
+  if (opts.clean) {
+    fs.rmSync(path.join(cfg.root, cfg.output), { recursive: true, force: true })
+    fs.rmSync(path.join(cfg.root, cfg.cache), { recursive: true, force: true })
   }
-  await Promise.all(Array.from({ length: workers }, () => worker()))
-}
 
-function isPage(p, cfg) {
-  const src = cfg.source.replace(/\/$/, '')
-  if (!p.startsWith(`${src}/`) || !p.endsWith('.adoc')) return false
-  if (path.basename(p).startsWith('_')) return false
-  return fs.existsSync(path.join(cfg.root, p))
-}
+  const host = createHost(cfg)
+  const plugins = await loadPlugins(cfg.plugins, host)
+  const { mode, pages } = decideMode(cfg, host, opts)
 
-function needsAllPages(p, cfg, host) {
-  const base = path.basename(p)
-  const configRel = relToRoot(cfg.configPath, cfg.root)
-  if (p === configRel) return true
-  if (base.startsWith('_') && base.endsWith('.adoc')) return true
-  return host.classifyPath(p) === 'full'
-}
-
-function prepareDirs(cfg) {
   fs.mkdirSync(path.join(cfg.root, cfg.output), { recursive: true })
   fs.mkdirSync(path.join(cfg.root, cfg.docinfoDir), { recursive: true })
-}
+  await plugins.contributeChrome({ mode, pages })
 
-function assetCopyItems(cfg) {
+  if (mode !== 'assets') host.writeHeadDocinfo()
+
   const source = cfg.source.replace(/\/$/, '')
   const output = cfg.output.replace(/\/$/, '')
   const implicitFrom = `${source}/styles`
   const implicitTo = `${output}/styles`
-  const items = [...(cfg.assets || [])]
-  const hasImplicit = items.some((a) => a.from === implicitFrom && a.to === implicitTo)
-  if (!hasImplicit) items.push({ from: implicitFrom, to: implicitTo })
-  return items
-}
+  const assetItems = [...(cfg.assets || [])]
+  if (!assetItems.some((a) => a.from === implicitFrom && a.to === implicitTo)) {
+    assetItems.push({ from: implicitFrom, to: implicitTo })
+  }
+  copyAssetDirs(cfg.root, assetItems)
 
-function cleanOutput(cfg) {
-  fs.rmSync(path.join(cfg.root, cfg.output), { recursive: true, force: true })
-  fs.rmSync(path.join(cfg.root, cfg.cache), { recursive: true, force: true })
+  switch (mode) {
+    case 'assets':
+      console.log('mkadoc: assets only')
+      break
+    case 'full':
+      console.log('mkadoc: full rebuild')
+      await buildPages(cfg, host, listPages(cfg), { concurrency: opts.concurrency })
+      pruneStaleHtml(cfg)
+      cleanupArtifacts(cfg)
+      break
+    case 'incremental':
+      console.log(`mkadoc: incremental ${pages.join(' ')}`)
+      await buildPages(cfg, host, pages, { concurrency: opts.concurrency })
+      pruneStaleHtml(cfg)
+      break
+  }
+
+  return mode
 }
 
 function listPages(cfg) {
@@ -78,15 +66,6 @@ function listPages(cfg) {
   return pages
 }
 
-async function convertAdocFile(page, absPath, opts) {
-  try {
-    await convertFile(absPath, opts)
-  } catch (err) {
-    const detail = err?.message || String(err)
-    throw userError(`mkadoc: failed to convert ${page}: ${detail}`, { cause: err })
-  }
-}
-
 async function buildPages(cfg, host, pages, { concurrency } = {}) {
   const attrs = { ...host.attributes }
   if (host.wantsDocinfo()) {
@@ -97,17 +76,23 @@ async function buildPages(cfg, host, pages, { concurrency } = {}) {
   const baseDir = path.join(cfg.root, cfg.source)
   const toDir = path.join(cfg.root, cfg.output)
   const registry = host.registry
-  const limit = concurrency ?? defaultConvertConcurrency()
+  const limit = concurrency ?? defaultPoolConcurrency(4)
 
   await mapPool(pages, limit, async (page) => {
-    await convertAdocFile(page, path.join(cfg.root, page), {
-      safe: 'unsafe',
-      base_dir: baseDir,
-      to_dir: toDir,
-      mkdirs: true,
-      extension_registry: registry,
-      attributes: attrs,
-    })
+    const absPath = path.join(cfg.root, page)
+    try {
+      await convertFile(absPath, {
+        safe: 'unsafe',
+        base_dir: baseDir,
+        to_dir: toDir,
+        mkdirs: true,
+        extension_registry: registry,
+        attributes: attrs,
+      })
+    } catch (err) {
+      const detail = err?.message || String(err)
+      throw new Error(`mkadoc: failed to convert ${page}: ${detail}`, { cause: err })
+    }
   })
 }
 
@@ -142,71 +127,4 @@ function cleanupArtifacts(cfg) {
       }
     },
   })
-}
-
-function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
-  if (forceFull || paths.length === 0) {
-    return { mode: 'full', pages: [] }
-  }
-
-  const pages = []
-  let assetsOnly = false
-  const changed = paths
-
-  for (const raw of changed) {
-    const p = relToRoot(raw, cfg.root)
-    if (host.assetPrefixes.some((prefix) => p.startsWith(prefix))) {
-      assetsOnly = true
-      continue
-    }
-
-    const src = cfg.source.replace(/\/$/, '')
-    if (p.startsWith(`${src}/styles/`)) {
-      assetsOnly = true
-      continue
-    }
-    if (needsAllPages(p, cfg, host)) {
-      return { mode: 'full', pages: [] }
-    }
-    if (isPage(p, cfg)) pages.push(p)
-  }
-  if (pages.length === 0 && assetsOnly) return { mode: 'assets', pages: [] }
-  if (pages.length === 0) return { mode: 'full', pages: [] }
-  return { mode: 'incremental', pages }
-}
-
-export async function build(cfg, opts = {}) {
-  if (opts.clean) cleanOutput(cfg)
-
-  const host = createHost(cfg)
-  const plugins = await loadPlugins(cfg.plugins, host)
-  const { mode, pages } = decideMode(cfg, host, opts)
-  const ctx = { mode, pages }
-
-  prepareDirs(cfg)
-  await plugins.contributeChrome(ctx)
-
-  if (mode !== 'assets') host.writeHeadDocinfo()
-
-  copyAssetDirs(cfg.root, assetCopyItems(cfg))
-
-  switch (mode) {
-    case 'assets':
-      console.log('mkadoc: assets only')
-      break
-    case 'full':
-      console.log('mkadoc: full rebuild')
-      await buildPages(cfg, host, listPages(cfg), { concurrency: opts.concurrency })
-      pruneStaleHtml(cfg)
-      cleanupArtifacts(cfg)
-      break
-    case 'incremental':
-      console.log(`mkadoc: incremental ${pages.join(' ')}`)
-      await buildPages(cfg, host, pages, { concurrency: opts.concurrency })
-
-      pruneStaleHtml(cfg)
-      break
-  }
-
-  return mode
 }

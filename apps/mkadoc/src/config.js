@@ -2,8 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { load } from '@asciidoctor/core'
 import { parse as parseYaml } from 'yaml'
-import { parseProjectConfig } from './config-schema.js'
-import { userError } from './errors.js'
+import { parseProjectConfig, parseServeConfig } from './config-schema.js'
 
 /**
  * Runtime project config exposed to plugins as `host.config`.
@@ -51,26 +50,16 @@ async function loadLiterateConfig(source) {
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       merged = deepMerge(merged, parsed)
     } else if (parsed != null) {
-      throw userError('mkadoc: [mkadoc-config] block must be a YAML mapping')
+      throw new Error('mkadoc: [mkadoc-config] block must be a YAML mapping')
     }
   }
 
   return merged
 }
 
-export function parsePort(raw, label = 'serve.port') {
-  const port = Number(raw)
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-    throw userError(`mkadoc: invalid ${label}: ${raw}`)
-  }
-  return port
-}
-
 export function resolveServeListen(serve = {}) {
-  const port = parsePort(serve.port ?? 8000)
-  const remote = Boolean(serve.remote)
-  const host = remote ? '0.0.0.0' : '127.0.0.1'
-  return { host, port, remote }
+  const { port, remote } = parseServeConfig(serve)
+  return { host: remote ? '0.0.0.0' : '127.0.0.1', port, remote }
 }
 
 function finalizeConfig(raw, root, abs) {
@@ -86,7 +75,7 @@ function finalizeConfig(raw, root, abs) {
 export async function loadConfig(configPath, root = process.cwd()) {
   const abs = path.resolve(root, configPath)
   if (!fs.existsSync(abs)) {
-    throw userError(`mkadoc: config not found: ${abs}`)
+    throw new Error(`mkadoc: config not found: ${abs}`)
   }
 
   const text = fs.readFileSync(abs, 'utf8')
@@ -98,11 +87,11 @@ export async function loadConfig(configPath, root = process.cwd()) {
   } else if (ext === '.yml' || ext === '.yaml') {
     raw = parseYaml(text) || {}
   } else {
-    throw userError(`mkadoc: unsupported config type "${ext}" (use mkadoc.adoc or .yml)`)
+    throw new Error(`mkadoc: unsupported config type "${ext}" (use mkadoc.adoc or .yml)`)
   }
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw userError('mkadoc: config must be a mapping')
+    throw new Error('mkadoc: config must be a mapping')
   }
 
   return finalizeConfig(raw, root, abs)

@@ -67,7 +67,7 @@ See the repo-root `mkadoc.adoc` for a full example used by this dotfiles site.
 
 == Build modes
 
-`decideMode` chooses one of:
+`decideMode` (`src/decide-mode.js`) chooses one of:
 
 [cols="1,3"]
 |===
@@ -167,7 +167,9 @@ apps/mkadoc/
   src/
     cli.js           # commands
     config.js        # load literate / YAML config
-    build.js         # convert, modes, prune, publish clean
+    build.js         # convert, prune, publish clean
+    decide-mode.js   # full / incremental / assets selection
+    map-pool.js      # bounded async worker pool
     serve.js         # watch + rebuild
     dev-server.js    # static HTTP + SSE reload
     check.js

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { loadConfig, parsePort, resolveServeListen } from '../src/config.js'
-import { parseProjectConfig } from '../src/config-schema.js'
+import { loadConfig, resolveServeListen } from '../src/config.js'
+import { parseProjectConfig, parseServeConfig } from '../src/config-schema.js'
 import { withTempProject } from './helpers/project.js'
 
 describe('loadConfig (literate AsciiDoc)', () => {
@@ -112,14 +112,14 @@ assets:
   })
 })
 
-describe('parsePort', () => {
+describe('parseServeConfig', () => {
   it('accepts valid ports and rejects invalid ones', () => {
-    assert.equal(parsePort('8765'), 8765)
-    assert.equal(parsePort(1), 1)
-    assert.equal(parsePort(65535), 65535)
-    assert.throws(() => parsePort('nope', '--port'), /invalid --port: nope/)
-    assert.throws(() => parsePort(0), /invalid serve.port: 0/)
-    assert.throws(() => parsePort(65536), /invalid serve.port/)
+    assert.equal(parseServeConfig({ port: '8765' }).port, 8765)
+    assert.equal(parseServeConfig({ port: 1 }).port, 1)
+    assert.equal(parseServeConfig({ port: 65535 }).port, 65535)
+    assert.throws(() => parseServeConfig({ port: 'nope' }), /invalid serve/)
+    assert.throws(() => parseServeConfig({ port: 0 }), /invalid serve/)
+    assert.throws(() => parseServeConfig({ port: 65536 }), /invalid serve/)
   })
 })
 

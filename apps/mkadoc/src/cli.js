@@ -1,7 +1,8 @@
 import { parseArgs } from 'node:util'
 import { build } from './build.js'
 import { check } from './check.js'
-import { defaultConfigPath, loadConfig, parsePort } from './config.js'
+import { defaultConfigPath, loadConfig } from './config.js'
+import { parseServeConfig } from './config-schema.js'
 import { formatCliError } from './errors.js'
 import { serve } from './serve.js'
 
@@ -89,8 +90,13 @@ async function main() {
   const configPath = values.config || defaultConfigPath()
   const cfg = await loadConfig(configPath, root)
 
-  if (values.remote) cfg.serve.remote = true
-  if (values.port !== undefined) cfg.serve.port = parsePort(values.port, '--port')
+  if (values.remote || values.port !== undefined) {
+    cfg.serve = parseServeConfig({
+      ...cfg.serve,
+      ...(values.remote ? { remote: true } : {}),
+      ...(values.port !== undefined ? { port: values.port } : {}),
+    })
+  }
 
   switch (command) {
     case 'build':

@@ -188,24 +188,5 @@ export default function shikiPlugin(rawOptions = {}) {
         links: [{ rel: 'stylesheet', href: cssAsset.href }],
       })
     },
-
-    async check() {
-      if (!shared.highlighter) {
-        return { ok: false, message: 'highlighter not initialized' }
-      }
-      try {
-        shared.highlighter.codeToHtml('echo test', {
-          lang: 'bash',
-          theme,
-          structure: 'inline',
-        })
-        return {
-          ok: true,
-          message: `shiki ok (theme=${theme}, bg=${shared.colors.bg}, langs=${shared.highlighter.getLoadedLanguages().length})`,
-        }
-      } catch (err) {
-        return { ok: false, message: err.message }
-      }
-    },
   }
 }

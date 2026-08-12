@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { formatCliError, userError } from '../src/errors.js'
+import { formatCliError } from '../src/errors.js'
 
 describe('CLI error classification', () => {
   it('formatCliError prints message-only for user errors and stack otherwise', () => {
-    assert.equal(formatCliError(userError('mkadoc: bad port')), 'mkadoc: bad port')
+    assert.equal(formatCliError(new Error('mkadoc: bad port')), 'mkadoc: bad port')
     assert.equal(
       formatCliError(new Error('mkadoc: invalid config: fancy')),
       'mkadoc: invalid config: fancy',

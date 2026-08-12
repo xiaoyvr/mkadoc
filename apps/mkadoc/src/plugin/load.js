@@ -1,7 +1,6 @@
 import krokiDiagram from '../builtins/kroki-diagram.js'
 import nav from '../builtins/nav.js'
 import shiki, { afterPluginsLoaded } from '../builtins/shiki.js'
-import { userError } from '../errors.js'
 import { BUILTIN_LOCATORS } from './locators.js'
 
 /** @type {Record<string, import('./contract.js').MkadocPluginFactory>} */
@@ -57,7 +56,7 @@ export async function loadPlugins(pluginsConfig, host) {
   for (const [locator, options] of entries) {
     const factory = BUILTINS[locator]
     if (!factory) {
-      throw userError(
+      throw new Error(
         `mkadoc: unknown plugin "${locator}" (only built-in mkadoc:* plugins are supported)`,
       )
     }

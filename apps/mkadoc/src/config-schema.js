@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { userError } from './errors.js'
 import { BUILTIN_LOCATORS } from './plugin/locators.js'
 
 const portSchema = z.preprocess((value) => {
@@ -7,7 +6,7 @@ const portSchema = z.preprocess((value) => {
   return Number(value)
 }, z.number().int().min(1).max(65535).default(8000))
 
-const ServeSchema = z
+export const ServeSchema = z
   .object({
     remote: z.boolean().default(false),
     port: portSchema,
@@ -59,7 +58,16 @@ export function formatConfigZodError(err) {
 export function parseProjectConfig(raw) {
   const result = ConfigSchema.safeParse(raw ?? {})
   if (!result.success) {
-    throw userError(`mkadoc: invalid config: ${formatConfigZodError(result.error)}`)
+    throw new Error(`mkadoc: invalid config: ${formatConfigZodError(result.error)}`)
+  }
+  return result.data
+}
+
+/** Validate/normalize `serve` (config defaults or CLI overrides). */
+export function parseServeConfig(raw) {
+  const result = ServeSchema.safeParse(raw ?? {})
+  if (!result.success) {
+    throw new Error(`mkadoc: invalid serve: ${formatConfigZodError(result.error)}`)
   }
   return result.data
 }
