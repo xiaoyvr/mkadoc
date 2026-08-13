@@ -14,7 +14,7 @@ function exists(root, rel) {
 describe('P0: orphan HTML prune', () => {
   it('incremental build removes HTML for a deleted page batched with an edit', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
       assert.ok(exists(root, 'site/guide.html'))
       assert.ok(exists(root, 'site/index.html'))
@@ -35,7 +35,7 @@ describe('P0: orphan HTML prune', () => {
 describe('P0: publish clean', () => {
   it('clean full build wipes stale output before rebuilding', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
 
       const stale = path.join(root, 'site/stale-orphan.html')
@@ -57,7 +57,7 @@ describe('P0: publish clean', () => {
 describe('P0: docinfo attribute escaping', () => {
   it('writeHeadDocinfo escapes attribute values', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       const host = createHost(cfg)
       host.contributeHead({
         links: [

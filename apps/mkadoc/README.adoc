@@ -1,50 +1,55 @@
 = mkadoc
 :toc:
 
-Build and serve AsciiDoc as a static site.
-This is a small Node CLI used by the dotfiles repo (and packagable via Nix).
+== Why
 
-== Quick start
+Write documentation in AsciiDoc and get a static site you can preview locally and publish cleanly.
 
-From a project that has `mkadoc.adoc` (or `mkadoc.yml`) and a source tree:
+mkadoc is for people who want:
 
-----
-mkadoc build
-mkadoc serve
-mkadoc publish
-mkadoc check
-----
+* docs that stay in AsciiDoc
+* a fast edit loop (`serve` with live reload; incremental rebuilds when possible)
+* optional extras — nav chrome, syntax highlighting, diagrams — without leaving the AsciiDoc world
 
-Default config path: `mkadoc.adoc` (override with `--config` / `-c`).
-Also accepts `.yml` / `.yaml`.
+== How
 
-== Commands
+mkadoc treats your project as:
+
+* **Sources** — AsciiDoc pages under a `source` directory (default `docs/`)
+* **Config** — a literate `mkadoc.adoc` with narrative for people and `[mkadoc-config]` YAML blocks for the tool
+* **Output** — HTML under `output` (default `site/`), plus a build cache
+
+Pages are normal `.adoc` files. Names starting with `_` are partials (included or shared), not site pages.
+
+Built-in plugins (`mkadoc:*`) opt into features at build time. 
+
+Build modes, at a glance:
+
+* **full** — clean slate / publish / config or partial changes
+* **incremental** — changed page files only
+* **assets** — styles or copied assets only (no page HTML rebuild)
+
+`serve` watches sources and config, rebuilds, and reloads the browser after a successful build.
+
+== What
+
+=== Get started
+
+From a project with `mkadoc.adoc` and a source tree:
 
 [cols="1,3"]
 |===
-| Command | Behavior
+| Command | What it does
 
-| `build` | Convert sources. With no path args (or `--full`), full rebuild. With path args, incremental when possible.
-| `publish` | Clean full build: deletes `output` + `cache`, then full rebuild (for deployment).
-| `serve` | Full build, watch sources + config, rebuild, serve `output/` with live reload.
-| `check` | Verify source dir exists and run enabled plugin health checks.
+| `build` | Convert sources. No paths (or `--full`) → full rebuild. With paths → incremental when possible.
+| `serve` | Full build, watch, serve `output/` with live reload.
+| `publish` | Delete `output` + `cache`, then full rebuild (for deployment).
+| `check` | Verify the source dir and run enabled plugin health checks.
 |===
 
-Serve bind (config `serve:` or flags):
+=== Config shape
 
-* `remote: false` (default) → `127.0.0.1` only
-* `remote: true` or `--remote` → `0.0.0.0`
-* `port` / `--port` (default `8000`)
-
-There is no `serve.host` setting; only `remote` + `port`.
-
-== Config
-
-Literate AsciiDoc (`mkadoc.adoc`): narrative for humans; YAML inside `[mkadoc-config]` blocks is merged in memory (later blocks win via deep merge; arrays replace).
-
-Plain YAML works the same shape without the prose.
-
-Typical keys:
+Typical keys inside `[mkadoc-config]`:
 
 ----
 source: docs
@@ -57,154 +62,27 @@ serve:
   port: 8000
 ----
 
-Config is validated with **Zod** (`src/config-schema.js`): unknown top-level keys, unknown `serve.*` keys (e.g. `host`), and unknown plugin **locators** are rejected. Plugin *option fields* are opaque to core — each plugin applies defaults and rejects unknown keys at load time.
-
-Asset copy always runs (all build modes) and is **recursive** (relative paths
-preserved; `node_modules` / `.git` skipped). In addition to `assets:`, mkadoc always
-copies `<source>/styles/` → `<output>/styles/` (skipped if already listed).
-
 See the repo-root `mkadoc.adoc` for a full example used by this dotfiles site.
 
-== Build modes
+=== Plugins
 
-`decideMode` (`src/decide-mode.js`) chooses one of:
-
-[cols="1,3"]
-|===
-| Mode | When
-
-| `full` | `--full` / publish / no paths / config or `_*.adoc` change / unknown paths / deletes with nothing else to rebuild
-| `incremental` | One or more real page `.adoc` files changed
-| `assets` | Only styles/asset prefixes changed (no page HTML rebuild)
-|===
-
-Configured + implicit style assets are copied in every mode (including incremental),
-so a batched page + CSS edit still updates `output/styles/`.
-
-After **full** and **incremental** builds, stale HTML (source `.adoc` gone) is pruned.
-Pages whose names start with `_` are partials, not site pages.
-
-Page converts run with a small worker pool (up to 4, bounded by CPU count) so larger
-trees rebuild faster; order is not significant.
-
-== Serve
-
-* Watches `source/` and the config file (parent dir, depth 0, so atomic saves still notify).
-* Initial build is always full; config edits force full + config reload.
-* Static server: `serve-handler` + SSE live reload (`src/dev-server.js`).
-* Reload is triggered after a successful rebuild (not by a second file watcher on `site/`).
-
-== Plugins
-
-Only **built-in** locators are supported (`mkadoc:*`).
-They are not npm package names; unknown locators fail at load time.
-Load order follows config key order.
-Plugin authoring types: `src/plugin/contract.js` (`MkadocPluginFactory` / `MkadocHost`).
-Annotate a factory with `/** @type {import('../plugin/contract.js').MkadocPluginFactory} */`.
+Enable under `plugins:` with a `mkadoc:*` locator.
 
 [cols="1,3"]
 |===
 | Locator | Role
 
-| `mkadoc:nav` | Sidebar from `_nav.adoc`; extracts CSS/JS passthrough blocks; header docinfo.
+| `mkadoc:nav` | Sidebar from a nav AsciiDoc file (markup + optional CSS/JS blocks).
 | `mkadoc:shiki` | Build-time syntax highlighting for `[source]` blocks.
-| `mkadoc:kroki-diagram` | Diagram blocks via Kroki (requires `server_url`).
+| `mkadoc:kroki-diagram` | Diagram blocks via Kroki (`server_url` required).
 |===
 
-`css_href` / `js_href` (nav, shiki) are **site-root paths** (e.g. `/styles/nav.css`).
-They control both the `<link>`/`<script>` href and the write path under `output/`
-(via `resolveSiteAsset` in `src/fs-utils.js`). Defaults stay under `/styles/`.
-
-Plugin options are validated with Zod in each factory (`parsePluginOptions`):
+Common options (defaults shown):
 
 * `mkadoc:nav` — `nav: docs/_nav.adoc`, `css_href: /styles/nav.css`, `js_href: /styles/nav.js`
-* `mkadoc:shiki` — `theme: github-light-default`, bundled `langs`, `css_href: /styles/shiki.css`
-* `mkadoc:kroki-diagram` — required `server_url`; defaults `data_uri`/`allow_uri_read: true`, `cache_dir: diagram`
+* `mkadoc:shiki` — `theme: github-light-default`, `css_href: /styles/shiki.css`
+* `mkadoc:kroki-diagram` — `server_url: …` (required)
 
-=== Plugin lifecycle
+`css_href` / `js_href` are site-root paths (e.g. `/styles/nav.css`): they set both the HTML link and where the file is written under `output/`.
 
-[cols="1,2,3"]
-|===
-| Phase | When | Hook
-
-| Load
-| `createHost` then `loadPlugins`
-| `setup(host)` — classifiers, asset prefixes, cache dirs, Asciidoctor extensions/attributes
-
-| Per build
-| After `decideMode`, before head docinfo / page convert
-| `contributeChrome(host, ctx)` — header/CSS/JS and `contributeHead`
-
-| Check
-| `mkadoc check`
-| `check(host)` → `{ ok, message? }`
-|===
-
-Plugin-facing host helpers: `registerExtension`, `addAttributes`, `contributeHead`,
-`registerClassifier`, `registerAssetPrefix`, `ensureDir`, `cacheDir`, `relToRoot`,
-`headerDocinfoPath` / `headerDocinfoExists` / `writeHeaderDocinfo` / `markHeaderProvided`.
-
-=== Shiki under `mkadoc serve`
-
-The Shiki engine is cached in-process so rebuilds do not leak Highlighter instances.
-Asciidoctor’s `shiki` adapter name is process-global; mkadoc swaps an **active** vs
-**inactive** adapter and disposes the Highlighter when the plugin is dropped from config
-(`src/builtins/shiki.js`).
-
-Practical rules while `serve` is running:
-
-* **Theme / language list changes** under `mkadoc:shiki` — **no process restart**.
-  Config reload recreates the Highlighter when theme/langs change and rewrites `styles/shiki.css`.
-* **Enable / disable `mkadoc:shiki`** — **no process restart**.
-  A reload without the plugin disposes the Highlighter and parks an inactive adapter
-  (clear error if a page still requests `source-highlighter=shiki`).
-
-== Layout (this package)
-
-----
-apps/mkadoc/
-  bin/mkadoc.js      # CLI entry
-  src/
-    cli.js           # commands
-    config.js        # load literate / YAML config
-    build.js         # convert, prune, publish clean
-    decide-mode.js   # full / incremental / assets selection
-    map-pool.js      # bounded async worker pool
-    serve.js         # watch + rebuild
-    dev-server.js    # static HTTP + SSE reload
-    check.js
-    fs-utils.js
-    html-utils.js
-    plugin/          # host + loader + contract + options helpers
-    builtins/        # builtin mkadoc:* plugins
-                     # JSDoc types: MkadocConfig (config.js), Host/Plugin (plugin/contract.js)
-  test/              # node:test suite (`npm test`)
-  biome.json         # lint + format
-  flake.nix          # Nix package
-----
-
-== Develop
-
-----
-cd apps/mkadoc
-npm test
-npm run lint
-npm run format
-npm run check   # lint + test
-----
-
-Lint/format: Biome (`biome.json`). Node `>= 20`.
-
-CLI errors: expected failures (`mkadoc: …`, bad args, bad config) print the message
-only; unexpected exceptions still dump a stack (`src/errors.js`).
-
-Nix (from this directory):
-
-----
-nix build .#mkadoc
-nix build .#checks.$(nix eval --raw --impure --expr 'builtins.currentSystem').mkadoc-test
-# or: nix flake check
-----
-
-`packages.mkadoc` does not include `test/` (test-only edits do not rebuild the installable package).
-`checks.mkadoc-test` is a separate derivation that runs `npm test`.
+While `mkadoc serve` is running, changing Shiki theme/langs or enabling/disabling the plugin does **not** require a process restart.

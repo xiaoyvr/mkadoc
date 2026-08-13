@@ -4,7 +4,7 @@ import path from 'node:path'
 import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
-import { smokeFixture, withTempProject } from './helpers/project.js'
+import { literateConfig, smokeFixture, withTempProject } from './helpers/project.js'
 
 function read(root, rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8')
@@ -21,7 +21,7 @@ function mtimeMs(root, rel) {
 describe('build smoke (no plugins)', () => {
   it('full build writes expected HTML for pages and skips partials', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       const mode = await build(cfg, { forceFull: true })
 
       assert.equal(mode, 'full')
@@ -35,7 +35,7 @@ describe('build smoke (no plugins)', () => {
 
   it('incremental page rebuild updates only that page', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
 
       const indexBefore = read(root, 'site/index.html')
@@ -54,7 +54,7 @@ describe('build smoke (no plugins)', () => {
 
   it('multiple page paths rebuild incrementally', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
 
       fs.writeFileSync(path.join(root, 'docs/index.adoc'), `= Smoke Index\n\nMARKER_INDEX_V2\n`)
@@ -68,7 +68,7 @@ describe('build smoke (no plugins)', () => {
 
   it('unknown non-page path alone forces a full rebuild', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
       const mode = await build(cfg, { paths: ['README.md'] })
       assert.equal(mode, 'full')
@@ -77,16 +77,16 @@ describe('build smoke (no plugins)', () => {
 
   it('config path change forces a full rebuild', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
-      const mode = await build(cfg, { paths: ['mkadoc.yml'] })
+      const mode = await build(cfg, { paths: ['mkadoc.adoc'] })
       assert.equal(mode, 'full')
     })
   })
 
   it('underscore partial change forces a full rebuild', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
 
       const mode = await build(cfg, { paths: ['docs/_partial.adoc'] })
@@ -98,7 +98,7 @@ describe('build smoke (no plugins)', () => {
 
   it('styles-only change is assets mode and leaves HTML untouched', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
 
       const indexBefore = read(root, 'site/index.html')
@@ -116,7 +116,7 @@ describe('build smoke (no plugins)', () => {
 
   it('incremental page + styles still copies updated CSS', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
 
       fs.writeFileSync(path.join(root, 'docs/guide.adoc'), `= Smoke Guide\n\nMARKER_GUIDE_V2\n`)
@@ -134,18 +134,18 @@ describe('build smoke (no plugins)', () => {
   it('incremental page + configured assets still copies the asset', async () => {
     await withTempProject(
       smokeFixture({
-        'mkadoc.yml': `source: docs
+        'mkadoc.adoc': literateConfig(`source: docs
 output: site
 cache: .cache/asciidoctor
 assets:
   - from: static
     to: site/static
 plugins: {}
-`,
+`),
         'static/app.js': `console.log('v1')\n`,
       }),
       async (root) => {
-        const cfg = await loadConfig('mkadoc.yml', root)
+        const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
         assert.match(read(root, 'site/static/app.js'), /v1/)
 

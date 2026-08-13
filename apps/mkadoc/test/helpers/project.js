@@ -56,17 +56,28 @@ export function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+/** Wrap YAML mapping text in a minimal literate `mkadoc.adoc` document. */
+export function literateConfig(yamlBody) {
+  return `= mkadoc
+
+[mkadoc-config]
+----
+${yamlBody.trim()}
+----
+`
+}
+
 /** Minimal no-plugin fixture used by smoke tests. */
 export function smokeFixture(overrides = {}) {
   return {
-    'mkadoc.yml': `source: docs
+    'mkadoc.adoc': literateConfig(`source: docs
 output: site
 cache: .cache/asciidoctor
 plugins: {}
 serve:
   remote: false
   port: 8765
-`,
+`),
     'docs/index.adoc': `= Smoke Index
 
 MARKER_INDEX_V1

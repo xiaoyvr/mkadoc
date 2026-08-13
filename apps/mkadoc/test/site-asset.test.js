@@ -6,7 +6,7 @@ import { build } from '../src/build.js'
 import { afterPluginsLoaded } from '../src/builtins/shiki.js'
 import { loadConfig } from '../src/config.js'
 import { resolveSiteAsset } from '../src/fs-utils.js'
-import { smokeFixture, withTempProject } from './helpers/project.js'
+import { literateConfig, smokeFixture, withTempProject } from './helpers/project.js'
 
 after(() => {
   afterPluginsLoaded([])
@@ -34,7 +34,7 @@ describe('nav/shiki href write alignment', () => {
   it('nav writes CSS/JS to paths derived from css_href / js_href', async () => {
     await withTempProject(
       smokeFixture({
-        'mkadoc.yml': `source: docs
+        'mkadoc.adoc': literateConfig(`source: docs
 output: site
 cache: .cache/asciidoctor
 plugins:
@@ -42,7 +42,7 @@ plugins:
     nav: docs/_nav.adoc
     css_href: /assets/nav.css
     js_href: /assets/nav.js
-`,
+`),
         'docs/_nav.adoc': `= Nav
 
 [mkadoc-nav-css]
@@ -69,7 +69,7 @@ console.log('extra');
 `,
       }),
       async (root) => {
-        const cfg = await loadConfig('mkadoc.yml', root)
+        const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
 
         const css = fs.readFileSync(path.join(root, 'site/assets/nav.css'), 'utf8')
@@ -98,14 +98,14 @@ console.log('extra');
   it('shiki writes CSS to the path derived from css_href', async () => {
     await withTempProject(
       smokeFixture({
-        'mkadoc.yml': `source: docs
+        'mkadoc.adoc': literateConfig(`source: docs
 output: site
 cache: .cache/asciidoctor
 plugins:
   mkadoc:shiki:
     theme: github-light-default
     css_href: /assets/shiki.css
-`,
+`),
         'docs/index.adoc': `= Smoke Index
 
 [source,bash]
@@ -115,7 +115,7 @@ echo hello
 `,
       }),
       async (root) => {
-        const cfg = await loadConfig('mkadoc.yml', root)
+        const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
 
         assert.match(

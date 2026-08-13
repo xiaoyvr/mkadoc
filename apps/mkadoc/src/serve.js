@@ -4,7 +4,7 @@ import { build } from './build.js'
 import { defaultConfigPath, loadConfig, resolveServeListen } from './config.js'
 import { createDevServer } from './dev-server.js'
 
-const WATCH_EXTS = new Set(['.adoc', '.css', '.js', '.html', '.yml', '.yaml'])
+const WATCH_EXTS = new Set(['.adoc', '.asciidoc', '.css', '.js', '.html'])
 
 export async function serve(cfg, opts = {}) {
   let current = cfg

@@ -17,7 +17,7 @@ Usage:
 
 Config:
   default mkadoc.adoc (literate AsciiDoc; [mkadoc-config] YAML blocks merged in memory)
-  --config PATH also accepts .yml / .yaml
+  --config PATH must be .adoc or .asciidoc
 
 Commands:
   build     Convert sources (incremental when PATH args are given)

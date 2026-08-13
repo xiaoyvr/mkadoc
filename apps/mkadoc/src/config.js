@@ -19,6 +19,8 @@ import { parseProjectConfig, parseServeConfig } from './config-schema.js'
  * @property {{ remote: boolean, port: number }} serve
  */
 
+const CONFIG_EXTS = new Set(['.adoc', '.asciidoc'])
+
 function deepMerge(base, next) {
   if (!next || typeof next !== 'object' || Array.isArray(next)) return next
   const out = { ...base }
@@ -39,19 +41,34 @@ function deepMerge(base, next) {
   return out
 }
 
+function parseConfigYaml(yamlText) {
+  try {
+    return parseYaml(yamlText)
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    throw new Error(`mkadoc: invalid YAML in [mkadoc-config] block: ${detail}`)
+  }
+}
+
 async function loadLiterateConfig(source) {
   const doc = await load(source, { safe: 'unsafe', standalone: false })
   let merged = {}
+  let sawBlock = false
 
   for (const block of doc.findBy((b) => b.getStyle() === 'mkadoc-config')) {
+    sawBlock = true
     const yamlText = block.getSource?.() ?? (block.lines || []).join('\n')
     if (!yamlText.trim()) continue
-    const parsed = parseYaml(yamlText)
+    const parsed = parseConfigYaml(yamlText)
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       merged = deepMerge(merged, parsed)
     } else if (parsed != null) {
       throw new Error('mkadoc: [mkadoc-config] block must be a YAML mapping')
     }
+  }
+
+  if (!sawBlock) {
+    throw new Error('mkadoc: config must contain at least one [mkadoc-config] block')
   }
 
   return merged
@@ -78,17 +95,13 @@ export async function loadConfig(configPath, root = process.cwd()) {
     throw new Error(`mkadoc: config not found: ${abs}`)
   }
 
-  const text = fs.readFileSync(abs, 'utf8')
   const ext = path.extname(abs).toLowerCase()
-
-  let raw
-  if (ext === '.adoc' || ext === '.asciidoc') {
-    raw = await loadLiterateConfig(text)
-  } else if (ext === '.yml' || ext === '.yaml') {
-    raw = parseYaml(text) || {}
-  } else {
-    throw new Error(`mkadoc: unsupported config type "${ext}" (use mkadoc.adoc or .yml)`)
+  if (!CONFIG_EXTS.has(ext)) {
+    throw new Error(`mkadoc: unsupported config type "${ext}" (use .adoc or .asciidoc)`)
   }
+
+  const text = fs.readFileSync(abs, 'utf8')
+  const raw = await loadLiterateConfig(text)
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error('mkadoc: config must be a mapping')

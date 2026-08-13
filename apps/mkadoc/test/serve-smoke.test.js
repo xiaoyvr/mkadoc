@@ -35,7 +35,7 @@ async function startServe(cfg) {
 describe('serve smoke (watch → build wiring)', () => {
   it('starts with a full build', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       const { close, calls } = await startServe(cfg)
       try {
         assert.equal(calls.length, 1)
@@ -50,7 +50,7 @@ describe('serve smoke (watch → build wiring)', () => {
 
   it('page edit triggers incremental rebuild via paths', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       const { close, calls } = await startServe(cfg)
       try {
         await sleep(400)
@@ -73,11 +73,11 @@ describe('serve smoke (watch → build wiring)', () => {
 
   it('config edit forces a full rebuild', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yml', root)
+      const cfg = await loadConfig('mkadoc.adoc', root)
       const { close, calls } = await startServe(cfg)
       try {
         await sleep(400)
-        const configPath = path.join(root, 'mkadoc.yml')
+        const configPath = path.join(root, 'mkadoc.adoc')
         fs.writeFileSync(
           configPath,
           fs.readFileSync(configPath, 'utf8').replace('port: 8765', 'port: 8766'),

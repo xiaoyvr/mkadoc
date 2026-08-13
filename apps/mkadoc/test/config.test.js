@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { loadConfig, resolveServeListen } from '../src/config.js'
 import { parseProjectConfig, parseServeConfig } from '../src/config-schema.js'
-import { withTempProject } from './helpers/project.js'
+import { literateConfig, withTempProject } from './helpers/project.js'
 
 describe('loadConfig (literate AsciiDoc)', () => {
   it('merges multiple [mkadoc-config] YAML blocks', async () => {
@@ -110,6 +110,78 @@ assets:
       },
     )
   })
+
+  it('rejects configs without a [mkadoc-config] block', async () => {
+    await withTempProject(
+      {
+        'mkadoc.adoc': `= Site
+
+Narrative only.
+`,
+        'docs/.keep': '',
+      },
+      async (root) => {
+        await assert.rejects(
+          () => loadConfig('mkadoc.adoc', root),
+          /at least one \[mkadoc-config\] block/,
+        )
+      },
+    )
+  })
+
+  it('rejects invalid YAML inside a [mkadoc-config] block', async () => {
+    await withTempProject(
+      {
+        'mkadoc.adoc': `= Site
+
+[mkadoc-config]
+----
+source: docs
+  bad: indent
+----
+`,
+        'docs/.keep': '',
+      },
+      async (root) => {
+        await assert.rejects(
+          () => loadConfig('mkadoc.adoc', root),
+          /invalid YAML in \[mkadoc-config\] block/,
+        )
+      },
+    )
+  })
+
+  it('rejects .yml / .yaml config paths', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yml': `source: docs
+`,
+        'docs/.keep': '',
+      },
+      async (root) => {
+        await assert.rejects(
+          () => loadConfig('mkadoc.yml', root),
+          /unsupported config type "\.yml"/,
+        )
+      },
+    )
+  })
+
+  it('accepts .asciidoc config extension', async () => {
+    await withTempProject(
+      {
+        'mkadoc.asciidoc': literateConfig(`source: docs
+output: site
+`),
+        'docs/.keep': '',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.asciidoc', root)
+        assert.equal(cfg.source, 'docs')
+        assert.equal(cfg.output, 'site')
+      },
+    )
+  })
 })
 
 describe('parseServeConfig', () => {
@@ -187,18 +259,18 @@ describe('parseProjectConfig (zod schema)', () => {
     assert.equal(cfg.plugins['mkadoc:shiki'].thme, 'typo')
   })
 
-  it('loadConfig surfaces schema errors from YAML files', async () => {
+  it('loadConfig surfaces schema errors from literate configs', async () => {
     await withTempProject(
       {
-        'mkadoc.yml': `source: docs
+        'mkadoc.adoc': literateConfig(`source: docs
 serve:
   bogus: true
   port: 8000
-`,
+`),
         'docs/.keep': '',
       },
       async (root) => {
-        await assert.rejects(() => loadConfig('mkadoc.yml', root), /invalid config/)
+        await assert.rejects(() => loadConfig('mkadoc.adoc', root), /invalid config/)
       },
     )
   })
