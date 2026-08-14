@@ -22,10 +22,11 @@ describe('P0: orphan HTML prune', () => {
       fs.rmSync(path.join(root, 'docs/guide.adoc'))
       fs.writeFileSync(path.join(root, 'docs/index.adoc'), `= Smoke Index\n\nMARKER_INDEX_V2\n`)
 
+      // index.adoc forces full (tab chrome is baked into every page)
       const mode = await build(cfg, {
         paths: ['docs/guide.adoc', 'docs/index.adoc'],
       })
-      assert.equal(mode, 'incremental')
+      assert.equal(mode, 'full')
       assert.equal(exists(root, 'site/guide.html'), false)
       assert.match(fs.readFileSync(path.join(root, 'site/index.html'), 'utf8'), /MARKER_INDEX_V2/)
     })
@@ -39,7 +40,7 @@ describe('P0: publish clean', () => {
       await build(cfg, { forceFull: true })
 
       const stale = path.join(root, 'site/stale-orphan.html')
-      const staleCache = path.join(root, '.cache/asciidoctor/junk.txt')
+      const staleCache = path.join(root, '.cache/junk.txt')
       fs.writeFileSync(stale, '<p>stale</p>\n')
       fs.mkdirSync(path.dirname(staleCache), { recursive: true })
       fs.writeFileSync(staleCache, 'junk\n')
@@ -47,7 +48,7 @@ describe('P0: publish clean', () => {
       await build(cfg, { forceFull: true, clean: true })
 
       assert.equal(exists(root, 'site/stale-orphan.html'), false)
-      assert.equal(exists(root, '.cache/asciidoctor/junk.txt'), false)
+      assert.equal(exists(root, '.cache/junk.txt'), false)
       assert.ok(exists(root, 'site/index.html'))
       assert.ok(exists(root, 'site/guide.html'))
     })

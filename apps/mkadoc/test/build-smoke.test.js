@@ -52,7 +52,7 @@ describe('build smoke (no plugins)', () => {
     })
   })
 
-  it('multiple page paths rebuild incrementally', async () => {
+  it('index.adoc in a batch forces a full rebuild', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
@@ -60,10 +60,29 @@ describe('build smoke (no plugins)', () => {
       fs.writeFileSync(path.join(root, 'docs/index.adoc'), `= Smoke Index\n\nMARKER_INDEX_V2\n`)
       fs.writeFileSync(path.join(root, 'docs/guide.adoc'), `= Smoke Guide\n\nMARKER_GUIDE_V2\n`)
       const mode = await build(cfg, { paths: ['docs/index.adoc', 'docs/guide.adoc'] })
-      assert.equal(mode, 'incremental')
+      assert.equal(mode, 'full')
       assert.match(read(root, 'site/index.html'), /MARKER_INDEX_V2/)
       assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
     })
+  })
+
+  it('multiple non-index page paths rebuild incrementally', async () => {
+    await withTempProject(
+      smokeFixture({
+        'docs/other.adoc': `= Smoke Other\n\nMARKER_OTHER_V1\n`,
+      }),
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        await build(cfg, { forceFull: true })
+
+        fs.writeFileSync(path.join(root, 'docs/guide.adoc'), `= Smoke Guide\n\nMARKER_GUIDE_V2\n`)
+        fs.writeFileSync(path.join(root, 'docs/other.adoc'), `= Smoke Other\n\nMARKER_OTHER_V2\n`)
+        const mode = await build(cfg, { paths: ['docs/guide.adoc', 'docs/other.adoc'] })
+        assert.equal(mode, 'incremental')
+        assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
+        assert.match(read(root, 'site/other.html'), /MARKER_OTHER_V2/)
+      },
+    )
   })
 
   it('unknown non-page path alone forces a full rebuild', async () => {
@@ -134,9 +153,9 @@ describe('build smoke (no plugins)', () => {
   it('incremental page + configured assets still copies the asset', async () => {
     await withTempProject(
       smokeFixture({
-        'mkadoc.adoc': literateConfig(`source: docs
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
 output: site
-cache: .cache/asciidoctor
 assets:
   - from: static
     to: site/static
@@ -149,15 +168,15 @@ plugins: {}
         await build(cfg, { forceFull: true })
         assert.match(read(root, 'site/static/app.js'), /v1/)
 
-        fs.writeFileSync(path.join(root, 'docs/index.adoc'), `= Smoke Index\n\nMARKER_INDEX_V2\n`)
+        fs.writeFileSync(path.join(root, 'docs/guide.adoc'), `= Smoke Guide\n\nMARKER_GUIDE_V2\n`)
         fs.writeFileSync(path.join(root, 'static/app.js'), `console.log('v2')\n`)
 
         const mode = await build(cfg, {
-          paths: ['docs/index.adoc', 'static/app.js'],
+          paths: ['docs/guide.adoc', 'static/app.js'],
         })
         // Unknown non-page paths do not force full when real pages are also present.
         assert.equal(mode, 'incremental')
-        assert.match(read(root, 'site/index.html'), /MARKER_INDEX_V2/)
+        assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
         assert.match(read(root, 'site/static/app.js'), /v2/)
       },
     )

@@ -28,14 +28,17 @@ describe('plugin-owned option validation', () => {
     )
   })
 
+  it('nav factory rejects legacy nav path option', () => {
+    assert.throws(() => navPlugin({ nav: 'docs/_nav.adoc' }), /mkadoc:nav:.*Unrecognized key/)
+  })
+
   it('loadPlugins surfaces plugin option errors', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const host = createHost({
         root,
-        source: 'docs',
+        sources: [{ path: 'docs', mount: '/', title: 'Docs' }],
         output: 'site',
-        cache: '.cache/asciidoctor',
-        docinfoDir: '.cache/asciidoctor/docinfo',
+        docinfoDir: '.cache/docinfo',
         assets: [],
         plugins: {},
       })

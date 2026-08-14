@@ -12,7 +12,8 @@ describe('loadConfig (literate AsciiDoc)', () => {
 
 [mkadoc-config]
 ----
-source: docs
+sources:
+  - docs
 serve:
   port: 8000
 ----
@@ -22,20 +23,22 @@ More prose.
 [mkadoc-config]
 ----
 plugins:
-  mkadoc:nav:
-    nav: docs/_nav.adoc
+  mkadoc:nav: {}
 serve:
   remote: true
 ----
 `,
-        'docs/.keep': '',
+        'docs/index.adoc': '= Dotfiles\n',
       },
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
-        assert.equal(cfg.source, 'docs')
+        assert.equal(cfg.sources.length, 1)
+        assert.equal(cfg.sources[0].path, 'docs')
+        assert.equal(cfg.sources[0].mount, '/')
+        assert.equal(cfg.sources[0].title, 'Dotfiles')
         assert.equal(cfg.serve.port, 8000)
         assert.equal(cfg.serve.remote, true)
-        assert.equal(cfg.plugins['mkadoc:nav'].nav, 'docs/_nav.adoc')
+        assert.deepEqual(cfg.plugins['mkadoc:nav'], {})
       },
     )
   })
@@ -51,6 +54,8 @@ serve:
 
 [mkadoc-config]
 ----
+sources:
+  - docs
 output: site
 ----
 `,
@@ -90,6 +95,8 @@ output: site
 
 [mkadoc-config]
 ----
+sources:
+  - docs
 assets:
   - from: a
     to: b
@@ -136,7 +143,8 @@ Narrative only.
 
 [mkadoc-config]
 ----
-source: docs
+sources:
+  - docs
   bad: indent
 ----
 `,
@@ -154,7 +162,8 @@ source: docs
   it('rejects .yml / .yaml config paths', async () => {
     await withTempProject(
       {
-        'mkadoc.yml': `source: docs
+        'mkadoc.yml': `sources:
+  - docs
 `,
         'docs/.keep': '',
       },
@@ -170,15 +179,43 @@ source: docs
   it('accepts .asciidoc config extension', async () => {
     await withTempProject(
       {
-        'mkadoc.asciidoc': literateConfig(`source: docs
+        'mkadoc.asciidoc': literateConfig(`sources:
+  - docs
 output: site
 `),
-        'docs/.keep': '',
+        'docs/index.adoc': '= Smoke\n',
       },
       async (root) => {
         const cfg = await loadConfig('mkadoc.asciidoc', root)
-        assert.equal(cfg.source, 'docs')
+        assert.equal(cfg.sources[0].path, 'docs')
         assert.equal(cfg.output, 'site')
+      },
+    )
+  })
+
+  it('derives tab title from :tab: on index.adoc', async () => {
+    await withTempProject(
+      {
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
+  - apps/mkadoc/docs
+`),
+        'docs/index.adoc': `= Long Root Title
+:tab: Site
+
+Body.
+`,
+        'apps/mkadoc/docs/index.adoc': `= mkadoc tool
+
+Body.
+`,
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        assert.equal(cfg.sources[0].title, 'Site')
+        assert.equal(cfg.sources[0].mount, '/')
+        assert.equal(cfg.sources[1].title, 'mkadoc tool')
+        assert.equal(cfg.sources[1].mount, '/apps/mkadoc')
       },
     )
   })
@@ -214,11 +251,11 @@ describe('resolveServeListen', () => {
 })
 
 describe('parseProjectConfig (zod schema)', () => {
-  it('applies defaults', () => {
-    assert.deepEqual(parseProjectConfig({}), {
-      source: 'docs',
+  it('requires sources and applies defaults', () => {
+    assert.throws(() => parseProjectConfig({}), /invalid config/)
+    assert.deepEqual(parseProjectConfig({ sources: ['docs'] }), {
+      sources: ['docs'],
       output: 'site',
-      cache: '.cache/asciidoctor',
       assets: [],
       plugins: {},
       serve: { remote: false, port: 8000 },
@@ -226,35 +263,39 @@ describe('parseProjectConfig (zod schema)', () => {
   })
 
   it('coerces string ports from YAML-like input', () => {
-    const cfg = parseProjectConfig({ serve: { port: '9001', remote: true } })
+    const cfg = parseProjectConfig({ sources: ['docs'], serve: { port: '9001', remote: true } })
     assert.equal(cfg.serve.port, 9001)
     assert.equal(cfg.serve.remote, true)
   })
 
   it('rejects unknown keys (strict schema)', () => {
     assert.throws(
-      () => parseProjectConfig({ source: 'docs', fancy: true }),
+      () => parseProjectConfig({ sources: ['docs'], fancy: true }),
       /invalid config:.*fancy/,
     )
-    assert.throws(() => parseProjectConfig({ serve: { bogus: true } }), /invalid config:.*serve/)
+    assert.throws(
+      () => parseProjectConfig({ sources: ['docs'], serve: { bogus: true } }),
+      /invalid config:.*serve/,
+    )
   })
 
   it('rejects unknown plugin locators', () => {
     assert.throws(
-      () => parseProjectConfig({ plugins: { 'mkadoc:nope': {} } }),
+      () => parseProjectConfig({ sources: ['docs'], plugins: { 'mkadoc:nope': {} } }),
       /invalid config:.*plugins/,
     )
   })
 
   it('accepts known plugin option objects without validating fields', () => {
     const cfg = parseProjectConfig({
+      sources: ['docs'],
       plugins: {
-        'mkadoc:nav': { nav: 'docs/_nav.adoc' },
+        'mkadoc:nav': {},
         'mkadoc:shiki': { theme: 'nord', thme: 'typo' },
         'mkadoc:kroki-diagram': { server_url: 'http://127.0.0.1:8080' },
       },
     })
-    assert.equal(cfg.plugins['mkadoc:nav'].nav, 'docs/_nav.adoc')
+    assert.deepEqual(cfg.plugins['mkadoc:nav'], {})
     assert.equal(cfg.plugins['mkadoc:shiki'].theme, 'nord')
     assert.equal(cfg.plugins['mkadoc:shiki'].thme, 'typo')
   })
@@ -262,7 +303,8 @@ describe('parseProjectConfig (zod schema)', () => {
   it('loadConfig surfaces schema errors from literate configs', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`source: docs
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
 serve:
   bogus: true
   port: 8000

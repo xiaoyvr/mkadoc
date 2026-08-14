@@ -37,9 +37,8 @@ const PluginsSchema = z.preprocess(
 
 const ConfigSchema = z
   .object({
-    source: z.string().min(1).default('docs'),
+    sources: z.array(z.string().min(1)).min(1),
     output: z.string().min(1).default('site'),
-    cache: z.string().min(1).default('.cache/asciidoctor'),
     assets: z.array(AssetSchema).default([]),
     plugins: PluginsSchema,
     serve: z.preprocess((v) => (v == null ? {} : v), ServeSchema),

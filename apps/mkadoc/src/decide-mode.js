@@ -1,11 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { relToRoot } from './fs-utils.js'
+import { isSourceIndexPath, sourceForRepoPath } from './sources.js'
 
 function isPage(p, cfg) {
-  const src = cfg.source.replace(/\/$/, '')
-  if (!p.startsWith(`${src}/`) || !p.endsWith('.adoc')) return false
+  if (!p.endsWith('.adoc')) return false
   if (path.basename(p).startsWith('_')) return false
+  const source = sourceForRepoPath(cfg.sources, p)
+  if (!source) return false
   return fs.existsSync(path.join(cfg.root, p))
 }
 
@@ -14,6 +16,8 @@ function needsAllPages(p, cfg, host) {
   const configRel = relToRoot(cfg.configPath, cfg.root)
   if (p === configRel) return true
   if (base.startsWith('_') && base.endsWith('.adoc')) return true
+  // Tab labels from index.adoc are baked into every page via docinfo header.
+  if (isSourceIndexPath(cfg.sources, p)) return true
   return host.classifyPath(p) === 'full'
 }
 
@@ -32,8 +36,8 @@ export function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
       continue
     }
 
-    const src = cfg.source.replace(/\/$/, '')
-    if (p.startsWith(`${src}/styles/`)) {
+    const source = sourceForRepoPath(cfg.sources, p)
+    if (source && p.startsWith(`${source.path}/styles/`)) {
       assetsOnly = true
       continue
     }

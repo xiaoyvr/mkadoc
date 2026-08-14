@@ -8,7 +8,8 @@ describe('check', () => {
   it('returns 1 when source directory is missing', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`source: missing-docs
+        'mkadoc.adoc': literateConfig(`sources:
+  - missing-docs
 output: site
 plugins: {}
 `),
@@ -20,20 +21,20 @@ plugins: {}
     )
   })
 
-  it('returns 1 when nav plugin points at a missing file', async () => {
+  it('returns 0 when nav file is missing (auto nav fallback)', async () => {
     await withTempProject(
       {
         ...smokeFixture(),
-        'mkadoc.adoc': literateConfig(`source: docs
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
 output: site
 plugins:
-  mkadoc:nav:
-    nav: docs/_missing-nav.adoc
+  mkadoc:nav: {}
 `),
       },
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
-        assert.equal(await check(cfg), 1)
+        assert.equal(await check(cfg), 0)
       },
     )
   })
@@ -41,15 +42,13 @@ plugins:
   it('returns 0 when nav plugin finds a valid _nav.adoc', async () => {
     await withTempProject(
       smokeFixture({
-        'docs/_nav.adoc': `= Nav
-
-* <<index.adoc,Home>>
+        'docs/_nav.adoc': `* xref:index.adoc[Home]
 `,
-        'mkadoc.adoc': literateConfig(`source: docs
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
 output: site
 plugins:
-  mkadoc:nav:
-    nav: docs/_nav.adoc
+  mkadoc:nav: {}
 `),
       }),
       async (root) => {

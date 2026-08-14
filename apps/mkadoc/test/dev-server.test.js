@@ -42,6 +42,9 @@ describe('dev-server', () => {
           assert.equal(page.status, 200)
           assert.match(page.body, /HELLO/)
           assert.match(page.body, /__mkadoc\/events/)
+          assert.match(page.body, /pagehide/)
+          assert.match(page.body, /beforeunload/)
+          assert.match(page.body, /es\.close/)
 
           const css = await get(new URL('styles/app.css', server.url).href)
           assert.equal(css.status, 200)

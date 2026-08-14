@@ -3,6 +3,7 @@ import { watch } from 'chokidar'
 import { build } from './build.js'
 import { defaultConfigPath, loadConfig, resolveServeListen } from './config.js'
 import { createDevServer } from './dev-server.js'
+import { sourceForRepoPath } from './sources.js'
 
 const WATCH_EXTS = new Set(['.adoc', '.asciidoc', '.css', '.js', '.html'])
 
@@ -15,7 +16,6 @@ export async function serve(cfg, opts = {}) {
   const configDir = path.dirname(configAbs)
   const { host, port, remote } = resolveServeListen(current.serve)
   const outDir = path.join(current.root, current.output)
-  const watchRoot = path.join(current.root, current.source)
 
   console.log('mkadoc: initial full build')
   await buildFn(current, { forceFull: true })
@@ -74,8 +74,9 @@ export async function serve(cfg, opts = {}) {
   function isWatchedPath(filePath) {
     const abs = path.resolve(filePath)
     if (abs === configAbs) return true
-    const rel = path.relative(watchRoot, abs)
-    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+    const rel = path.relative(current.root, abs).split(path.sep).join('/')
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return false
+    return Boolean(sourceForRepoPath(current.sources, rel))
   }
 
   function schedule(filePath) {
@@ -91,11 +92,13 @@ export async function serve(cfg, opts = {}) {
     }, 100)
   }
 
-  const docsWatcher = watch(watchRoot, {
-    ignoreInitial: true,
-    awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
-    ignored: [/(^|[/\\])\../, '**/node_modules/**'],
-  })
+  const sourceWatchers = current.sources.map((source) =>
+    watch(path.join(current.root, source.path), {
+      ignoreInitial: true,
+      awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
+      ignored: [/(^|[/\\])\../, '**/node_modules/**'],
+    }),
+  )
 
   const configWatcher = watch(configDir, {
     ignoreInitial: true,
@@ -107,17 +110,20 @@ export async function serve(cfg, opts = {}) {
     },
   })
 
+  const allWatchers = [...sourceWatchers, configWatcher]
+
   const watchersReady = new Promise((resolve) => {
     let readyCount = 0
     const markReady = () => {
       readyCount += 1
-      if (readyCount === 2) {
+      if (readyCount === allWatchers.length) {
         const relConfig = path.relative(current.root, configAbs) || configAbs
-        console.log(`mkadoc: watching ${current.source}/ and ${relConfig} only`)
+        const srcList = current.sources.map((s) => s.path).join(', ')
+        console.log(`mkadoc: watching ${srcList} and ${relConfig}`)
         resolve()
       }
     }
-    for (const watcher of [docsWatcher, configWatcher]) {
+    for (const watcher of allWatchers) {
       watcher.on('ready', markReady)
       watcher.on('error', (err) => {
         console.error('mkadoc: watch error:', err?.message || err)
@@ -153,7 +159,7 @@ export async function serve(cfg, opts = {}) {
     pending.clear()
     rebuildQueued = false
     await Promise.all([
-      docsWatcher.close(),
+      ...sourceWatchers.map((w) => w.close()),
       configWatcher.close(),
       devServer?.close?.() ?? Promise.resolve(),
     ])

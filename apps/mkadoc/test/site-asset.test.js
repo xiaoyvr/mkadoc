@@ -34,38 +34,15 @@ describe('nav/shiki href write alignment', () => {
   it('nav writes CSS/JS to paths derived from css_href / js_href', async () => {
     await withTempProject(
       smokeFixture({
-        'mkadoc.adoc': literateConfig(`source: docs
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
 output: site
-cache: .cache/asciidoctor
 plugins:
   mkadoc:nav:
-    nav: docs/_nav.adoc
     css_href: /assets/nav.css
     js_href: /assets/nav.js
 `),
-        'docs/_nav.adoc': `= Nav
-
-[mkadoc-nav-css]
-++++
-.nav { color: blue; }
-++++
-
-[mkadoc-nav-css]
-++++
-.extra { margin: 0; }
-++++
-
-* <<index.adoc,Home>>
-
-[mkadoc-nav-js]
-++++
-console.log('nav');
-++++
-
-[mkadoc-nav-js]
-++++
-console.log('extra');
-++++
+        'docs/_nav.adoc': `* xref:index.adoc[Home]
 `,
       }),
       async (root) => {
@@ -74,19 +51,18 @@ console.log('extra');
 
         const css = fs.readFileSync(path.join(root, 'site/assets/nav.css'), 'utf8')
         const js = fs.readFileSync(path.join(root, 'site/assets/nav.js'), 'utf8')
-        assert.match(css, /\.nav/)
-        assert.match(css, /\.extra/)
-        assert.match(js, /console\.log\('nav'\)/)
-        assert.match(js, /console\.log\('extra'\)/)
+        assert.match(css, /\.docs-tabs/)
+        assert.match(js, /docs-tab/)
         assert.equal(fs.existsSync(path.join(root, 'site/styles/nav.css')), false)
 
         const header = fs.readFileSync(
           path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
           'utf8',
         )
+        assert.match(header, /docs-topbar/)
+        assert.match(header, /docs-tab/)
         assert.match(header, /Home/)
-        assert.doesNotMatch(header, /\.nav \{ color: blue; \}/)
-        assert.doesNotMatch(header, /console\.log\('nav'\)/)
+        assert.match(header, /docs-sidebar/)
 
         const docinfo = fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8')
         assert.match(docinfo, /href="\/assets\/nav\.css"/)
@@ -98,9 +74,9 @@ console.log('extra');
   it('shiki writes CSS to the path derived from css_href', async () => {
     await withTempProject(
       smokeFixture({
-        'mkadoc.adoc': literateConfig(`source: docs
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
 output: site
-cache: .cache/asciidoctor
 plugins:
   mkadoc:shiki:
     theme: github-light-default

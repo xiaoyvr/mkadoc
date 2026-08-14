@@ -6,12 +6,14 @@ import { loadPlugins } from './plugin/load.js'
 export async function check(cfg) {
   let failed = false
 
-  const source = path.join(cfg.root, cfg.source)
-  if (!fs.existsSync(source)) {
-    console.error(`mkadoc check: source not found: ${source}`)
-    failed = true
-  } else {
-    console.log(`mkadoc check: source ok (${cfg.source})`)
+  for (const source of cfg.sources) {
+    const abs = path.join(cfg.root, source.path)
+    if (!fs.existsSync(abs)) {
+      console.error(`mkadoc check: source not found: ${source.path}`)
+      failed = true
+    } else {
+      console.log(`mkadoc check: source ok (${source.path} → ${source.mount} [${source.title}])`)
+    }
   }
 
   const host = createHost(cfg)

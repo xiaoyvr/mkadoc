@@ -1,6 +1,7 @@
 import path from 'node:path'
 import asciidoctorKroki from 'asciidoctor-kroki'
 import { z } from 'zod'
+import { CACHE_DIR } from '../config.js'
 import { parsePluginOptions } from '../plugin/options.js'
 
 const OptionsSchema = z
@@ -35,7 +36,7 @@ export default function krokiDiagramPlugin(rawOptions = {}) {
         'kroki-server-url': serverUrl,
         'data-uri': dataUri,
         'allow-uri-read': allowUriRead,
-        imagesoutdir: diagramDir || path.join(host.root, host.config.cache, cacheName),
+        imagesoutdir: diagramDir || path.join(host.root, CACHE_DIR, cacheName),
       })
     },
 

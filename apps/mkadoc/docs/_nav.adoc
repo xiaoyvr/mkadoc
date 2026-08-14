@@ -1,0 +1,5 @@
+////
+Sidebar links for apps/mkadoc/docs
+////
+
+* xref:index.adoc[Overview]

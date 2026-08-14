@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { Extensions } from '@asciidoctor/core'
+import { CACHE_DIR } from '../config.js'
 import { relToRoot, writeIfChanged } from '../fs-utils.js'
 import { escapeHtmlAttr } from '../html-utils.js'
 
@@ -56,7 +57,7 @@ export function createHost(cfg) {
     },
 
     cacheDir(name) {
-      return host.ensureDir(path.join(cfg.cache, name))
+      return host.ensureDir(path.join(CACHE_DIR, name))
     },
 
     relToRoot(p) {

@@ -4,7 +4,7 @@
  *
  * @typedef {'full' | 'incremental' | 'assets'} BuildMode
  *
- * @typedef {{ mode: BuildMode, pages: string[] }} BuildContext
+ * @typedef {{ mode: BuildMode, pages: string[], paths?: string[] }} BuildContext
  *
  * @typedef {{ ok: boolean, message?: string }} CheckResult
  *

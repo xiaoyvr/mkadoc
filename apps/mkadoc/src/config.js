@@ -3,6 +3,10 @@ import path from 'node:path'
 import { load } from '@asciidoctor/core'
 import { parse as parseYaml } from 'yaml'
 import { parseProjectConfig, parseServeConfig } from './config-schema.js'
+import { normalizeSources } from './sources.js'
+
+/** Fixed build-cache directory (not configurable). */
+export const CACHE_DIR = '.cache'
 
 /**
  * Runtime project config exposed to plugins as `host.config`.
@@ -10,9 +14,8 @@ import { parseProjectConfig, parseServeConfig } from './config-schema.js'
  * @typedef {object} MkadocConfig
  * @property {string} root
  * @property {string} configPath
- * @property {string} source
+ * @property {import('./sources.js').MkadocSource[]} sources
  * @property {string} output
- * @property {string} cache
  * @property {string} docinfoDir
  * @property {{ from: string, to: string }[]} assets
  * @property {Record<string, Record<string, unknown>>} plugins
@@ -79,13 +82,15 @@ export function resolveServeListen(serve = {}) {
   return { host: remote ? '0.0.0.0' : '127.0.0.1', port, remote }
 }
 
-function finalizeConfig(raw, root, abs) {
+async function finalizeConfig(raw, root, abs) {
   const cfg = parseProjectConfig(raw)
+  const sources = await normalizeSources(cfg.sources, root)
   return {
     ...cfg,
+    sources,
     root,
     configPath: abs,
-    docinfoDir: path.join(cfg.cache, 'docinfo'),
+    docinfoDir: path.join(CACHE_DIR, 'docinfo'),
   }
 }
 

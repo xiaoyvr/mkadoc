@@ -4,7 +4,7 @@ import http from 'node:http'
 import path from 'node:path'
 import handler from 'serve-handler'
 
-const RELOAD_SCRIPT = `<script>(function(){try{var es=new EventSource("/__mkadoc/events");es.onmessage=function(){location.reload()};}catch(e){}})();</script>`
+const RELOAD_SCRIPT = `<script>(function(){try{var es=new EventSource("/__mkadoc/events");var close=function(){try{es.close()}catch(e){}};addEventListener("pagehide",close);addEventListener("beforeunload",close);es.onmessage=function(){close();location.reload()};}catch(e){}})();</script>`
 
 function resolveHtmlFile(root, pathname) {
   let rel = decodeURIComponent((pathname || '/').split('?')[0])

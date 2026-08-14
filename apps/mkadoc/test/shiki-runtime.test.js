@@ -14,9 +14,9 @@ after(() => {
 
 function shikiFixture(theme = 'github-light-default') {
   return smokeFixture({
-    'mkadoc.adoc': literateConfig(`source: docs
+    'mkadoc.adoc': literateConfig(`sources:
+  - docs
 output: site
-cache: .cache/asciidoctor
 plugins:
   mkadoc:shiki:
     theme: ${theme}
@@ -42,9 +42,9 @@ describe('shiki process-global runtime', () => {
 
       fs.writeFileSync(
         path.join(root, 'mkadoc.adoc'),
-        literateConfig(`source: docs
+        literateConfig(`sources:
+  - docs
 output: site
-cache: .cache/asciidoctor
 plugins:
   mkadoc:shiki:
     theme: nord
@@ -66,9 +66,9 @@ plugins:
 
       fs.writeFileSync(
         path.join(root, 'mkadoc.adoc'),
-        literateConfig(`source: docs
+        literateConfig(`sources:
+  - docs
 output: site
-cache: .cache/asciidoctor
 plugins: {}
 `),
       )
@@ -89,9 +89,9 @@ plugins: {}
 
       fs.writeFileSync(
         path.join(root, 'mkadoc.adoc'),
-        literateConfig(`source: docs
+        literateConfig(`sources:
+  - docs
 output: site
-cache: .cache/asciidoctor
 plugins: {}
 `),
       )
@@ -99,9 +99,9 @@ plugins: {}
 
       fs.writeFileSync(
         path.join(root, 'mkadoc.adoc'),
-        literateConfig(`source: docs
+        literateConfig(`sources:
+  - docs
 output: site
-cache: .cache/asciidoctor
 plugins:
   mkadoc:shiki:
     theme: github-light-default

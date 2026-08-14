@@ -70,9 +70,9 @@ ${yamlBody.trim()}
 /** Minimal no-plugin fixture used by smoke tests. */
 export function smokeFixture(overrides = {}) {
   return {
-    'mkadoc.adoc': literateConfig(`source: docs
+    'mkadoc.adoc': literateConfig(`sources:
+  - docs
 output: site
-cache: .cache/asciidoctor
 plugins: {}
 serve:
   remote: false
