@@ -15,10 +15,10 @@ after(() => {
 describe('resolveSiteAsset', () => {
   it('maps root-absolute hrefs under output/', async () => {
     await withTempProject({}, async (root) => {
-      const asset = resolveSiteAsset(root, 'site', '/styles/nav.css')
-      assert.equal(asset.href, '/styles/nav.css')
-      assert.equal(asset.relPath, 'styles/nav.css')
-      assert.equal(asset.absPath, path.join(root, 'site', 'styles', 'nav.css'))
+      const asset = resolveSiteAsset(root, 'site', '/styles/chrome.css')
+      assert.equal(asset.href, '/styles/chrome.css')
+      assert.equal(asset.relPath, 'styles/chrome.css')
+      assert.equal(asset.absPath, path.join(root, 'site', 'styles', 'chrome.css'))
     })
   })
 
@@ -31,42 +31,106 @@ describe('resolveSiteAsset', () => {
 })
 
 describe('nav/shiki href write alignment', () => {
-  it('nav writes CSS/JS to paths derived from css_href / js_href', async () => {
+  it('core chrome writes CSS/JS under /styles/chrome.*', async () => {
     await withTempProject(
       smokeFixture({
         'mkadoc.adoc': literateConfig(`sources:
   - docs
 output: site
 plugins:
-  mkadoc:nav:
-    css_href: /assets/nav.css
-    js_href: /assets/nav.js
+  mkadoc:nav: {}
 `),
+        'docs/_chrome.adoc': `
+[mkadoc-css]
+////
+.mkadoc-topbar { height: 2rem; }
+////
+`,
         'docs/_nav.adoc': `* xref:index.adoc[Home]
+
+[mkadoc-css]
+////
+.mkadoc-sidebar a { color: #123456; }
+////
 `,
       }),
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
 
-        const css = fs.readFileSync(path.join(root, 'site/assets/nav.css'), 'utf8')
-        const js = fs.readFileSync(path.join(root, 'site/assets/nav.js'), 'utf8')
-        assert.match(css, /\.docs-tabs/)
-        assert.match(js, /docs-tab/)
-        assert.equal(fs.existsSync(path.join(root, 'site/styles/nav.css')), false)
+        const chromeCss = fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8')
+        const navCss = fs.readFileSync(path.join(root, 'site/styles/nav.css'), 'utf8')
+        const js = fs.readFileSync(path.join(root, 'site/styles/chrome.js'), 'utf8')
+        assert.match(chromeCss, /--mkadoc-topbar-height/)
+        assert.match(chromeCss, /height: 2rem/)
+        assert.doesNotMatch(chromeCss, /#123456/)
+        assert.match(navCss, /\.mkadoc-sidebar a/)
+        assert.match(navCss, /#123456/)
+        assert.match(js, /mkadoc-tab/)
 
         const header = fs.readFileSync(
           path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
           'utf8',
         )
-        assert.match(header, /docs-topbar/)
-        assert.match(header, /docs-tab/)
+        assert.match(header, /mkadoc-topbar/)
+        assert.match(header, /mkadoc-tab/)
+        assert.match(header, /mkadoc-chrome-body/)
         assert.match(header, /Home/)
-        assert.match(header, /docs-sidebar/)
+        assert.match(header, /mkadoc-sidebar/)
+        assert.doesNotMatch(header, /listingblock/)
+        assert.doesNotMatch(header, /#123456/)
 
         const docinfo = fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8')
-        assert.match(docinfo, /href="\/assets\/nav\.css"/)
-        assert.match(docinfo, /src="\/assets\/nav\.js"/)
+        assert.match(docinfo, /href="\/styles\/chrome\.css"/)
+        assert.match(docinfo, /href="\/styles\/nav\.css"/)
+        assert.match(docinfo, /src="\/styles\/chrome\.js"/)
+      },
+    )
+  })
+
+  it('core writes section tabs without mkadoc:nav', async () => {
+    await withTempProject(
+      smokeFixture({
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
+  - apps/mkadoc/docs
+output: site
+plugins: {}
+`),
+        'docs/index.adoc': `= Dotfiles
+:tab: Site
+
+Root.
+`,
+        'apps/mkadoc/docs/index.adoc': `= mkadoc
+
+App.
+`,
+      }),
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        await build(cfg, { forceFull: true })
+
+        const header = fs.readFileSync(
+          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
+          'utf8',
+        )
+        assert.match(header, /mkadoc-topbar/)
+        assert.match(header, /mkadoc-tab/)
+        assert.match(header, /mkadoc-chrome-body/)
+        assert.match(header, />Site</)
+        assert.match(header, />mkadoc</)
+        assert.doesNotMatch(header, /mkadoc-sidebar/)
+        assert.ok(fs.existsSync(path.join(root, 'site/styles/chrome.js')))
+        assert.match(
+          fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8'),
+          /\.mkadoc-topbar/,
+        )
+        assert.doesNotMatch(
+          fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8'),
+          /\.mkadoc-sidebar/,
+        )
+        assert.equal(fs.existsSync(path.join(root, 'site/styles/nav.css')), false)
       },
     )
   })

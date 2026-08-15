@@ -1,0 +1,109 @@
+/* mkadoc:nav — sidebar shell + content */
+:root {
+  --mkadoc-sidebar-width: 16rem;
+}
+
+.mkadoc-sidebar {
+  position: fixed;
+  top: var(--mkadoc-topbar-height, 3rem);
+  left: 0;
+  bottom: 0;
+  width: var(--mkadoc-sidebar-width);
+  overflow: auto;
+  padding: 1.25rem 1rem;
+  background: #f8f8f7;
+  border-right: 1px solid #e0e0dc;
+  box-sizing: border-box;
+  z-index: 1000;
+}
+
+.mkadoc-tab-panel {
+  display: none;
+}
+
+.mkadoc-tab-panel.is-active {
+  display: block;
+}
+
+.mkadoc-sidebar h1,
+.mkadoc-sidebar h2,
+.mkadoc-sidebar h3 {
+  font-family: "Open Sans", "DejaVu Sans", sans-serif;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.8);
+  margin: 0 0 0.75rem;
+  line-height: 1.25;
+}
+
+.mkadoc-sidebar h1 { font-size: 1.1rem; }
+.mkadoc-sidebar h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.mkadoc-sidebar .paragraph { margin: 0 0 0.75rem; }
+
+.mkadoc-sidebar .ulist,
+.mkadoc-sidebar ul {
+  list-style: none;
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  font-family: "Open Sans", "DejaVu Sans", sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.mkadoc-sidebar li {
+  list-style: none;
+  list-style-type: none;
+  margin: 0 0 0.35rem;
+}
+.mkadoc-sidebar li::marker {
+  content: none;
+}
+.mkadoc-sidebar li > p {
+  margin: 0;
+  padding: 0.2rem 0.4rem;
+}
+.mkadoc-sidebar ul ul { margin: 0.25rem 0 0.5rem 0.75rem; }
+
+.mkadoc-sidebar a {
+  color: rgba(0, 0, 0, 0.75);
+  text-decoration: none;
+  display: block;
+  border-radius: 3px;
+}
+
+.mkadoc-sidebar a:hover,
+.mkadoc-sidebar a:focus {
+  color: #2156a5;
+  background: rgba(33, 86, 165, 0.08);
+}
+
+.mkadoc-sidebar a.current {
+  color: #ba3925;
+  font-weight: 600;
+  background: rgba(186, 57, 37, 0.08);
+}
+
+@media screen and (min-width: 768px) {
+  body:has(#mkadoc-sidebar) {
+    padding-left: var(--mkadoc-sidebar-width);
+  }
+}
+
+@media screen and (max-width: 767px) {
+  .mkadoc-sidebar {
+    position: static;
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid #e0e0dc;
+  }
+
+  body:has(#mkadoc-sidebar) {
+    padding-left: 0;
+  }
+}

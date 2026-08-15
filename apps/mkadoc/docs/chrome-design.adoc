@@ -1,0 +1,104 @@
+= Site chrome design
+
+This page explains **why** mkadoc lays out the topbar, plugin UI, and article the way it does — not the full plugin API (see xref:plugins.adoc[Writing mkadoc plugins]).
+
+== Mental model: one full HTML document per page
+
+Think of the site as **many complete pages**, not one shell that swaps an article fragment.
+
+Each published URL is its own standalone HTML file: `<html>`, `<head>`, `<body>`, Asciidoctor’s article structure, and (when enabled) the same shared chrome prefix baked in at build time.
+Navigating to another page loads **another full document** — there is no client-side “main outlet” that receives only the article.
+
+That framing matters:
+
+* Shared chrome (topbar, sidebar, head tags) is **copied into every page** via Asciidoctor docinfo, not mounted once by a router.
+* The article is **not** a fragment dropped into a live layout; it is the convert result for that `.adoc` file, sitting in the body next to the injected chrome.
+* Plugins contribute markup and assets that become part of those full pages at build time — they do not own a single-page application frame.
+
+If you catch yourself designing for “shell + content slot,” pause: mkadoc’s model is **full HTML per page**, with small shared inserts repeated on each one.
+
+== Starting point: Asciidoctor owns the page
+
+Each of those full pages is still an **Asciidoctor conversion**.
+mkadoc does not replace that with a custom full-page template or a client app.
+
+Instead it **injects** shared snippets into every page:
+
+* Head tags (stylesheets, scripts)
+* A header block at the start of `<body>` (topbar + a mount for plugin UI)
+
+So the product model is: *AsciiDoc → full HTML page, plus small shared inserts* — not *one page with an embedded article fragment*.
+
+== What ends up in the page
+
+Conceptually:
+
+----
+<body>
+  <header id="mkadoc-topbar">…section tabs…</header>
+  <div id="mkadoc-chrome-body">
+    <!-- optional plugin UI, e.g. left sidebar -->
+  </div>
+
+  <!-- Asciidoctor article: unchanged convert output -->
+</body>
+----
+
+* **Topbar** — core, from `sources` (always present).
+* **`#mkadoc-chrome-body`** — plugins may append shared UI (sidebar, future side panels, …).
+* **Article** — normal Asciidoctor body; **sibling** of the chrome mount, not nested inside it.
+
+== Why the article is not inside `#mkadoc-chrome-body`
+
+It is tempting to wrap the article for CSS grid/flex:
+
+----
+<div id="mkadoc-chrome-body">
+  <aside>sidebar</aside>
+  <main>article</main>
+</div>
+----
+
+mkadoc deliberately **does not** do that.
+
+=== Shared inserts run before the article exists
+
+The header snippet is injected as a fixed prefix on every page.
+At that moment the pipeline is not “here is a slot; drop the article in.”
+The article is produced separately as convert output and follows the header in the body.
+
+Nesting the article under `#mkadoc-chrome-body` would require an extra step: **rewrite the HTML after convert** (find the article root, move it into the div) or a **custom HTML template** that replaces Asciidoctor’s page structure.
+
+=== Siblings avoid fragile rewrites
+
+Post-processing every page to wrap content is brittle:
+
+* Asciidoctor’s DOM can vary with attributes, backends, and extensions
+* Incremental builds and edge cases get harder to reason about
+* Debugging “is this Asciidoctor or our rewriter?” gets noisy
+
+Keeping **siblings** means: inject chrome, leave the article alone.
+
+=== Layout still works with CSS
+
+Side UI (like the nav sidebar) uses positioning and padding, for example fixed `aside` + `body:has(#mkadoc-sidebar) { padding-left: … }`.
+That is enough for common docs layouts without owning the article’s parent node.
+
+== Design goals this serves
+
+* **Safe** — no HTML rewriter between Asciidoctor and the published page for layout.
+* **Simple plugins** — append markup under `#mkadoc-chrome-body` and ship your own CSS; no “main slot” protocol.
+* **Clear ownership** — core: topbar; plugins: optional shared UI; Asciidoctor: article.
+* **Shared vs per-page** — chrome is the same on every page; the article changes per file. That matches “inject once, convert many.”
+
+== Tradeoff (accepted)
+
+You do **not** get a single parent grid that contains both sidebar and article “for free.”
+If a future layout truly needs that, options would be a careful post-convert wrap or a custom template — a larger change, taken only when padding/sibling CSS is not enough.
+
+Until then: **siblings for safety.**
+
+== Related
+
+* Site author overview: xref:index.adoc[mkadoc]
+* Plugin APIs for contributing under the topbar: xref:plugins.adoc[Writing mkadoc plugins]

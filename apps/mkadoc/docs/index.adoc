@@ -8,7 +8,7 @@ mkadoc is for people who want:
 
 * docs that stay in AsciiDoc
 * a fast edit loop (`serve` with live reload; incremental rebuilds when possible)
-* optional extras — nav chrome, syntax highlighting, diagrams — without leaving the AsciiDoc world
+* optional extras — sidebar nav, syntax highlighting, diagrams — without leaving the AsciiDoc world
 * monorepo-friendly sources (`docs/`, `apps/*/docs`, …) in one site
 
 == How
@@ -19,11 +19,24 @@ mkadoc treats your project as:
 * **Config** — a literate `mkadoc.adoc` with narrative for people and `[mkadoc-config]` YAML blocks for the tool
 * **Output** — HTML under `output` (default `site/`)
 
+Site chrome is layered:
+
+* **Core topbar** — section tabs from `sources` (always on; no plugin required)
+* **Below the topbar** — plugins may add UI into `#mkadoc-chrome-body` (e.g. a left sidebar from `mkadoc:nav`)
+* **Article** — Asciidoctor convert output, as a **sibling** of that mount (not nested inside it)
+
+Mental model: **one full HTML document per page** (not a single shell with an article fragment). Why that shape, and why siblings: xref:chrome-design.adoc[Site chrome design].
+
 Conventions:
 
 * Mount: strip a trailing `docs` segment (`docs` → `/`, `apps/mkadoc/docs` → `/apps/mkadoc`)
 * Tab title: `:tab:` on `{source}/index.adoc`, else doctitle, else last mount segment, else `Docs`
-* Nav links: optional `{source}/_nav.adoc`; missing → auto page list
+* Topbar CSS: package defaults always apply (`/styles/chrome.css`); optional `[mkadoc-css]` on the *first* source's `_chrome.adoc` overrides (later sources ignored)
+* Topbar JS: always shipped by mkadoc (`/styles/chrome.js`; not customizable)
+* Nav links: with `mkadoc:nav`, optional `{source}/_nav.adoc` per source; missing → auto page list
+* Nav CSS: `mkadoc:nav` defaults for the sidebar box and its links (`/styles/nav.css`); optional `[mkadoc-css]` on the *first* source's `_nav.adoc` overrides (later sources ignored)
+* Prefer `////` delimiters for `[mkadoc-css]` blocks so a missed strip stays an AsciiDoc comment
+* Without `mkadoc:nav`: topbar only — no sidebar and no `/styles/nav.css`
 * Pages: normal `.adoc` files; names starting with `_` are partials, not site pages
 * Cache: always `.cache/` (not configurable — add it to `.gitignore`)
 * Output: HTML under `site/` by default (override with `output:`)
@@ -77,22 +90,29 @@ See the repo-root `mkadoc.adoc` for a full example used by this dotfiles site.
 === Plugins
 
 Enable under `plugins:` with a `mkadoc:*` locator.
+For authoring plugins (host API, extension points, conventions), see xref:plugins.adoc[Writing mkadoc plugins].
 
 [cols="1,3"]
 |===
 | Locator | Role
 
-| `mkadoc:nav` | Section tabs + contextual sidebar from each source's `_nav.adoc`.
+| `mkadoc:nav` | Left sidebar under the topbar (`#mkadoc-chrome-body`): layout + link styles, panels from each source's `_nav.adoc`.
 | `mkadoc:shiki` | Build-time syntax highlighting for `[source]` blocks.
 | `mkadoc:kroki-diagram` | Diagram blocks via Kroki (`server_url` required).
 |===
 
 Common options (defaults shown):
 
-* `mkadoc:nav` — `css_href: /styles/nav.css`, `js_href: /styles/nav.js` (enable with `{}`)
+* `mkadoc:nav` — enable with `{}` (no options)
 * `mkadoc:shiki` — `theme: github-light-default`, `css_href: /styles/shiki.css`
 * `mkadoc:kroki-diagram` — `server_url: …` (required)
 
-`css_href` / `js_href` are site-root paths (e.g. `/styles/nav.css`): they set both the HTML link and where the file is written under `output/`.
+Stylesheets:
+
+* `/styles/chrome.css` — core topbar (package defaults + optional first-source `_chrome.adoc`)
+* `/styles/chrome.js` — tab / current-link behavior (package only)
+* `/styles/nav.css` — written only when `mkadoc:nav` is enabled (plugin defaults + optional first-source `_nav.adoc`)
+
+`css_href` on plugins such as Shiki is a site-root path (e.g. `/styles/shiki.css`): it sets both the HTML link and where the file is written under `output/`.
 
 While `mkadoc serve` is running, changing Shiki theme/langs or enabling/disabling the plugin does **not** require a process restart.

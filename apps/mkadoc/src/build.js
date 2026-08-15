@@ -1,11 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { convertFile } from '@asciidoctor/core'
+import { writeSiteChrome } from './chrome.js'
 import { CACHE_DIR } from './config.js'
 import { decideMode } from './decide-mode.js'
 import { copyAssetDirs, relToRoot, walkDir } from './fs-utils.js'
 import { defaultPoolConcurrency, mapPool } from './map-pool.js'
-import { createHost } from './plugin/host.js'
+import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
 import {
   isSourceIndexPath,
@@ -30,15 +31,16 @@ export async function build(cfg, opts = {}) {
     await refreshSourceTitles(cfg)
   }
 
-  const host = createHost(cfg)
-  const plugins = await loadPlugins(cfg.plugins, host)
-  const { mode, pages } = decideMode(cfg, host, opts)
+  const { plugin: pluginHost, build: buildHost } = createHosts(cfg)
+  const plugins = await loadPlugins(cfg.plugins, pluginHost)
+  const { mode, pages } = decideMode(cfg, buildHost, opts)
 
   fs.mkdirSync(path.join(cfg.root, cfg.output), { recursive: true })
   fs.mkdirSync(path.join(cfg.root, cfg.docinfoDir), { recursive: true })
   await plugins.contributeChrome({ mode, pages, paths: touched })
+  await writeSiteChrome(buildHost, { mode, paths: touched })
 
-  if (mode !== 'assets') host.writeHeadDocinfo()
+  if (mode !== 'assets') buildHost.writeHeadDocinfo()
 
   const output = cfg.output.replace(/\/$/, '')
   const assetItems = [...(cfg.assets || [])]
@@ -60,7 +62,7 @@ export async function build(cfg, opts = {}) {
       console.log('mkadoc: full rebuild')
       await buildPages(
         cfg,
-        host,
+        buildHost,
         listSourcePages(cfg.root, cfg.sources).map((p) => p.page),
         { concurrency: opts.concurrency },
       )
@@ -69,7 +71,7 @@ export async function build(cfg, opts = {}) {
       break
     case 'incremental':
       console.log(`mkadoc: incremental ${pages.join(' ')}`)
-      await buildPages(cfg, host, pages, { concurrency: opts.concurrency })
+      await buildPages(cfg, buildHost, pages, { concurrency: opts.concurrency })
       pruneStaleHtml(cfg)
       break
   }

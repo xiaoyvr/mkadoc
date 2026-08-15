@@ -1,0 +1,188 @@
+= Writing mkadoc plugins
+
+This guide is for authors of `mkadoc:*` plugins.
+You receive a **plugin host** in each hook — that is the only API you call.
+Types live in `src/plugin/contract.js` (`MkadocPluginHost`, `MkadocPluginFactory`).
+
+Today only built-in locators listed in `src/plugin/locators.js` can be enabled from config.
+Use the existing builtins as the reference implementations under `src/builtins/`.
+
+== What you can extend
+
+[cols="1,3"]
+|===
+| Extension point | How
+
+| Asciidoctor conversion | `registerExtension` + `addAttributes` in `setup` (blocks, macros, highlighters, …)
+| Generated CSS / JS on every page | Write files under `host.config.output`, then `contributeHead({ links, scripts })`
+| UI below the site topbar | `contributeChromeBody(html)` — HTML is inserted into `#mkadoc-chrome-body`
+| Rebuild sensitivity | `registerClassifier` (force **full** rebuild) or `registerAssetPrefix` (**assets** mode)
+| Health checks | `check(host)` → `{ ok, message? }` for `mkadoc check`
+| On-disk cache | `cacheDir(name)` under `.cache/`
+|===
+
+== What you cannot extend (core-owned)
+
+* **Topbar / section tabs** — built from `sources` by core. You do not replace or rewrite the topbar markup.
+* **Topbar CSS/JS files** — core always writes `/styles/chrome.css` and `/styles/chrome.js`. Do not write those paths from a plugin (you would fight core on every build). Site authors can *override styles* by adding `[mkadoc-css]` in the first source’s `_chrome.adoc` (core appends that after package defaults). Topbar JS is not customizable. Ship plugin assets under your own paths (e.g. `/styles/my.css`).
+* **Page HTML body** — the article is Asciidoctor’s convert output. `#mkadoc-chrome-body` is only for shared site UI that appears on every page (for example a left sidebar), not for the article itself.
+* **Config schema / CLI / unknown locators** — plugins are registered only via known `mkadoc:*` locators and factory options you validate yourself.
+* **Build orchestration** — core decides `full` / `incremental` / `assets` and assembles the shared page chrome/head. You only influence rebuilds via `registerClassifier` / `registerAssetPrefix` (see below). You do not take over writing the topbar/header HTML or flushing head tags — use `contributeChromeBody` and `contributeHead` instead.
+
+== Plugin shape
+
+Export a factory: `(options?) => plugin`.
+
+Validate `options` in the factory (Zod + `parsePluginOptions`). Reject unknown keys.
+
+Return:
+
+[cols="1,3"]
+|===
+| Field | Purpose
+
+| `name` | Short id (e.g. `nav`)
+| `setup(host)` | Optional. Runs once after the plugin is constructed, **before** rebuild mode is decided. Register extensions, attributes, classifiers, asset prefixes here.
+| `contributeChrome(host, ctx)` | Optional. Runs each build after mode is known. Emit CSS/JS/HTML. `ctx`: `{ mode, pages, paths }` (`mode` is `full` \| `incremental` \| `assets`).
+| `check(host)` | Optional. Used by `mkadoc check` only. Keep it cheap.
+|===
+
+Lifecycle order that matters to you:
+
+. Your factory runs (options validated).
+. `setup(host)` — classifiers / prefixes must be registered here to affect this build’s mode.
+. Core decides `full` / `incremental` / `assets`.
+. `contributeChrome(host, ctx)` — skip heavy work when `ctx.mode === 'assets'` if you only care about HTML chrome.
+. Pages convert with the registry/attributes you registered.
+
+== Plugin host API
+
+Every hook receives the same host object.
+
+=== Context
+
+`host.config`:: Resolved project config (`sources`, `output`, `plugins`, …).
+`host.root`:: Absolute project root. Join with relative paths from config.
+
+=== Asciidoctor
+
+`host.registerExtension(fn)`::
+Call `fn(registry)` to register Asciidoctor.js extensions. Used by diagram / syntax plugins.
+
+`host.addAttributes(attrs)`::
+Merge document attributes applied on every convert (e.g. `source-highlighter`, `kroki-server-url`, `icons`).
+
+=== Head assets
+
+`host.contributeHead({ links?, scripts? })`::
+Queue `<link>` / `<script>` tags that core injects into **every page’s** `<head>`.
+
+* `links` — objects like `{ rel: 'stylesheet', href: '/styles/my.css' }`
+* `scripts` — objects like `{ src: '/styles/my.js', defer: true }`
+
+Convention: write the file under `output/` yourself (see `resolveSiteAsset` / `writeIfChanged` in existing builtins), use a **root-absolute** `href`/`src` (e.g. `/styles/nav.css`).
+
+=== Below-topbar chrome
+
+Core always emits:
+
+----
+<header id="mkadoc-topbar" class="mkadoc-topbar">…</header>
+<div id="mkadoc-chrome-body" class="mkadoc-chrome-body"></div>
+----
+
+`host.contributeChromeBody(html)`::
+Append a HTML fragment inside `#mkadoc-chrome-body`. Fragments from multiple plugins are concatenated in **plugin load order** (config key order).
+
+Own your markup and CSS. Typical pattern for a fixed side column (e.g. sidebar):
+
+* Contribute an `<aside id="…">` (stable id).
+* Ship CSS that positions it (often `position: fixed`) and adjusts `body` padding with `:has(#your-id)`.
+* Do not assume another plugin’s sidebar exists unless you document that dependency.
+
+The article itself is **not** inside `#mkadoc-chrome-body`; it stays in the normal page body from Asciidoctor.
+See xref:chrome-design.adoc[Site chrome design] for why.
+
+=== Rebuild hints
+
+When files change under `serve`, core chooses a rebuild mode. These two APIs are how you nudge that choice:
+
+`host.registerClassifier(fn)`::
+“If this path changed, rebuild **everything**.”  
+`fn(relPath)` returns `'full'`, or `null`/`undefined` to leave the decision to core/other plugins.  
+Register in `setup`. Example: `mkadoc:nav` returns `'full'` for each source’s `_nav.adoc` so sidebar edits refresh chrome on all pages.
+
+`host.registerAssetPrefix(prefix)`::
+“Changes under this path are **styles/assets only** — don’t reconvert AsciiDoc pages.”  
+Pass a repo-relative output prefix (the host normalizes a trailing `/`).  
+Example: `mkadoc:shiki` registers the directory of its generated CSS so a CSS-only edit can stay in **assets** mode.
+
+=== Filesystem helpers
+
+`host.ensureDir(relOrAbs)`:: Ensure a directory exists; returns absolute path.
+`host.cacheDir(name)`:: Ensure `.cache/<name>/` under the project; returns absolute path.
+`host.relToRoot(p)`:: Normalize a path to repo-relative form.
+
+== Conventions
+
+=== Locator and options
+
+* Locator form: `mkadoc:<name>` (must be allow-listed in `locators.js` today).
+* Enable in config as `plugins: { "mkadoc:you": { … } }` or `{}` for defaults.
+* Validate options in the factory; do not scrape undeclared keys from `host.config.plugins` inside hooks.
+
+=== Assets
+
+* Prefer `/styles/<plugin>.css` (and `.js` if needed) under `output/`.
+* Do not write `/styles/chrome.css` or `/styles/chrome.js` from a plugin — core owns those files. Site-level topbar CSS tweaks go in the first source’s `_chrome.adoc` (`[mkadoc-css]`), not via a plugin overwrite.
+* Root-absolute URLs in `contributeHead` (leading `/`).
+
+=== Source-tree conventions (site authors)
+
+These are site conventions your plugin may *read*; they are not host APIs:
+
+* First source’s `_chrome.adoc` — optional `[mkadoc-css]` overrides for **core topbar** styles (core reads this; not your job unless you document a parallel file).
+* Per-source `_nav.adoc` — used by `mkadoc:nav` for link lists; first source may also carry `[mkadoc-css]` nav overrides.
+* Prefer `////` delimiters for `[mkadoc-css]` so a missed strip remains an AsciiDoc comment.
+* Files starting with `_` are partials (not pages), but path classifiers can still force full rebuilds when they change.
+
+=== `contributeChrome` modes
+
+* `full` / `incremental` — update chrome HTML and CSS as needed.
+* `assets` — usually skip HTML chrome regeneration; copying styles may still happen outside your plugin. If your only job is a stylesheet derived from config, you may still rewrite CSS here when appropriate.
+
+=== Composition with other plugins
+
+* Chrome-body fragments are concatenated; use distinct element ids/classes.
+* Layout conflicts (two plugins both claiming full width under the topbar) are resolved by CSS and documentation, not by the host.
+* There is no sidebar-specific host API — only `contributeChromeBody`.
+
+== Minimal sketch
+[source,js]
+----
+export default function myPlugin(raw = {}) {
+  parsePluginOptions('mkadoc:my', OptionsSchema, raw)
+
+  return {
+    name: 'my',
+
+    async setup(host) {
+      host.addAttributes({ 'my-flag': true })
+      host.registerClassifier((p) => (p.endsWith('/_my.adoc') ? 'full' : null))
+    },
+
+    async contributeChrome(host, { mode }) {
+      if (mode === 'assets') return
+      // write /styles/my.css under host.config.output …
+      host.contributeHead({ links: [{ rel: 'stylesheet', href: '/styles/my.css' }] })
+      host.contributeChromeBody('<aside id="mkadoc-my" class="mkadoc-my">…</aside>')
+    },
+
+    async check(host) {
+      return { ok: true, message: 'my ok' }
+    },
+  }
+}
+----
+
+Study `src/builtins/nav.js`, `shiki.js`, and `kroki-diagram.js` for complete patterns (options parsing, `resolveSiteAsset`, classifiers, extensions).

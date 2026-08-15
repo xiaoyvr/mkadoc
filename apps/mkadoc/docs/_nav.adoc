@@ -1,5 +1,10 @@
 ////
-Sidebar links for apps/mkadoc/docs
+Sidebar links for apps/mkadoc/docs.
+Not the first source: [mkadoc-css] here is ignored.
+Nav contributes the sidebar via mkadoc:nav; CSS overrides live on the first
+source (docs/_nav.adoc). Topbar: docs/_chrome.adoc.
 ////
 
 * xref:index.adoc[Overview]
+* xref:chrome-design.adoc[Site chrome design]
+* xref:plugins.adoc[Writing plugins]

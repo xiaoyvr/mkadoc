@@ -3,7 +3,7 @@ import { describe, it } from 'node:test'
 import krokiDiagramPlugin from '../src/builtins/kroki-diagram.js'
 import navPlugin from '../src/builtins/nav.js'
 import shikiPlugin from '../src/builtins/shiki.js'
-import { createHost } from '../src/plugin/host.js'
+import { createHosts } from '../src/plugin/host.js'
 import { loadPlugins } from '../src/plugin/load.js'
 import { smokeFixture, withTempProject } from './helpers/project.js'
 
@@ -28,13 +28,18 @@ describe('plugin-owned option validation', () => {
     )
   })
 
+  it('nav factory rejects legacy css_href / js_href options', () => {
+    assert.throws(() => navPlugin({ css_href: '/x.css' }), /mkadoc:nav:.*Unrecognized key/)
+    assert.throws(() => navPlugin({ js_href: '/x.js' }), /mkadoc:nav:.*Unrecognized key/)
+  })
+
   it('nav factory rejects legacy nav path option', () => {
     assert.throws(() => navPlugin({ nav: 'docs/_nav.adoc' }), /mkadoc:nav:.*Unrecognized key/)
   })
 
   it('loadPlugins surfaces plugin option errors', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const host = createHost({
+      const { plugin } = createHosts({
         root,
         sources: [{ path: 'docs', mount: '/', title: 'Docs' }],
         output: 'site',
@@ -43,7 +48,7 @@ describe('plugin-owned option validation', () => {
         plugins: {},
       })
       await assert.rejects(
-        () => loadPlugins({ 'mkadoc:nav': { bogus: true } }, host),
+        () => loadPlugins({ 'mkadoc:nav': { bogus: true } }, plugin),
         /mkadoc:nav:.*Unrecognized key: "bogus"/,
       )
     })

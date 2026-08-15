@@ -4,7 +4,7 @@ import path from 'node:path'
 import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
-import { createHost } from '../src/plugin/host.js'
+import { createHosts } from '../src/plugin/host.js'
 import { smokeFixture, withTempProject } from './helpers/project.js'
 
 function exists(root, rel) {
@@ -59,7 +59,7 @@ describe('P0: docinfo attribute escaping', () => {
   it('writeHeadDocinfo escapes attribute values', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.adoc', root)
-      const host = createHost(cfg)
+      const { build: host } = createHosts(cfg)
       host.contributeHead({
         links: [
           {

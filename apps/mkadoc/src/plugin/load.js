@@ -18,7 +18,7 @@ for (const locator of BUILTIN_LOCATORS) {
 
 /**
  * @param {{ locator: string, plugin: import('./contract.js').MkadocPlugin }[]} loaded
- * @param {import('./contract.js').MkadocHost} host
+ * @param {import('./contract.js').MkadocPluginHost} host
  */
 function createPluginRunner(loaded, host) {
   return {
@@ -46,7 +46,7 @@ function createPluginRunner(loaded, host) {
 
 /**
  * @param {Record<string, Record<string, unknown>> | null | undefined} pluginsConfig
- * @param {import('./contract.js').MkadocHost} host
+ * @param {import('./contract.js').MkadocPluginHost} host
  */
 export async function loadPlugins(pluginsConfig, host) {
   const entries = Object.entries(pluginsConfig || {})

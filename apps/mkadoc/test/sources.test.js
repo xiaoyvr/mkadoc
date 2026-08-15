@@ -33,6 +33,11 @@ plugins:
 Root body.
 `,
         'docs/_nav.adoc': `* xref:index.adoc[Home]
+
+[mkadoc-css]
+----
+.mkadoc-sidebar a { color: #111; }
+----
 `,
         'apps/mkadoc/docs/index.adoc': `= mkadoc
 
@@ -59,12 +64,13 @@ Guide body.
           path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
           'utf8',
         )
-        assert.match(header, /docs-topbar/)
+        assert.match(header, /mkadoc-topbar/)
         assert.match(header, /data-mount="\/"/)
         assert.match(header, /data-mount="\/apps\/mkadoc"/)
         assert.match(header, />Site</)
         assert.match(header, />mkadoc</)
-        assert.match(header, /docs-sidebar/)
+        assert.match(header, /mkadoc-chrome-body/)
+        assert.match(header, /mkadoc-sidebar/)
 
         const outRel = pageToOutRel(cfg.sources[1], 'apps/mkadoc/docs/guide.adoc')
         assert.equal(outRel, 'apps/mkadoc/guide.html')

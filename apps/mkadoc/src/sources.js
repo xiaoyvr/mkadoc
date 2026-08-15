@@ -203,3 +203,8 @@ export async function refreshSourceTitles(cfg) {
 export function navPathForSource(source) {
   return `${source.path}/_nav.adoc`
 }
+
+/** Convention: `{source}/_chrome.adoc` (first source may override site chrome CSS) */
+export function chromePathForSource(source) {
+  return `${source.path}/_chrome.adoc`
+}
