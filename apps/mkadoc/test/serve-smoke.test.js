@@ -17,19 +17,23 @@ function read(root, rel) {
 async function startServe(cfg) {
   /** @type {{ opts: object, mode: string }[]} */
   const calls = []
+  let serverOpts = null
   const { close } = await serve(cfg, {
-    createServer: async () => ({
-      close: async () => {},
-      reload: () => {},
-      url: 'http://127.0.0.1:0/',
-    }),
+    createServer: async (opts) => {
+      serverOpts = opts
+      return {
+        close: async () => {},
+        reload: () => {},
+        url: 'http://127.0.0.1:0/',
+      }
+    },
     buildFn: async (c, opts) => {
       const mode = await build(c, opts)
       calls.push({ opts, mode })
       return mode
     },
   })
-  return { close, calls }
+  return { close, calls, serverOpts }
 }
 
 describe('serve smoke (watch → build wiring)', () => {
@@ -41,7 +45,7 @@ describe('serve smoke (watch → build wiring)', () => {
         assert.equal(calls.length, 1)
         assert.deepEqual(calls[0].opts, { forceFull: true })
         assert.equal(calls[0].mode, 'full')
-        assert.match(read(root, 'site/index.html'), /MARKER_INDEX_V1/)
+        assert.match(read(root, 'site/docs/index.html'), /MARKER_INDEX_V1/)
       } finally {
         await close()
       }
@@ -64,7 +68,20 @@ describe('serve smoke (watch → build wiring)', () => {
           second.opts.paths.some((p) => String(p).replace(/\\/g, '/').endsWith('docs/guide.adoc')),
         )
         assert.equal(second.mode, 'incremental')
-        assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
+        assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V2/)
+      } finally {
+        await close()
+      }
+    })
+  })
+
+  it('passes a root redirect to the first source index page', async () => {
+    await withTempProject(smokeFixture(), async (root) => {
+      const cfg = await loadConfig('mkadoc.adoc', root)
+      const { close, serverOpts } = await startServe(cfg)
+      try {
+        assert.equal(typeof serverOpts.rootRedirect, 'function')
+        assert.equal(serverOpts.rootRedirect(), '/docs/index.html')
       } finally {
         await close()
       }

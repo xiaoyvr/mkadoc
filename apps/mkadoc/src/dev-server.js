@@ -21,6 +21,10 @@ function resolveHtmlFile(root, pathname) {
   return abs
 }
 
+function resolveRootRedirect(rootRedirect) {
+  return typeof rootRedirect === 'function' ? rootRedirect() : rootRedirect
+}
+
 function openBrowser(url) {
   const platform = process.platform
   if (platform === 'darwin') {
@@ -33,7 +37,7 @@ function openBrowser(url) {
 }
 
 export async function createDevServer(opts) {
-  const { root, host, port, open = false } = opts
+  const { root, host, port, open = false, rootRedirect = null } = opts
   const clients = new Set()
 
   const server = http.createServer(async (req, res) => {
@@ -48,6 +52,13 @@ export async function createDevServer(opts) {
       res.write(': connected\n\n')
       clients.add(res)
       req.on('close', () => clients.delete(res))
+      return
+    }
+
+    const redirectTarget = resolveRootRedirect(rootRedirect)
+    if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname === '/' && redirectTarget) {
+      res.writeHead(302, { Location: redirectTarget })
+      res.end()
       return
     }
 
@@ -113,6 +124,10 @@ export async function createDevServer(opts) {
     clients.clear()
     await new Promise((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()))
+      // `server.close()` waits for every open connection to end on its own,
+      // so a browser tab holding the SSE stream (or a keep-alive socket) would
+      // block shutdown forever. Force-terminate all connections instead.
+      server.closeAllConnections()
     })
   }
 

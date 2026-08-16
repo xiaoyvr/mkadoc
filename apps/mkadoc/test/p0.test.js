@@ -16,8 +16,8 @@ describe('P0: orphan HTML prune', () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
-      assert.ok(exists(root, 'site/guide.html'))
-      assert.ok(exists(root, 'site/index.html'))
+      assert.ok(exists(root, 'site/docs/guide.html'))
+      assert.ok(exists(root, 'site/docs/index.html'))
 
       fs.rmSync(path.join(root, 'docs/guide.adoc'))
       fs.writeFileSync(path.join(root, 'docs/index.adoc'), `= Smoke Index\n\nMARKER_INDEX_V2\n`)
@@ -27,8 +27,11 @@ describe('P0: orphan HTML prune', () => {
         paths: ['docs/guide.adoc', 'docs/index.adoc'],
       })
       assert.equal(mode, 'full')
-      assert.equal(exists(root, 'site/guide.html'), false)
-      assert.match(fs.readFileSync(path.join(root, 'site/index.html'), 'utf8'), /MARKER_INDEX_V2/)
+      assert.equal(exists(root, 'site/docs/guide.html'), false)
+      assert.match(
+        fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'),
+        /MARKER_INDEX_V2/,
+      )
     })
   })
 })
@@ -49,8 +52,8 @@ describe('P0: publish clean', () => {
 
       assert.equal(exists(root, 'site/stale-orphan.html'), false)
       assert.equal(exists(root, '.cache/junk.txt'), false)
-      assert.ok(exists(root, 'site/index.html'))
-      assert.ok(exists(root, 'site/guide.html'))
+      assert.ok(exists(root, 'site/docs/index.html'))
+      assert.ok(exists(root, 'site/docs/guide.html'))
     })
   })
 })

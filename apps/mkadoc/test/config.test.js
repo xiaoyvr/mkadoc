@@ -34,7 +34,7 @@ serve:
         const cfg = await loadConfig('mkadoc.adoc', root)
         assert.equal(cfg.sources.length, 1)
         assert.equal(cfg.sources[0].path, 'docs')
-        assert.equal(cfg.sources[0].mount, '/')
+        assert.equal(cfg.sources[0].mount, '/docs')
         assert.equal(cfg.sources[0].title, 'Dotfiles')
         assert.equal(cfg.serve.port, 8000)
         assert.equal(cfg.serve.remote, true)
@@ -213,9 +213,9 @@ Body.
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
         assert.equal(cfg.sources[0].title, 'Site')
-        assert.equal(cfg.sources[0].mount, '/')
+        assert.equal(cfg.sources[0].mount, '/docs')
         assert.equal(cfg.sources[1].title, 'mkadoc tool')
-        assert.equal(cfg.sources[1].mount, '/apps/mkadoc')
+        assert.equal(cfg.sources[1].mount, '/apps/mkadoc/docs')
       },
     )
   })

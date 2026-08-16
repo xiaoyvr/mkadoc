@@ -12,8 +12,14 @@ describe('build concurrency', () => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       const mode = await build(cfg, { forceFull: true, concurrency: 2 })
       assert.equal(mode, 'full')
-      assert.match(fs.readFileSync(path.join(root, 'site/index.html'), 'utf8'), /MARKER_INDEX_V1/)
-      assert.match(fs.readFileSync(path.join(root, 'site/guide.html'), 'utf8'), /MARKER_GUIDE_V1/)
+      assert.match(
+        fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'),
+        /MARKER_INDEX_V1/,
+      )
+      assert.match(
+        fs.readFileSync(path.join(root, 'site/docs/guide.html'), 'utf8'),
+        /MARKER_GUIDE_V1/,
+      )
     })
   })
 })

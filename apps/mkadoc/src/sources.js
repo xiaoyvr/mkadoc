@@ -11,8 +11,8 @@ import { relToRoot, walkDir } from './fs-utils.js'
  */
 
 /**
- * Strip a trailing `docs` segment for mount derivation.
- * `docs` → `/`; `apps/mkadoc/docs` → `/apps/mkadoc`
+ * Derive the site mount from a source path, verbatim (no magic stripping).
+ * `docs` → `/docs`; `apps/mkadoc/docs` → `/apps/mkadoc/docs`
  * @param {string} sourcePath
  */
 export function mountFromSourcePath(sourcePath) {
@@ -20,15 +20,10 @@ export function mountFromSourcePath(sourcePath) {
   if (norm.length === 0) {
     throw new Error('mkadoc: source path must not be empty')
   }
-  if (norm[norm.length - 1] === 'docs') {
-    norm.pop()
-  }
-  if (norm.length === 0) return '/'
   return `/${norm.join('/')}`
 }
 
 function titleFallback(mount) {
-  if (mount === '/') return 'Docs'
   const parts = mount.split('/').filter(Boolean)
   return parts[parts.length - 1] || 'Docs'
 }
@@ -91,6 +86,18 @@ export function mountPrefix(mount) {
 }
 
 /**
+ * Convention: a request for the site root redirects to the first source's index
+ * page, unless the first source already mounts at `/` (root is served directly).
+ * @param {MkadocSource[]} sources
+ * @returns {string|null} redirect target href, or null when no redirect is needed
+ */
+export function rootRedirectHref(sources) {
+  const first = sources[0]
+  if (!first || first.mount === '/') return null
+  return `${first.mount}/index.html`
+}
+
+/**
  * Longest matching source for a site pathname (`/apps/mkadoc/guide.html`).
  * @param {MkadocSource[]} sources
  * @param {string} pathname
@@ -100,13 +107,6 @@ export function sourceForPathname(sources, pathname) {
   let best = null
   let bestLen = -1
   for (const src of sources) {
-    if (src.mount === '/') {
-      if (bestLen < 0) {
-        best = src
-        bestLen = 0
-      }
-      continue
-    }
     const prefix = mountPrefix(src.mount)
     if (pathOnly === src.mount || pathOnly.startsWith(prefix)) {
       if (src.mount.length > bestLen) {
@@ -153,7 +153,6 @@ export function pageToOutRel(source, pageRel) {
   }
   const under = norm === source.path ? '' : norm.slice(prefix.length)
   const htmlUnder = under.replace(/\.adoc$/, '.html')
-  if (source.mount === '/') return htmlUnder
   const mountRel = source.mount.replace(/^\//, '')
   return htmlUnder ? `${mountRel}/${htmlUnder}` : `${mountRel}/index.html`
 }

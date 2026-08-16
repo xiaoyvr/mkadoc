@@ -41,7 +41,7 @@ describe('plugin-owned option validation', () => {
     await withTempProject(smokeFixture(), async (root) => {
       const { plugin } = createHosts({
         root,
-        sources: [{ path: 'docs', mount: '/', title: 'Docs' }],
+        sources: [{ path: 'docs', mount: '/docs', title: 'Docs' }],
         output: 'site',
         docinfoDir: '.cache/docinfo',
         assets: [],

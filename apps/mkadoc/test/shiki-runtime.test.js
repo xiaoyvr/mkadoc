@@ -37,7 +37,7 @@ describe('shiki process-global runtime', () => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
       const css1 = fs.readFileSync(path.join(root, 'site/styles/shiki.css'), 'utf8')
-      const html1 = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8')
+      const html1 = fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8')
       assert.match(html1, /pre.*shiki|class="shiki"/)
 
       fs.writeFileSync(
@@ -55,7 +55,7 @@ plugins:
       const css2 = fs.readFileSync(path.join(root, 'site/styles/shiki.css'), 'utf8')
       assert.notEqual(css1, css2)
       assert.match(css2, /nord/i)
-      assert.match(fs.readFileSync(path.join(root, 'site/index.html'), 'utf8'), /shiki/)
+      assert.match(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'), /shiki/)
     })
   })
 
@@ -108,7 +108,7 @@ plugins:
 `),
       )
       await build(await loadConfig('mkadoc.adoc', root), { forceFull: true })
-      const html = fs.readFileSync(path.join(root, 'site/index.html'), 'utf8')
+      const html = fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8')
       assert.match(html, /echo[\s\S]*hello/)
       assert.match(html, /shiki/)
     })

@@ -52,7 +52,7 @@ function escapeHtmlAttr(value) {
 }
 
 function tabHref(source) {
-  return source.mount === '/' ? '/index.html' : `${source.mount}/index.html`
+  return `${source.mount}/index.html`
 }
 
 /**
@@ -89,7 +89,6 @@ const CHROME_JS = `(function () {
   if (path.endsWith("/")) path += "index.html";
 
   function mountMatchLen(mount) {
-    if (mount === "/") return 0;
     var prefix = mount.endsWith("/") ? mount : mount + "/";
     if (path === mount || path === mount + ".html") return mount.length;
     if (path.startsWith(prefix)) return mount.length;

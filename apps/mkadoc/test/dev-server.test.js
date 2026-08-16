@@ -73,4 +73,79 @@ describe('dev-server', () => {
       },
     )
   })
+
+  it('redirects / to rootRedirect when configured', async () => {
+    await withTempProject(
+      {
+        'site/docs/index.html': `<!doctype html><html><body><p>DOCS</p></body></html>\n`,
+      },
+      async (root) => {
+        const server = await createDevServer({
+          root: path.join(root, 'site'),
+          host: '127.0.0.1',
+          port: 0,
+          open: false,
+          rootRedirect: '/docs/index.html',
+        })
+
+        try {
+          const res = await new Promise((resolve, reject) => {
+            http.get(server.url, (r) => {
+              r.resume()
+              r.on('end', () => resolve(r))
+            }).on('error', reject)
+          })
+          assert.equal(res.statusCode, 302)
+          assert.equal(res.headers.location, '/docs/index.html')
+        } finally {
+          await server.close()
+        }
+      },
+    )
+  })
+
+  it('close() terminates even with an open SSE connection', async () => {
+    await withTempProject(
+      {
+        'site/index.html': `<!doctype html><html><body><p>HELLO</p></body></html>\n`,
+      },
+      async (root) => {
+        const server = await createDevServer({
+          root: path.join(root, 'site'),
+          host: '127.0.0.1',
+          port: 0,
+          open: false,
+        })
+
+        // Open an SSE connection and keep it open (the browser-tab case that
+        // previously hung `server.close()` forever).
+        const resClosed = new Promise((resolve) => {
+          const req = http.get(new URL('__mkadoc/events', server.url), (res) => {
+            res.on('data', () => {})
+            res.once('close', () => resolve('res-close'))
+            res.once('aborted', () => resolve('res-aborted'))
+            res.once('error', () => resolve('res-error'))
+          })
+          req.once('error', () => resolve('req-error'))
+        })
+        // Wait for the SSE response to be established before closing.
+        await new Promise((r) => setTimeout(r, 100))
+
+        try {
+          const closed = await Promise.race([
+            server.close().then(() => 'closed'),
+            new Promise((r) => setTimeout(() => r('timeout'), 2000)),
+          ])
+          assert.equal(closed, 'closed')
+          const signal = await Promise.race([
+            resClosed,
+            new Promise((r) => setTimeout(() => r('timeout'), 2000)),
+          ])
+          assert.notEqual(signal, 'timeout', 'open connection should be force-closed')
+        } finally {
+          await server.close().catch(() => {})
+        }
+      },
+    )
+  })
 })

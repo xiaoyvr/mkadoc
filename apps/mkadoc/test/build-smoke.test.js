@@ -25,11 +25,11 @@ describe('build smoke (no plugins)', () => {
       const mode = await build(cfg, { forceFull: true })
 
       assert.equal(mode, 'full')
-      assert.ok(exists(root, 'site/index.html'))
-      assert.ok(exists(root, 'site/guide.html'))
+      assert.ok(exists(root, 'site/docs/index.html'))
+      assert.ok(exists(root, 'site/docs/guide.html'))
       assert.equal(exists(root, 'site/_partial.html'), false)
-      assert.match(read(root, 'site/index.html'), /MARKER_INDEX_V1/)
-      assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V1/)
+      assert.match(read(root, 'site/docs/index.html'), /MARKER_INDEX_V1/)
+      assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V1/)
     })
   })
 
@@ -38,17 +38,17 @@ describe('build smoke (no plugins)', () => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
 
-      const indexBefore = read(root, 'site/index.html')
-      const indexMtime = mtimeMs(root, 'site/index.html')
+      const indexBefore = read(root, 'site/docs/index.html')
+      const indexMtime = mtimeMs(root, 'site/docs/index.html')
 
       fs.writeFileSync(path.join(root, 'docs/guide.adoc'), `= Smoke Guide\n\nMARKER_GUIDE_V2\n`)
       await new Promise((r) => setTimeout(r, 20))
 
       const mode = await build(cfg, { paths: [path.join(root, 'docs/guide.adoc')] })
       assert.equal(mode, 'incremental')
-      assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
-      assert.equal(read(root, 'site/index.html'), indexBefore)
-      assert.equal(mtimeMs(root, 'site/index.html'), indexMtime)
+      assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V2/)
+      assert.equal(read(root, 'site/docs/index.html'), indexBefore)
+      assert.equal(mtimeMs(root, 'site/docs/index.html'), indexMtime)
     })
   })
 
@@ -61,8 +61,8 @@ describe('build smoke (no plugins)', () => {
       fs.writeFileSync(path.join(root, 'docs/guide.adoc'), `= Smoke Guide\n\nMARKER_GUIDE_V2\n`)
       const mode = await build(cfg, { paths: ['docs/index.adoc', 'docs/guide.adoc'] })
       assert.equal(mode, 'full')
-      assert.match(read(root, 'site/index.html'), /MARKER_INDEX_V2/)
-      assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
+      assert.match(read(root, 'site/docs/index.html'), /MARKER_INDEX_V2/)
+      assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V2/)
     })
   })
 
@@ -79,8 +79,8 @@ describe('build smoke (no plugins)', () => {
         fs.writeFileSync(path.join(root, 'docs/other.adoc'), `= Smoke Other\n\nMARKER_OTHER_V2\n`)
         const mode = await build(cfg, { paths: ['docs/guide.adoc', 'docs/other.adoc'] })
         assert.equal(mode, 'incremental')
-        assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
-        assert.match(read(root, 'site/other.html'), /MARKER_OTHER_V2/)
+        assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V2/)
+        assert.match(read(root, 'site/docs/other.html'), /MARKER_OTHER_V2/)
       },
     )
   })
@@ -110,8 +110,8 @@ describe('build smoke (no plugins)', () => {
 
       const mode = await build(cfg, { paths: ['docs/_partial.adoc'] })
       assert.equal(mode, 'full')
-      assert.match(read(root, 'site/index.html'), /MARKER_INDEX_V1/)
-      assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V1/)
+      assert.match(read(root, 'site/docs/index.html'), /MARKER_INDEX_V1/)
+      assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V1/)
     })
   })
 
@@ -120,15 +120,15 @@ describe('build smoke (no plugins)', () => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
 
-      const indexBefore = read(root, 'site/index.html')
-      const guideBefore = read(root, 'site/guide.html')
+      const indexBefore = read(root, 'site/docs/index.html')
+      const guideBefore = read(root, 'site/docs/guide.html')
       assert.match(read(root, 'site/styles/site.css'), /site css v1/)
 
       fs.writeFileSync(path.join(root, 'docs/styles/site.css'), `/* site css v2 */\n`)
       const mode = await build(cfg, { paths: ['docs/styles/site.css'] })
       assert.equal(mode, 'assets')
-      assert.equal(read(root, 'site/index.html'), indexBefore)
-      assert.equal(read(root, 'site/guide.html'), guideBefore)
+      assert.equal(read(root, 'site/docs/index.html'), indexBefore)
+      assert.equal(read(root, 'site/docs/guide.html'), guideBefore)
       assert.match(read(root, 'site/styles/site.css'), /site css v2/)
     })
   })
@@ -145,7 +145,7 @@ describe('build smoke (no plugins)', () => {
         paths: ['docs/guide.adoc', 'docs/styles/site.css'],
       })
       assert.equal(mode, 'incremental')
-      assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
+      assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V2/)
       assert.match(read(root, 'site/styles/site.css'), /site css mixed/)
     })
   })
@@ -176,7 +176,7 @@ plugins: {}
         })
         // Unknown non-page paths do not force full when real pages are also present.
         assert.equal(mode, 'incremental')
-        assert.match(read(root, 'site/guide.html'), /MARKER_GUIDE_V2/)
+        assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V2/)
         assert.match(read(root, 'site/static/app.js'), /v2/)
       },
     )
