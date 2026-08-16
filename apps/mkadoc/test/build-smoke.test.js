@@ -114,4 +114,80 @@ describe('build smoke (no plugins)', () => {
       assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V1/)
     })
   })
+
+  it('copies referenced local assets to the mirrored output path', async () => {
+    const files = {
+      'docs/images/pic.png': 'PNG-BLOCK',
+      'docs/images/icon.png': 'PNG-INLINE',
+      'docs/files/manual.pdf': 'PDF',
+      'docs/videos/demo.mp4': 'MP4',
+    }
+    await withTempProject(
+      {
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
+output: site
+`),
+        'docs/index.adoc': `= Home
+
+image::images/pic.png[Alt]
+
+Inline image:images/icon.png[] and link:files/manual.pdf[PDF].
+
+video::videos/demo.mp4[]
+
+image::/abs/logo.png[Abs]
+
+image::https://ex.com/x.png[Net]
+
+xref:guide.adoc[Guide]
+`,
+        'docs/guide.adoc': `= Guide
+`,
+        ...files,
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        await build(cfg, { forceFull: true })
+
+        for (const [rel, content] of Object.entries(files)) {
+          const outRel = `site/${rel}`
+          assert.equal(exists(root, outRel), true, `${outRel} should exist`)
+          assert.equal(read(root, outRel), content)
+        }
+        // Absolute and external refs are ignored.
+        assert.equal(exists(root, 'site/abs/logo.png'), false)
+        assert.equal(exists(root, 'site/docs/x.png'), false)
+        // Page links are not assets.
+        assert.equal(fs.existsSync(path.join(root, 'site/docs/guide.html')), true)
+      },
+    )
+  })
+
+  it('warns and continues on missing referenced assets', async () => {
+    const originalWarn = console.warn
+    const warnings = []
+    console.warn = (msg) => warnings.push(String(msg))
+    try {
+      await withTempProject(
+        {
+          'mkadoc.adoc': literateConfig(`sources:
+  - docs
+output: site
+`),
+          'docs/index.adoc': `= Home
+
+image::images/missing.png[]
+`,
+        },
+        async (root) => {
+          const cfg = await loadConfig('mkadoc.adoc', root)
+          await build(cfg, { forceFull: true })
+        },
+      )
+    } finally {
+      console.warn = originalWarn
+    }
+    assert.ok(warnings.some((w) => /referenced asset not found/.test(w)))
+  })
 })

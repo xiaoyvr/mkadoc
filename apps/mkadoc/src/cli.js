@@ -9,7 +9,7 @@ import { serve } from './serve.js'
 const HELP = `mkadoc — build and serve AsciiDoc as a static site
 
 Usage:
-  mkadoc build [--full] [--config PATH] [PATH...]
+  mkadoc build [--config PATH]
   mkadoc publish [--config PATH]
   mkadoc serve [--config PATH] [--port PORT] [--remote] [--open]
   mkadoc check [--config PATH]
@@ -20,7 +20,7 @@ Config:
   --config PATH must be .adoc or .asciidoc
 
 Commands:
-  build     Convert sources (incremental when PATH args are given)
+  build     Full rebuild of sources
   publish   Clean full build for deployment
   serve     Full build, watch sources, serve output with live reload
   check     Verify source path and enabled plugin health checks
@@ -35,11 +35,8 @@ function printHelp() {
   process.stdout.write(HELP)
 }
 
-async function cmdBuild(cfg, values, positionals) {
-  await build(cfg, {
-    forceFull: Boolean(values.full),
-    paths: positionals,
-  })
+async function cmdBuild(cfg) {
+  await build(cfg, { forceFull: true })
 }
 
 async function cmdPublish(cfg) {
@@ -70,7 +67,6 @@ async function main() {
     args: process.argv.slice(2),
     allowPositionals: true,
     options: {
-      full: { type: 'boolean', default: false },
       config: { type: 'string', short: 'c' },
       port: { type: 'string' },
       remote: { type: 'boolean', default: false },
@@ -79,7 +75,7 @@ async function main() {
     },
   })
 
-  const [command = 'help', ...rest] = positionals
+  const [command = 'help'] = positionals
 
   if (values.help || command === 'help' || command === '--help') {
     printHelp()
@@ -100,7 +96,7 @@ async function main() {
 
   switch (command) {
     case 'build':
-      await cmdBuild(cfg, values, rest)
+      await cmdBuild(cfg)
       return 0
     case 'publish':
       await cmdPublish(cfg)

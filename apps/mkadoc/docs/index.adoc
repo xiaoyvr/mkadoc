@@ -22,16 +22,14 @@ These are literately configured by the `[mkdoc-config]` YAML blocks inside `mkad
 
 Some conventions:
 
-* Site root: `serve` redirects `/` to the *first* source's index page
-* Tab title: `:tab:` on `{source}/index.adoc`, else doctitle, else last mount segment, else `Docs`
-* Pages: normal `.adoc` files; names starting with `_` are partials, not site pages
-* Cache: always `.cache/` (not configurable — add it to `.gitignore`)
-* Output: HTML under `site/` by default (override with `output:`)
+* **Config file**: `mkdoc.adoc` under repository root
+* **Site root**: `serve` redirects `/` to the *first* source's index page
+* **Tab title**: `:tab:` on `{source}/index.adoc`, else doctitle, else last mount segment, else `Docs`
+* **Pages**: normal `.adoc` files; names starting with `_` are ignored
+* **Cache**: `.cache/` under repository root (not configurable — add it to `.gitignore`)
+* **Output**: HTML under `site/` by default, configurable with `output:`
 
-
-== What
-
-=== Get started
+== Get started
 
 From a project with `mkadoc.adoc` and source trees:
 
@@ -39,7 +37,7 @@ From a project with `mkadoc.adoc` and source trees:
 |===
 | Command | What it does
 
-| `build` | Convert sources. No paths (or `--full`) → full rebuild. With paths → incremental when possible.
+| `build` | Full rebuild of all sources.
 | `serve` | Full build, watch, serve `output/` with live reload.
 | `publish` | Delete `output` + `.cache/`, then full rebuild (for deployment).
 | `check` | Verify source dirs and run enabled plugin health checks.
@@ -61,6 +59,19 @@ serve:
 ----
 
 See the repo-root `mkadoc.adoc` for a full example used by this dotfiles site.
+
+=== Assets
+
+Referenced local files are copied into the output automatically — no config.
+During a page build, mkadoc reads the Asciidoctor asset catalog (images, `link:`
+targets) plus `video::`/`audio::` blocks, and copies each relative target to the
+mirrored path under `output/` (e.g. `docs/images/x.png` → `site/docs/images/x.png`),
+skipping unchanged files.
+
+* Relative paths are resolved against the page's source dir; `:imagesdir:` is honored.
+* Root-absolute (`/x.png`) and external (`https://…`) targets are left alone.
+* `.html`/`.adoc` targets (converted pages / sources) are not copied.
+* A missing referenced file logs a warning and the build continues.
 
 === Plugins
 

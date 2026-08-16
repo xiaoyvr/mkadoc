@@ -20,6 +20,20 @@ export function writeIfChanged(filePath, content) {
   return true
 }
 
+/** Copy a file, skipping the write when the destination already matches. */
+export function copyFileIfChanged(src, dest) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  if (fs.existsSync(dest)) {
+    const a = fs.statSync(src)
+    const b = fs.statSync(dest)
+    if (a.size === b.size && fs.readFileSync(dest).equals(fs.readFileSync(src))) {
+      return false
+    }
+  }
+  fs.copyFileSync(src, dest)
+  return true
+}
+
 export function resolveSiteAsset(root, output, href) {
   const raw = String(href ?? '').trim()
   if (!raw.startsWith('/') || raw.startsWith('//')) {

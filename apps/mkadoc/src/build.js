@@ -1,10 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { convertFile } from '@asciidoctor/core'
+import { load } from '@asciidoctor/core'
 import { writeSiteChrome } from './chrome.js'
 import { CACHE_DIR } from './config.js'
 import { decideMode } from './decide-mode.js'
-import { relToRoot, walkDir } from './fs-utils.js'
+import { copyFileIfChanged, relToRoot, walkDir, writeIfChanged } from './fs-utils.js'
 import { defaultPoolConcurrency, mapPool } from './map-pool.js'
 import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
@@ -89,20 +89,79 @@ async function buildPages(cfg, host, pages, { concurrency } = {}) {
     const toFile = path.join(outRoot, outRel)
     fs.mkdirSync(path.dirname(toFile), { recursive: true })
     try {
-      await convertFile(absPath, {
+      const text = fs.readFileSync(absPath, 'utf8')
+      const doc = await load(text, {
         safe: 'unsafe',
         base_dir: baseDir,
-        to_dir: path.dirname(toFile),
-        to_file: path.basename(toFile),
-        mkdirs: true,
+        standalone: true,
         extension_registry: registry,
         attributes: attrs,
+        catalog_assets: true,
       })
+      const html = String(await doc.convert())
+      writeIfChanged(toFile, html)
+      copyReferencedAssets(cfg, absPath, doc)
     } catch (err) {
       const detail = err?.message || String(err)
       throw new Error(`mkadoc: failed to convert ${page}: ${detail}`, { cause: err })
     }
   })
+}
+
+/** Targets that are not local relative files (URLs, root-absolute, anchors). */
+function isExternalOrAbsoluteTarget(target) {
+  if (target.startsWith('#') || target.startsWith('/')) return true
+  return /^[a-z][a-z0-9+.-]*:/i.test(target)
+}
+
+/** Converted pages and AsciiDoc sources are not assets. */
+const ASSET_SKIP_RE = /\.(?:html?|adoc|asciidoc)$/i
+
+/**
+ * Collect file targets referenced by a converted document: images (block +
+ * inline, honoring `:imagesdir:`), `link:` targets, and video/audio blocks.
+ * @param {import('@asciidoctor/core').Document} doc
+ */
+function collectReferencedAssets(doc) {
+  const targets = []
+  for (const img of doc.getImages?.() || []) {
+    const target = String(img.target ?? '').trim()
+    const dir = String(img.imagesdir ?? '').trim()
+    const relativeDir = dir && !dir.startsWith('/') && !/^[a-z][a-z0-9+.-]*:/i.test(dir)
+    targets.push(relativeDir ? `${dir}/${target}` : target)
+  }
+  for (const link of doc.getLinks?.() || []) {
+    targets.push(String(link ?? '').trim())
+  }
+  for (const block of doc.findBy((b) => b.getContext() === 'video' || b.getContext() === 'audio')) {
+    targets.push(String(block.getAttribute?.('target') ?? '').trim())
+  }
+  return targets.filter(Boolean)
+}
+
+/**
+ * Copy each local relative asset referenced by the page into the output at
+ * the mirrored path (output mirrors the source tree, so the emitted relative
+ * URL resolves). Absolute/external targets and page/source links are skipped;
+ * missing files warn and continue.
+ */
+function copyReferencedAssets(cfg, pageAbs, doc) {
+  const pageDir = path.dirname(pageAbs)
+  const outRoot = path.join(cfg.root, cfg.output)
+  const seen = new Set()
+
+  for (const target of collectReferencedAssets(doc)) {
+    if (isExternalOrAbsoluteTarget(target) || ASSET_SKIP_RE.test(target)) continue
+    const srcAbs = path.resolve(pageDir, target)
+    const rel = relToRoot(srcAbs, cfg.root)
+    if (seen.has(rel)) continue
+    seen.add(rel)
+    if (!fs.existsSync(srcAbs) || !fs.statSync(srcAbs).isFile()) {
+      console.warn(`mkadoc: referenced asset not found: ${rel}`)
+      continue
+    }
+    copyFileIfChanged(srcAbs, path.join(outRoot, rel))
+  }
 }
 
 function pruneStaleHtml(cfg) {

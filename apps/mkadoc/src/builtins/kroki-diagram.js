@@ -7,7 +7,6 @@ import { parsePluginOptions } from '../plugin/options.js'
 const OptionsSchema = z
   .object({
     server_url: z.string().min(1),
-    data_uri: z.boolean().default(true),
     allow_uri_read: z.boolean().default(true),
     cache_dir: z.string().min(1).default('diagram'),
   })
@@ -17,7 +16,6 @@ const OptionsSchema = z
 export default function krokiDiagramPlugin(rawOptions = {}) {
   const {
     server_url: serverUrl,
-    data_uri: dataUri,
     allow_uri_read: allowUriRead,
     cache_dir: cacheName,
   } = parsePluginOptions('mkadoc:kroki-diagram', OptionsSchema, rawOptions)
@@ -32,9 +30,12 @@ export default function krokiDiagramPlugin(rawOptions = {}) {
       host.registerExtension((registry) => {
         asciidoctorKroki.register(registry)
       })
+      // Scope data-URI embedding to kroki diagrams only (kroki-data-uri),
+      // leaving regular images as file references that get copied.
       host.addAttributes({
         'kroki-server-url': serverUrl,
-        'data-uri': dataUri,
+        'kroki-fetch-diagram': '',
+        'kroki-data-uri': '',
         'allow-uri-read': allowUriRead,
         imagesoutdir: diagramDir || path.join(host.root, CACHE_DIR, cacheName),
       })
