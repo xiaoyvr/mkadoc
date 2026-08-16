@@ -51,13 +51,13 @@ function autoNavHtml(host, source) {
   return `<div class="ulist"><ul>\n${items}\n</ul></div>\n`
 }
 
-function readNavCssBundle(host) {
+async function readNavCssBundle(host) {
   const cssParts = [DEFAULT_NAV_CSS]
   const first = host.config.sources[0]
   if (first) {
     const navAbs = path.join(host.root, navPathForSource(first))
     if (fs.existsSync(navAbs)) {
-      const { css } = extractMkadocCss(fs.readFileSync(navAbs, 'utf8'))
+      const { css } = await extractMkadocCss(fs.readFileSync(navAbs, 'utf8'))
       if (css) cssParts.push(`/* Overrides from first source _nav.adoc */\n${css}`)
     }
   }
@@ -76,7 +76,7 @@ async function buildSidebarHtml(host) {
     let html = ''
     if (fs.existsSync(navAbs)) {
       const sourceText = fs.readFileSync(navAbs, 'utf8')
-      const { markupSource } = extractMkadocCss(sourceText)
+      const { markupSource } = await extractMkadocCss(sourceText)
       if (markupSource) {
         html = await renderNavMarkup(markupSource, {
           relfileprefix: mountPrefix(source.mount),
@@ -120,7 +120,7 @@ export default function navPlugin(rawOptions = {}) {
       // Only rewrite shared CSS on full builds. Incremental must not change
       // selectors while existing pages still embed the previous chrome HTML.
       if (mode === 'full' || !fs.existsSync(cssAsset.absPath)) {
-        writeIfChanged(cssAsset.absPath, readNavCssBundle(host))
+        writeIfChanged(cssAsset.absPath, await readNavCssBundle(host))
       }
       host.contributeHead({
         links: [{ rel: 'stylesheet', href: cssAsset.href }],
@@ -136,7 +136,7 @@ export default function navPlugin(rawOptions = {}) {
         const navRel = navPathForSource(first)
         const abs = path.join(host.root, navRel)
         if (fs.existsSync(abs)) {
-          const { css } = extractMkadocCss(fs.readFileSync(abs, 'utf8'))
+          const { css } = await extractMkadocCss(fs.readFileSync(abs, 'utf8'))
           notes.push(
             css ? `${navRel} style overrides ok` : `${navRel} using plugin CSS defaults`,
           )
@@ -152,7 +152,7 @@ export default function navPlugin(rawOptions = {}) {
           notes.push(`${navRel} missing (auto nav)`)
           continue
         }
-        const { markupSource } = extractMkadocCss(fs.readFileSync(abs, 'utf8'))
+        const { markupSource } = await extractMkadocCss(fs.readFileSync(abs, 'utf8'))
         if (!markupSource) {
           notes.push(`${navRel} empty (auto nav)`)
         } else {

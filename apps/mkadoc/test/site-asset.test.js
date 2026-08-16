@@ -1,16 +1,11 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { after, describe, it } from 'node:test'
+import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
-import { afterPluginsLoaded } from '../src/builtins/shiki.js'
 import { loadConfig } from '../src/config.js'
 import { resolveSiteAsset } from '../src/fs-utils.js'
 import { literateConfig, smokeFixture, withTempProject } from './helpers/project.js'
-
-after(() => {
-  afterPluginsLoaded([])
-})
 
 describe('resolveSiteAsset', () => {
   it('maps root-absolute hrefs under output/', async () => {
@@ -30,28 +25,15 @@ describe('resolveSiteAsset', () => {
   })
 })
 
-describe('nav/shiki href write alignment', () => {
+describe('core chrome href write alignment', () => {
   it('core chrome writes CSS/JS under /styles/chrome.*', async () => {
     await withTempProject(
       smokeFixture({
-        'mkadoc.adoc': literateConfig(`sources:
-  - docs
-output: site
-plugins:
-  mkadoc:nav: {}
-`),
         'docs/_chrome.adoc': `
 [mkadoc-css]
-////
+----
 .mkadoc-topbar { height: 2rem; }
-////
-`,
-        'docs/_nav.adoc': `* xref:index.adoc[Home]
-
-[mkadoc-css]
-////
-.mkadoc-sidebar a { color: #123456; }
-////
+----
 `,
       }),
       async (root) => {
@@ -59,14 +41,13 @@ plugins:
         await build(cfg, { forceFull: true })
 
         const chromeCss = fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8')
-        const navCss = fs.readFileSync(path.join(root, 'site/styles/nav.css'), 'utf8')
         const js = fs.readFileSync(path.join(root, 'site/styles/chrome.js'), 'utf8')
         assert.match(chromeCss, /--mkadoc-topbar-height/)
         assert.match(chromeCss, /height: 2rem/)
-        assert.doesNotMatch(chromeCss, /#123456/)
-        assert.match(navCss, /\.mkadoc-sidebar a/)
-        assert.match(navCss, /#123456/)
+        assert.match(chromeCss, /position: sticky/)
+        assert.match(chromeCss, /mkadoc-brand-swap/)
         assert.match(js, /mkadoc-tab/)
+        assert.match(js, /getBoundingClientRect/)
 
         const header = fs.readFileSync(
           path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
@@ -75,15 +56,13 @@ plugins:
         assert.match(header, /mkadoc-topbar/)
         assert.match(header, /mkadoc-tab/)
         assert.match(header, /mkadoc-chrome-body/)
-        assert.match(header, /Home/)
-        assert.match(header, /mkadoc-sidebar/)
+        assert.doesNotMatch(header, /mkadoc-sidebar/)
         assert.doesNotMatch(header, /listingblock/)
-        assert.doesNotMatch(header, /#123456/)
 
         const docinfo = fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8')
         assert.match(docinfo, /href="\/styles\/chrome\.css"/)
-        assert.match(docinfo, /href="\/styles\/nav\.css"/)
         assert.match(docinfo, /src="\/styles\/chrome\.js"/)
+        assert.equal(fs.existsSync(path.join(root, 'site/styles/nav.css')), false)
       },
     )
   })
@@ -131,41 +110,6 @@ App.
           /\.mkadoc-sidebar/,
         )
         assert.equal(fs.existsSync(path.join(root, 'site/styles/nav.css')), false)
-      },
-    )
-  })
-
-  it('shiki writes CSS to the path derived from css_href', async () => {
-    await withTempProject(
-      smokeFixture({
-        'mkadoc.adoc': literateConfig(`sources:
-  - docs
-output: site
-plugins:
-  mkadoc:shiki:
-    theme: github-light-default
-    css_href: /assets/shiki.css
-`),
-        'docs/index.adoc': `= Smoke Index
-
-[source,bash]
-----
-echo hello
-----
-`,
-      }),
-      async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
-        await build(cfg, { forceFull: true })
-
-        assert.match(
-          fs.readFileSync(path.join(root, 'site/assets/shiki.css'), 'utf8'),
-          /Generated from Shiki/,
-        )
-        assert.equal(fs.existsSync(path.join(root, 'site/styles/shiki.css')), false)
-
-        const docinfo = fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8')
-        assert.match(docinfo, /href="\/assets\/shiki\.css"/)
       },
     )
   })

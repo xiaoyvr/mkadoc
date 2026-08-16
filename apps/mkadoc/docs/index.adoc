@@ -29,7 +29,7 @@ Some conventions:
 * Topbar JS: always shipped by mkadoc (`/styles/chrome.js`; not customizable)
 * Nav links: with `mkadoc:nav`, optional `{source}/_nav.adoc` per source; missing → auto page list
 * Nav CSS: `mkadoc:nav` defaults for the sidebar box and its links (`/styles/nav.css`); optional `[mkadoc-css]` on the *first* source's `_nav.adoc` overrides (later sources ignored)
-* Prefer `////` delimiters for `[mkadoc-css]` blocks so a missed strip stays an AsciiDoc comment
+* Use `----` (listing) delimiters for `[mkadoc-css]` blocks (`////` comment blocks are not visible to the parser)
 * Without `mkadoc:nav`: topbar only — no sidebar and no `/styles/nav.css`
 * Pages: normal `.adoc` files; names starting with `_` are partials, not site pages
 * Cache: always `.cache/` (not configurable — add it to `.gitignore`)

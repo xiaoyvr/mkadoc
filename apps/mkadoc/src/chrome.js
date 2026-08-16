@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { load } from '@asciidoctor/core'
 import { resolveSiteAsset, writeIfChanged } from './fs-utils.js'
 import { chromePathForSource, isSourceIndexPath } from './sources.js'
 
@@ -13,29 +14,40 @@ const DEFAULT_CHROME_CSS = fs
   .trim()
 
 /**
- * Prefer `////` delimiters so a missed strip still hides the body as an AsciiDoc comment
- * (unlike `----`, which renders as a listing).
- */
-const MKADOC_CSS_BLOCK_RE =
-  /\[mkadoc-css\][^\n]*\n(?:----|\+\+\+\+|\/{4}|\.{4})\n([\s\S]*?)\n(?:----|\+\+\+\+|\/{4}|\.{4})/g
-
-/**
- * Split AsciiDoc into markup vs `[mkadoc-css]` blocks.
+ * Split AsciiDoc into markup vs `[mkadoc-css]` blocks using the Asciidoctor
+ * parser. Blocks styled `mkadoc-css` (delimiters `----`, `++++`, `....`) are
+ * extracted; `////` comment blocks are not visible to the parser and cannot
+ * be used.
  * @param {string} sourceText
+ * @returns {Promise<{ css: string, markupSource: string }>}
  */
-export function extractMkadocCss(sourceText) {
+export async function extractMkadocCss(sourceText) {
+  const doc = await load(sourceText, {
+    safe: 'unsafe',
+    standalone: false,
+    sourcemap: true,
+  })
+
   const css = []
-  const re = new RegExp(MKADOC_CSS_BLOCK_RE.source, 'g')
-  let match = re.exec(sourceText)
-  while (match) {
-    const body = String(match[1] || '').trim()
+  const strip = new Set()
+  const lines = sourceText.split('\n')
+
+  for (const block of doc.findBy((b) => b.getStyle() === 'mkadoc-css')) {
+    const body = String(block.getSource?.() || '').trim()
     if (body) css.push(body)
-    match = re.exec(sourceText)
+
+    // `getLineNumber()` points at the first delimiter (1-indexed); remove the
+    // `[mkadoc-css]` attribute line, both delimiters, and the block body.
+    const first = block.getLineNumber?.()
+    if (Number.isFinite(first)) {
+      const span = block.getSourceLines?.().length || 0
+      for (let n = first - 1; n <= first + span + 1; n++) strip.add(n)
+    }
   }
-  const markupSource = sourceText.replace(new RegExp(MKADOC_CSS_BLOCK_RE.source, 'g'), '\n').trim()
+
   return {
     css: css.join('\n\n').trim(),
-    markupSource,
+    markupSource: lines.filter((_, i) => !strip.has(i + 1)).join('\n').trim(),
   }
 }
 
@@ -61,7 +73,8 @@ function tabHref(source) {
  * @param {string[]} bodyParts HTML from host.contributeChromeBody
  */
 export function buildChromeHtml(sources, bodyParts = []) {
-  const brand = escapeHtml(sources[0]?.title || 'Docs')
+  const brandRaw = sources[0]?.description || sources[0]?.title || 'Docs'
+  const brand = escapeHtml(brandRaw)
   const tabs = sources
     .map((source) => {
       const href = tabHref(source)
@@ -72,11 +85,11 @@ export function buildChromeHtml(sources, bodyParts = []) {
   const body = bodyParts.filter(Boolean).join('\n')
 
   return `<header id="mkadoc-topbar" class="mkadoc-topbar">
-<div class="mkadoc-brand"><p>${brand}</p></div>
+<div class="mkadoc-brand" data-site-title="${escapeHtmlAttr(brandRaw)}"><p>${brand}</p></div>
+</header>
 <nav class="mkadoc-tabs" aria-label="Documentation sections">
 ${tabs}
 </nav>
-</header>
 <div id="mkadoc-chrome-body" class="mkadoc-chrome-body">
 ${body}
 </div>
@@ -122,6 +135,62 @@ const CHROME_JS = `(function () {
     if (a.classList.contains("mkadoc-tab")) return;
     if (a.getAttribute("href") === path) a.classList.add("current");
   });
+
+  // The sticky topbar keeps the site title floating; swap it to the document
+  // title once the article h1 scrolls under the bar. The sidebar rides up
+  // with the scrolling tabs until it sits flush below the floating title.
+  var root = document.documentElement;
+  var topbar = document.getElementById("mkadoc-topbar");
+  var tabs = document.querySelector(".mkadoc-tabs");
+  var tabsHeight = tabs ? tabs.offsetHeight : 0;
+  var sidebar = document.querySelector(".mkadoc-sidebar");
+  var sidebarTop = sidebar ? sidebar.getBoundingClientRect().top : 0;
+  var topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : 0;
+  var maxOffset = Math.max(sidebarTop - topbarBottom, 0);
+  var brand = document.querySelector(".mkadoc-brand");
+  var brandEl = brand ? brand.querySelector("p") : null;
+  var siteTitle = (brand ? brand.getAttribute("data-site-title") : "") || "";
+  var h1 = document.querySelector("#header h1");
+  var docTitle = h1 ? String(h1.textContent || "").trim() : "";
+  var ticking = false;
+
+  function setBrand(text) {
+    if (!brandEl || brandEl.textContent === text) return;
+    brandEl.textContent = text;
+    brandEl.classList.remove("mkadoc-brand-swap");
+    void brandEl.offsetWidth;
+    brandEl.classList.add("mkadoc-brand-swap");
+  }
+
+  function updateBrand() {
+    ticking = false;
+    var y = window.scrollY || document.documentElement.scrollTop || 0;
+    // Once the tabs have fully scrolled under the bar, the floating title
+    // needs its own bottom line.
+    root.classList.toggle("mkadoc-scrolled", y >= tabsHeight);
+    if (maxOffset > 0) {
+      root.style.setProperty(
+        "--mkadoc-scroll-offset",
+        Math.min(Math.max(y, 0), maxOffset) + "px",
+      );
+    }
+    if (!topbar || !h1) {
+      setBrand(siteTitle);
+      return;
+    }
+    var past = h1.getBoundingClientRect().bottom <= topbar.getBoundingClientRect().bottom;
+    setBrand(past && docTitle ? docTitle : siteTitle);
+  }
+
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(updateBrand);
+  }
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  updateBrand();
 })();
 `
 
@@ -135,13 +204,13 @@ function readFirstSourceFile(cfg, relPath) {
  * Package chrome defaults always apply; first source may append topbar overrides.
  * Below-topbar UI/CSS is owned by plugins via contributeChromeBody.
  */
-function readFirstSourceChromeCss(cfg) {
+async function readFirstSourceChromeCss(cfg) {
   const cssParts = [DEFAULT_CHROME_CSS]
   const first = cfg.sources[0]
   if (!first) return cssParts.join('\n\n').trim()
 
   const chromeText = readFirstSourceFile(cfg, chromePathForSource(first))
-  const chrome = chromeText ? extractMkadocCss(chromeText) : { css: '' }
+  const chrome = chromeText ? await extractMkadocCss(chromeText) : { css: '' }
   if (chrome.css) {
     cssParts.push(`/* Overrides from first source _chrome.adoc */\n${chrome.css}`)
   }
@@ -173,7 +242,7 @@ export async function writeSiteChrome(host, { mode, paths = [] }) {
     !fs.existsSync(jsAsset.absPath)
 
   if (needChrome) {
-    const css = readFirstSourceChromeCss(host.config)
+    const css = await readFirstSourceChromeCss(host.config)
     const chrome = buildChromeHtml(host.config.sources, host.chromeBody)
     writeIfChanged(cssAsset.absPath, `${css}\n`)
     writeIfChanged(jsAsset.absPath, `${CHROME_JS}\n`)

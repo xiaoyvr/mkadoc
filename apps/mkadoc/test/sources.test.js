@@ -127,6 +127,36 @@ plugins:
     )
   })
 
+  it('uses first source :description: as the topbar brand', async () => {
+    await withTempProject(
+      {
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
+output: site
+`),
+        'docs/index.adoc': `= Dotfiles
+:description: Nix-managed system and user configurations
+
+Body.
+`,
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        await build(cfg, { forceFull: true })
+        const header = fs.readFileSync(
+          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
+          'utf8',
+        )
+        assert.match(header, /mkadoc-brand/)
+        assert.match(header, />Nix-managed system and user configurations</)
+        assert.match(
+          header,
+          /data-site-title="Nix-managed system and user configurations"/,
+        )
+      },
+    )
+  })
+
   it('index.adoc :tab: change refreshes tab chrome', async () => {
     await withTempProject(
       {

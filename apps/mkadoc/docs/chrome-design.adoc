@@ -35,7 +35,8 @@ Conceptually:
 
 ----
 <body>
-  <header id="mkadoc-topbar">…section tabs…</header>
+  <header id="mkadoc-topbar">…site title…</header>
+  <nav class="mkadoc-tabs">…section tabs…</nav>
   <div id="mkadoc-chrome-body">
     <!-- optional plugin UI, e.g. left sidebar -->
   </div>
@@ -44,7 +45,8 @@ Conceptually:
 </body>
 ----
 
-* **Topbar** — core, from `sources` (always present).
+* **Topbar** — core sticky site title, from `sources` (always present).
+* **Tabs** — core section tabs, from `sources` (always present); a sibling that scrolls under the sticky topbar.
 * **`#mkadoc-chrome-body`** — plugins may append shared UI (sidebar, future side panels, …).
 * **Article** — normal Asciidoctor body; **sibling** of the chrome mount, not nested inside it.
 

@@ -5,7 +5,7 @@
 
 .mkadoc-sidebar {
   position: fixed;
-  top: var(--mkadoc-topbar-height, 3rem);
+  top: calc(var(--mkadoc-topbar-height, 3rem) + var(--mkadoc-tabs-height, 2.5rem) - var(--mkadoc-scroll-offset, 0px));
   left: 0;
   bottom: 0;
   width: var(--mkadoc-sidebar-width);

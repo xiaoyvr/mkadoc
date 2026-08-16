@@ -8,6 +8,7 @@ import { relToRoot, walkDir } from './fs-utils.js'
  * @property {string} path        repo-relative source dir (posix)
  * @property {string} mount       site mount, e.g. `/` or `/apps/mkadoc`
  * @property {string} title       tab / section label
+ * @property {string} description `:description:` from index.adoc (brand for first source)
  */
 
 /**
@@ -29,21 +30,29 @@ function titleFallback(mount) {
 }
 
 /**
- * Tab title: `{source}/index.adoc` `:tab:`, else doctitle, else last mount segment / Docs.
+ * Read `{source}/index.adoc` metadata used for tabs and the site brand.
+ * Tab title: `:tab:`, else doctitle, else last mount segment / Docs.
+ * Description: `:description:` (empty when absent); the first source uses it as brand.
  * @param {string} root
  * @param {string} sourcePath
  * @param {string} mount
+ * @returns {Promise<{ title: string, description: string }>}
  */
-export async function titleForSource(root, sourcePath, mount) {
+export async function sourceMetaForIndex(root, sourcePath, mount) {
   const indexAbs = path.join(root, sourcePath, 'index.adoc')
-  if (!fs.existsSync(indexAbs)) return titleFallback(mount)
+  if (!fs.existsSync(indexAbs)) {
+    return { title: titleFallback(mount), description: '' }
+  }
 
   const text = fs.readFileSync(indexAbs, 'utf8')
   const doc = await load(text, { safe: 'unsafe', standalone: false })
   const tab = String(doc.getAttribute?.('tab') || '').trim()
-  if (tab) return tab
-  const title = String(doc.getDoctitle?.() || doc.getAttribute?.('doctitle') || '').trim()
-  return title || titleFallback(mount)
+  const title =
+    tab ||
+    String(doc.getDoctitle?.() || doc.getAttribute?.('doctitle') || '').trim() ||
+    titleFallback(mount)
+  const description = String(doc.getAttribute?.('description') || '').trim()
+  return { title, description }
 }
 
 /**
@@ -73,8 +82,8 @@ export async function normalizeSources(sourcePaths, root) {
       throw new Error(`mkadoc: duplicate source mount ${mount} (from ${sourcePath})`)
     }
     mounts.add(mount)
-    const title = await titleForSource(root, sourcePath, mount)
-    sources.push({ path: sourcePath, mount, title })
+    const { title, description } = await sourceMetaForIndex(root, sourcePath, mount)
+    sources.push({ path: sourcePath, mount, title, description })
   }
 
   return sources
@@ -194,7 +203,9 @@ export function isSourceIndexPath(sources, relPath) {
  */
 export async function refreshSourceTitles(cfg) {
   for (const source of cfg.sources) {
-    source.title = await titleForSource(cfg.root, source.path, source.mount)
+    const meta = await sourceMetaForIndex(cfg.root, source.path, source.mount)
+    source.title = meta.title
+    source.description = meta.description
   }
 }
 

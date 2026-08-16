@@ -88,6 +88,7 @@ Core always emits:
 
 ----
 <header id="mkadoc-topbar" class="mkadoc-topbar">…</header>
+<nav class="mkadoc-tabs">…</nav>
 <div id="mkadoc-chrome-body" class="mkadoc-chrome-body"></div>
 ----
 
@@ -143,7 +144,7 @@ These are site conventions your plugin may *read*; they are not host APIs:
 
 * First source’s `_chrome.adoc` — optional `[mkadoc-css]` overrides for **core topbar** styles (core reads this; not your job unless you document a parallel file).
 * Per-source `_nav.adoc` — used by `mkadoc:nav` for link lists; first source may also carry `[mkadoc-css]` nav overrides.
-* Prefer `////` delimiters for `[mkadoc-css]` so a missed strip remains an AsciiDoc comment.
+* Use `----` (listing) delimiters for `[mkadoc-css]` (`////` comment blocks are not visible to the parser).
 * Files starting with `_` are partials (not pages), but path classifiers can still force full rebuilds when they change.
 
 === `contributeChrome` modes

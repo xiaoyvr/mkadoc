@@ -219,6 +219,26 @@ Body.
       },
     )
   })
+
+  it('derives source description from :description: on index.adoc', async () => {
+    await withTempProject(
+      {
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
+`),
+        'docs/index.adoc': `= Dotfiles
+:description: Nix-managed system and user configurations
+
+Body.
+`,
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        assert.equal(cfg.sources[0].description, 'Nix-managed system and user configurations')
+        assert.equal(cfg.sources[0].title, 'Dotfiles')
+      },
+    )
+  })
 })
 
 describe('parseServeConfig', () => {
