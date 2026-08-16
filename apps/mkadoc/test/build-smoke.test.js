@@ -164,6 +164,32 @@ xref:guide.adoc[Guide]
     )
   })
 
+  it('copies the first source _assets folder to the mirrored output path', async () => {
+    await withTempProject(
+      {
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
+  - apps/mkadoc/docs
+output: site
+`),
+        'docs/index.adoc': '= Home\n',
+        'apps/mkadoc/docs/index.adoc': '= App\n',
+        'docs/_assets/logo.png': 'PNG',
+        'apps/mkadoc/docs/_assets/other.png': 'IGNORE',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        await build(cfg, { forceFull: true })
+
+        // First source _assets is staged; other sources are not.
+        assert.equal(read(root, 'site/docs/_assets/logo.png'), 'PNG')
+        assert.equal(exists(root, 'site/apps/mkadoc/docs/_assets/other.png'), false)
+        // _assets is not published as pages.
+        assert.equal(exists(root, 'site/docs/_assets/logo.html'), false)
+      },
+    )
+  })
+
   it('warns and continues on missing referenced assets', async () => {
     const originalWarn = console.warn
     const warnings = []

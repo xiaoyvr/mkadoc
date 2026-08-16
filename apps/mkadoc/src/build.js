@@ -41,6 +41,7 @@ export async function build(cfg, opts = {}) {
   await writeSiteChrome(buildHost, { mode, paths: touched })
 
   if (mode !== 'assets') buildHost.writeHeadDocinfo()
+  copyFirstSourceAssets(cfg)
 
   switch (mode) {
     case 'assets':
@@ -105,6 +106,26 @@ async function buildPages(cfg, host, pages, { concurrency } = {}) {
       const detail = err?.message || String(err)
       throw new Error(`mkadoc: failed to convert ${page}: ${detail}`, { cause: err })
     }
+  })
+}
+
+/**
+ * Convention: `<first source>/_assets` is always copied to
+ * `<output>/<first source.path>/_assets` so chrome-level files (logos,
+ * favicons) are staged and referenceable without any page reference.
+ * The `_` prefix keeps it out of page discovery.
+ */
+function copyFirstSourceAssets(cfg) {
+  const first = cfg.sources[0]
+  if (!first) return
+  const from = path.join(cfg.root, first.path, '_assets')
+  if (!fs.existsSync(from)) return
+  walkDir(from, {
+    shouldEnterDir: (_full, name) => name !== 'node_modules' && name !== '.git',
+    onFile: (src) => {
+      const rel = relToRoot(src, cfg.root)
+      copyFileIfChanged(src, path.join(cfg.root, cfg.output, rel))
+    },
   })
 }
 

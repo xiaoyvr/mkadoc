@@ -20,8 +20,9 @@
 }
 
 /* Scrolled: the tabs have scrolled away, so the floating title gets its own bottom line. */
+/* box-shadow (not border) so the 1px line doesn't shrink the bar's content box. */
 html.mkadoc-scrolled .mkadoc-topbar {
-  border-bottom: 1px solid #e0e0dc;
+  box-shadow: 0 1px 0 #e0e0dc;
 }
 
 .mkadoc-brand {

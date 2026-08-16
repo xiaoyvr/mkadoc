@@ -73,6 +73,12 @@ skipping unchanged files.
 * `.html`/`.adoc` targets (converted pages / sources) are not copied.
 * A missing referenced file logs a warning and the build continues.
 
+Convention: the **first source's `_assets` folder is always copied** to
+`<output>/<first source path>/_assets` (e.g. `docs/_assets/` → `site/docs/_assets/`).
+Put chrome-level files there (site logo, favicon) and reference them at
+`/<first source path>/_assets/…` (e.g. `url('/docs/_assets/logo.png')`); no page
+reference is needed. The `_` prefix keeps the folder out of page discovery.
+
 === Plugins
 
 Enable under `plugins:` with a `mkadoc:*` locator.

@@ -28,10 +28,15 @@ export function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
 
   const pages = []
   let assetsOnly = false
+  const firstSourcePath = cfg.sources[0]?.path
 
   for (const raw of paths) {
     const p = relToRoot(raw, cfg.root)
     if (host.assetPrefixes.some((prefix) => p.startsWith(prefix))) {
+      assetsOnly = true
+      continue
+    }
+    if (firstSourcePath && p.startsWith(`${firstSourcePath}/_assets/`)) {
       assetsOnly = true
       continue
     }
