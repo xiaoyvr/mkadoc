@@ -90,7 +90,6 @@ MARKER_GUIDE_V1
 
 This is not a page.
 `,
-    'docs/styles/site.css': `/* site css v1 */\n`,
     ...overrides,
   }
 }

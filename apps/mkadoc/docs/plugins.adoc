@@ -150,7 +150,7 @@ These are site conventions your plugin may *read*; they are not host APIs:
 === `contributeChrome` modes
 
 * `full` / `incremental` — update chrome HTML and CSS as needed.
-* `assets` — usually skip HTML chrome regeneration; copying styles may still happen outside your plugin. If your only job is a stylesheet derived from config, you may still rewrite CSS here when appropriate.
+* `assets` — usually skip HTML chrome regeneration. If your only job is a stylesheet derived from config, you may still rewrite CSS here when appropriate.
 
 === Composition with other plugins
 

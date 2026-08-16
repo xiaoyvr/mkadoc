@@ -11,8 +11,8 @@ after(() => {
   afterPluginsLoaded([])
 })
 
-describe('shiki asset href writing', () => {
-  it('writes CSS to the path derived from css_href', async () => {
+describe('shiki asset writing', () => {
+  it('writes CSS to /styles/shiki.css and links it', async () => {
     await withTempProject(
       smokeFixture({
         'mkadoc.adoc': literateConfig(`sources:
@@ -21,7 +21,6 @@ output: site
 plugins:
   mkadoc:shiki:
     theme: github-light-default
-    css_href: /assets/shiki.css
 `),
         'docs/index.adoc': `= Smoke Index
 
@@ -36,13 +35,12 @@ echo hello
         await build(cfg, { forceFull: true })
 
         assert.match(
-          fs.readFileSync(path.join(root, 'site/assets/shiki.css'), 'utf8'),
+          fs.readFileSync(path.join(root, 'site/styles/shiki.css'), 'utf8'),
           /Generated from Shiki/,
         )
-        assert.equal(fs.existsSync(path.join(root, 'site/styles/shiki.css')), false)
 
         const docinfo = fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8')
-        assert.match(docinfo, /href="\/assets\/shiki\.css"/)
+        assert.match(docinfo, /href="\/styles\/shiki\.css"/)
       },
     )
   })

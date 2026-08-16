@@ -44,7 +44,6 @@ describe('plugin-owned option validation', () => {
         sources: [{ path: 'docs', mount: '/docs', title: 'Docs' }],
         output: 'site',
         docinfoDir: '.cache/docinfo',
-        assets: [],
         plugins: {},
       })
       await assert.rejects(

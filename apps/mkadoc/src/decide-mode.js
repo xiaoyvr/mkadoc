@@ -35,12 +35,6 @@ export function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
       assetsOnly = true
       continue
     }
-
-    const source = sourceForRepoPath(cfg.sources, p)
-    if (source && p.startsWith(`${source.path}/styles/`)) {
-      assetsOnly = true
-      continue
-    }
     if (needsAllPages(p, cfg, host)) {
       return { mode: 'full', pages: [] }
     }

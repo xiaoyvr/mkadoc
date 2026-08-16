@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { copyAssetDirs, relToRoot, walkDir, writeIfChanged } from '../src/fs-utils.js'
+import { relToRoot, walkDir, writeIfChanged } from '../src/fs-utils.js'
 import { withTempProject } from './helpers/project.js'
 
 describe('fs-utils', () => {
@@ -54,48 +54,6 @@ describe('fs-utils', () => {
             }),
           /directory not found/,
         )
-      },
-    )
-  })
-
-  it('copyAssetDirs copies files and skips unchanged', async () => {
-    await withTempProject(
-      {
-        'from/a.css': 'body{}',
-        'from/b.css': 'h1{}',
-      },
-      async (root) => {
-        copyAssetDirs(root, [{ from: 'from', to: 'to' }])
-        assert.equal(fs.readFileSync(path.join(root, 'to/a.css'), 'utf8'), 'body{}')
-        assert.equal(fs.readFileSync(path.join(root, 'to/b.css'), 'utf8'), 'h1{}')
-
-        const mtime = fs.statSync(path.join(root, 'to/a.css')).mtimeMs
-        await new Promise((r) => setTimeout(r, 20))
-        copyAssetDirs(root, [{ from: 'from', to: 'to' }])
-        assert.equal(fs.statSync(path.join(root, 'to/a.css')).mtimeMs, mtime)
-
-        // Missing source dirs are ignored.
-        copyAssetDirs(root, [{ from: 'nope', to: 'to2' }])
-        assert.equal(fs.existsSync(path.join(root, 'to2')), true)
-        assert.equal(fs.readdirSync(path.join(root, 'to2')).length, 0)
-      },
-    )
-  })
-
-  it('copyAssetDirs copies nested trees and skips node_modules', async () => {
-    await withTempProject(
-      {
-        'from/a.css': 'root{}',
-        'from/nested/b.css': 'nest{}',
-        'from/nested/deep/c.js': 'deep',
-        'from/node_modules/pkg/x.js': 'skip',
-      },
-      async (root) => {
-        copyAssetDirs(root, [{ from: 'from', to: 'to' }])
-        assert.equal(fs.readFileSync(path.join(root, 'to/a.css'), 'utf8'), 'root{}')
-        assert.equal(fs.readFileSync(path.join(root, 'to/nested/b.css'), 'utf8'), 'nest{}')
-        assert.equal(fs.readFileSync(path.join(root, 'to/nested/deep/c.js'), 'utf8'), 'deep')
-        assert.equal(fs.existsSync(path.join(root, 'to/node_modules')), false)
       },
     )
   })

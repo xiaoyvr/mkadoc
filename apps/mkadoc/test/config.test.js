@@ -97,23 +97,23 @@ output: site
 ----
 sources:
   - docs
-assets:
-  - from: a
-    to: b
 ----
 
 [mkadoc-config]
 ----
-assets:
-  - from: c
-    to: d
+sources:
+  - apps/mkadoc/docs
 ----
 `,
         'docs/.keep': '',
+        'apps/mkadoc/docs/.keep': '',
       },
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
-        assert.deepEqual(cfg.assets, [{ from: 'c', to: 'd' }])
+        assert.deepEqual(
+          cfg.sources.map((s) => s.path),
+          ['apps/mkadoc/docs'],
+        )
       },
     )
   })
@@ -276,7 +276,6 @@ describe('parseProjectConfig (zod schema)', () => {
     assert.deepEqual(parseProjectConfig({ sources: ['docs'] }), {
       sources: ['docs'],
       output: 'site',
-      assets: [],
       plugins: {},
       serve: { remote: false, port: 8000 },
     })

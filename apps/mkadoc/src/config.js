@@ -17,7 +17,6 @@ export const CACHE_DIR = '.cache'
  * @property {import('./sources.js').MkadocSource[]} sources
  * @property {string} output
  * @property {string} docinfoDir
- * @property {{ from: string, to: string }[]} assets
  * @property {Record<string, Record<string, unknown>>} plugins
  * @property {{ remote: boolean, port: number }} serve
  */

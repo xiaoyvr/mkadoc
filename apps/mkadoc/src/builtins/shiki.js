@@ -24,9 +24,10 @@ const OptionsSchema = z
       .array(z.string().min(1))
       .default([...DEFAULT_LANGS])
       .transform((langs) => (langs.length ? langs : [...DEFAULT_LANGS])),
-    css_href: z.string().min(1).default('/styles/shiki.css'),
   })
   .strict()
+
+const CSS_HREF = '/styles/shiki.css'
 
 const DEFAULT_THEME = 'github-light-default'
 
@@ -127,11 +128,7 @@ export function afterPluginsLoaded(locators = []) {
 
 /** @type {import('../plugin/contract.js').MkadocPluginFactory} */
 export default function shikiPlugin(rawOptions = {}) {
-  const {
-    theme,
-    langs,
-    css_href: cssHref,
-  } = parsePluginOptions('mkadoc:shiki', OptionsSchema, rawOptions)
+  const { theme, langs } = parsePluginOptions('mkadoc:shiki', OptionsSchema, rawOptions)
 
   return {
     name: 'shiki',
@@ -155,7 +152,7 @@ export default function shikiPlugin(rawOptions = {}) {
         }
       }
 
-      const cssAsset = resolveSiteAsset(host.root, host.config.output, cssHref)
+      const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
       const assetDir = path.posix.dirname(cssAsset.relPath)
       const out = host.config.output.replace(/\\/g, '/').replace(/\/$/, '')
       host.registerAssetPrefix(assetDir === '.' ? out : path.posix.join(out, assetDir))
@@ -175,7 +172,7 @@ export default function shikiPlugin(rawOptions = {}) {
     },
 
     async contributeChrome(host) {
-      const cssAsset = resolveSiteAsset(host.root, host.config.output, cssHref)
+      const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
       const css = `/* Generated from Shiki theme: ${theme} — do not edit. */
 .listingblock > .content > pre.shiki,
 .listingblock > .content > pre.shiki code {

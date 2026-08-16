@@ -11,14 +11,6 @@ export function relToRoot(p, root) {
   return out.split(path.sep).join('/')
 }
 
-function sameFileContent(a, b) {
-  if (!fs.existsSync(b)) return false
-  const sa = fs.statSync(a)
-  const sb = fs.statSync(b)
-  if (sa.size !== sb.size) return false
-  return fs.readFileSync(a).equals(fs.readFileSync(b))
-}
-
 export function writeIfChanged(filePath, content) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   if (fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf8') === content) {
@@ -64,23 +56,5 @@ export function walkDir(dir, { missing = 'skip', shouldEnterDir, onFile } = {}) 
     } else if (ent.isFile()) {
       onFile?.(full, ent.name)
     }
-  }
-}
-
-export function copyAssetDirs(root, items = []) {
-  for (const item of items) {
-    const from = path.join(root, item.from)
-    const to = path.join(root, item.to)
-    fs.mkdirSync(to, { recursive: true })
-    walkDir(from, {
-      shouldEnterDir: (_full, name) => name !== 'node_modules' && name !== '.git',
-      onFile: (src) => {
-        const rel = path.relative(from, src)
-        const dest = path.join(to, rel)
-        fs.mkdirSync(path.dirname(dest), { recursive: true })
-        if (sameFileContent(src, dest)) return
-        fs.copyFileSync(src, dest)
-      },
-    })
   }
 }

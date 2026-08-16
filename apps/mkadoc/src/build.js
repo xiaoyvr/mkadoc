@@ -4,7 +4,7 @@ import { convertFile } from '@asciidoctor/core'
 import { writeSiteChrome } from './chrome.js'
 import { CACHE_DIR } from './config.js'
 import { decideMode } from './decide-mode.js'
-import { copyAssetDirs, relToRoot, walkDir } from './fs-utils.js'
+import { relToRoot, walkDir } from './fs-utils.js'
 import { defaultPoolConcurrency, mapPool } from './map-pool.js'
 import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
@@ -41,18 +41,6 @@ export async function build(cfg, opts = {}) {
   await writeSiteChrome(buildHost, { mode, paths: touched })
 
   if (mode !== 'assets') buildHost.writeHeadDocinfo()
-
-  const output = cfg.output.replace(/\/$/, '')
-  const assetItems = [...(cfg.assets || [])]
-  const stylesSource = cfg.sources.find((s) => fs.existsSync(path.join(cfg.root, s.path, 'styles')))
-  if (stylesSource) {
-    const implicitFrom = `${stylesSource.path}/styles`
-    const implicitTo = `${output}/styles`
-    if (!assetItems.some((a) => a.from === implicitFrom && a.to === implicitTo)) {
-      assetItems.push({ from: implicitFrom, to: implicitTo })
-    }
-  }
-  copyAssetDirs(cfg.root, assetItems)
 
   switch (mode) {
     case 'assets':
