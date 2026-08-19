@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { isFirstSourceLogoPath } from './chrome.js'
 import { relToRoot } from './fs-utils.js'
 import { isSourceIndexPath, sourceForRepoPath } from './sources.js'
 
@@ -18,6 +19,8 @@ function needsAllPages(p, cfg, host) {
   if (base.startsWith('_') && base.endsWith('.adoc')) return true
   // Tab labels from index.adoc are baked into every page via docinfo header.
   if (isSourceIndexPath(cfg.sources, p)) return true
+  // Logo override is baked into header HTML (src href).
+  if (isFirstSourceLogoPath(cfg.sources, p)) return true
   return host.classifyPath(p) === 'full'
 }
 
@@ -36,12 +39,12 @@ export function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
       assetsOnly = true
       continue
     }
+    if (needsAllPages(p, cfg, host)) {
+      return { mode: 'full', pages: [] }
+    }
     if (firstSourcePath && p.startsWith(`${firstSourcePath}/_assets/`)) {
       assetsOnly = true
       continue
-    }
-    if (needsAllPages(p, cfg, host)) {
-      return { mode: 'full', pages: [] }
     }
     if (isPage(p, cfg)) pages.push(p)
   }

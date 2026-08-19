@@ -7,11 +7,38 @@ import { chromePathForSource, isSourceIndexPath } from './sources.js'
 
 const CSS_HREF = '/styles/chrome.css'
 const JS_HREF = '/styles/chrome.js'
+const DEFAULT_LOGO_HREF = '/styles/default-logo.svg'
+const DEFAULT_LOGO_SRC = fileURLToPath(new URL('./assets/default-logo.svg', import.meta.url))
+/** Prefer SVG, then PNG. First source only. */
+const LOGO_OVERRIDE_NAMES = Object.freeze(['logo.svg', 'logo.png'])
 
 /** Always applied base chrome styles; first-source `[mkadoc-css]` appends overrides. */
 const DEFAULT_CHROME_CSS = fs
   .readFileSync(fileURLToPath(new URL('./chrome-default.css', import.meta.url)), 'utf8')
   .trim()
+
+/**
+ * Site logo: first-source `_assets/logo.svg` or `logo.png`, else package default.
+ * @param {{ root: string, sources: import('./sources.js').MkadocSource[] }} cfg
+ */
+export function resolveLogoHref(cfg) {
+  const first = cfg.sources[0]
+  if (!first) return DEFAULT_LOGO_HREF
+  for (const name of LOGO_OVERRIDE_NAMES) {
+    const rel = `${first.path}/_assets/${name}`
+    if (fs.existsSync(path.join(cfg.root, rel))) {
+      return `${first.mount}/_assets/${name}`
+    }
+  }
+  return DEFAULT_LOGO_HREF
+}
+
+/** True when `relPath` is the first source's logo override file. */
+export function isFirstSourceLogoPath(sources, relPath) {
+  const first = sources[0]
+  if (!first) return false
+  return LOGO_OVERRIDE_NAMES.some((name) => relPath === `${first.path}/_assets/${name}`)
+}
 
 /**
  * Split AsciiDoc into markup vs `[mkadoc-css]` blocks using the Asciidoctor
@@ -71,9 +98,12 @@ function tabHref(source) {
  * Core chrome: topbar/tabs + empty body region for plugins.
  * @param {import('./sources.js').MkadocSource[]} sources
  * @param {string[]} bodyParts HTML from host.contributeChromeBody
+ * @param {{ logoSrc?: string }} [opts]
  */
-export function buildChromeHtml(sources, bodyParts = []) {
-  const brandRaw = sources[0]?.description || sources[0]?.title || 'Docs'
+export function buildChromeHtml(sources, bodyParts = [], { logoSrc = DEFAULT_LOGO_HREF } = {}) {
+  const first = sources[0]
+  const homeHref = first ? tabHref(first) : '/'
+  const brandRaw = first?.description || first?.title || 'Docs'
   const brand = escapeHtml(brandRaw)
   const tabs = sources
     .map((source) => {
@@ -83,8 +113,10 @@ export function buildChromeHtml(sources, bodyParts = []) {
     .join('\n')
 
   const body = bodyParts.filter(Boolean).join('\n')
+  const logo = `<a class="mkadoc-logo" href="${escapeHtmlAttr(homeHref)}" aria-label="Home"><img src="${escapeHtmlAttr(logoSrc)}" alt=""></a>`
 
   return `<header id="mkadoc-topbar" class="mkadoc-topbar">
+${logo}
 <div class="mkadoc-brand" data-site-title="${escapeHtmlAttr(brandRaw)}"><p>${brand}</p></div>
 </header>
 <nav class="mkadoc-tabs" aria-label="Documentation sections">
@@ -222,6 +254,8 @@ async function readFirstSourceChromeCss(cfg) {
  * Core site chrome: section tabs from `sources` + `#mkadoc-chrome-body` for plugins.
  * CSS: always `chrome-default.css`, then optional first-source `_chrome.adoc` (`[mkadoc-css]`).
  * JS: always package `CHROME_JS` → `/styles/chrome.js`.
+ * Logo: package default `/styles/default-logo.svg`, overridden by first-source
+ * `_assets/logo.svg` or `logo.png` (no config); links to first-source home.
  *
  * @param {import('./plugin/contract.js').MkadocBuildHost} host
  * @param {{ mode: string, paths?: string[] }} ctx
@@ -234,18 +268,24 @@ export async function writeSiteChrome(host, { mode, paths = [] }) {
   const jsAsset = resolveSiteAsset(host.root, host.config.output, JS_HREF)
 
   const indexTouched = paths.some((p) => isSourceIndexPath(host.config.sources, p))
+  const logoTouched = paths.some((p) => isFirstSourceLogoPath(host.config.sources, p))
+  const defaultLogoAsset = resolveSiteAsset(host.root, host.config.output, DEFAULT_LOGO_HREF)
   const needChrome =
     mode === 'full' ||
     indexTouched ||
+    logoTouched ||
     !host.headerDocinfoExists() ||
     !fs.existsSync(cssAsset.absPath) ||
-    !fs.existsSync(jsAsset.absPath)
+    !fs.existsSync(jsAsset.absPath) ||
+    !fs.existsSync(defaultLogoAsset.absPath)
 
   if (needChrome) {
     const css = await readFirstSourceChromeCss(host.config)
-    const chrome = buildChromeHtml(host.config.sources, host.chromeBody)
+    const logoSrc = resolveLogoHref(host.config)
+    const chrome = buildChromeHtml(host.config.sources, host.chromeBody, { logoSrc })
     writeIfChanged(cssAsset.absPath, `${css}\n`)
     writeIfChanged(jsAsset.absPath, `${CHROME_JS}\n`)
+    writeIfChanged(defaultLogoAsset.absPath, fs.readFileSync(DEFAULT_LOGO_SRC, 'utf8'))
     await host.writeHeaderDocinfo(chrome)
   }
 

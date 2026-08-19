@@ -25,6 +25,58 @@ describe('resolveSiteAsset', () => {
   })
 })
 
+describe('core site logo', () => {
+  it('uses package default logo linked to first-source home', async () => {
+    await withTempProject(smokeFixture(), async (root) => {
+      const cfg = await loadConfig('mkadoc.adoc', root)
+      await build(cfg, { forceFull: true })
+
+      const header = fs.readFileSync(
+        path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
+        'utf8',
+      )
+      assert.match(header, /class="mkadoc-logo"/)
+      assert.match(header, /href="\/docs\/index\.html"/)
+      assert.match(header, /src="\/styles\/default-logo\.svg"/)
+      assert.ok(fs.existsSync(path.join(root, 'site/styles/default-logo.svg')))
+    })
+  })
+
+  it('overrides with first-source _assets/logo.svg then logo.png', async () => {
+    await withTempProject(
+      smokeFixture({
+        'docs/_assets/logo.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
+        'docs/_assets/logo.png': 'PNG',
+      }),
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        await build(cfg, { forceFull: true })
+        const header = fs.readFileSync(
+          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
+          'utf8',
+        )
+        assert.match(header, /src="\/docs\/_assets\/logo\.svg"/)
+        assert.doesNotMatch(header, /default-logo/)
+      },
+    )
+
+    await withTempProject(
+      smokeFixture({
+        'docs/_assets/logo.png': 'PNG',
+      }),
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        await build(cfg, { forceFull: true })
+        const header = fs.readFileSync(
+          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
+          'utf8',
+        )
+        assert.match(header, /src="\/docs\/_assets\/logo\.png"/)
+      },
+    )
+  })
+})
+
 describe('core chrome href write alignment', () => {
   it('core chrome writes CSS/JS under /styles/chrome.*', async () => {
     await withTempProject(
@@ -54,6 +106,7 @@ describe('core chrome href write alignment', () => {
           'utf8',
         )
         assert.match(header, /mkadoc-topbar/)
+        assert.match(header, /mkadoc-logo/)
         assert.match(header, /mkadoc-tab/)
         assert.match(header, /mkadoc-chrome-body/)
         assert.doesNotMatch(header, /mkadoc-sidebar/)
@@ -63,6 +116,7 @@ describe('core chrome href write alignment', () => {
         assert.match(docinfo, /href="\/styles\/chrome\.css"/)
         assert.match(docinfo, /src="\/styles\/chrome\.js"/)
         assert.equal(fs.existsSync(path.join(root, 'site/styles/nav.css')), false)
+        assert.ok(fs.existsSync(path.join(root, 'site/styles/default-logo.svg')))
       },
     )
   })

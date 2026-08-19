@@ -25,6 +25,24 @@ html.mkadoc-scrolled .mkadoc-topbar {
   box-shadow: 0 1px 0 #e0e0dc;
 }
 
+.mkadoc-logo {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.75rem;
+  line-height: 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.mkadoc-logo img {
+  display: block;
+  height: 1.5rem;
+  width: auto;
+  max-width: 10rem;
+  object-fit: contain;
+}
+
 .mkadoc-brand {
   flex: 1 1 auto;
   min-width: 0;

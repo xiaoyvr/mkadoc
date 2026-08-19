@@ -111,7 +111,7 @@ async function buildPages(cfg, host, pages, { concurrency } = {}) {
 
 /**
  * Convention: `<first source>/_assets` is always copied to
- * `<output>/<first source.path>/_assets` so chrome-level files (logos,
+ * `<output>/<first source.path>/_assets` so chrome-level files (logo override,
  * favicons) are staged and referenceable without any page reference.
  * The `_` prefix keeps it out of page discovery.
  */

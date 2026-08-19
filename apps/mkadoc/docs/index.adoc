@@ -75,9 +75,15 @@ skipping unchanged files.
 
 Convention: the **first source's `_assets` folder is always copied** to
 `<output>/<first source path>/_assets` (e.g. `docs/_assets/` → `site/docs/_assets/`).
-Put chrome-level files there (site logo, favicon) and reference them at
-`/<first source path>/_assets/…` (e.g. `url('/docs/_assets/logo.png')`); no page
-reference is needed. The `_` prefix keeps the folder out of page discovery.
+Put chrome-level files there (favicon, …); no page reference is needed.
+The `_` prefix keeps the folder out of page discovery.
+
+**Site logo (convention, no config):** core always emits a clickable logo in the
+topbar linking to the first source's home (`…/index.html`).
+
+* Default: package icon at `/styles/default-logo.svg`
+* Override: if the first source has `_assets/logo.svg` or `_assets/logo.png`
+  (SVG preferred when both exist), that file is used instead
 
 === Plugins
 
