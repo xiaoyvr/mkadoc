@@ -5,6 +5,7 @@ import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
 import { mountFromSourcePath, pageToOutRel, rootRedirectHref, sourceForPathname } from '../src/sources.js'
+import { parseHtml } from './helpers/html.js'
 import { literateConfig, withTempProject } from './helpers/project.js'
 
 describe('mountFromSourcePath', () => {
@@ -80,17 +81,22 @@ Guide body.
         assert.ok(fs.existsSync(path.join(root, 'site/apps/mkadoc/docs/index.html')))
         assert.ok(fs.existsSync(path.join(root, 'site/apps/mkadoc/docs/guide.html')))
 
-        const header = fs.readFileSync(
-          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
-          'utf8',
+        const header = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
-        assert.match(header, /mkadoc-topbar/)
-        assert.match(header, /data-mount="\/docs"/)
-        assert.match(header, /data-mount="\/apps\/mkadoc\/docs"/)
-        assert.match(header, />Site</)
-        assert.match(header, />mkadoc</)
-        assert.match(header, /mkadoc-chrome-body/)
-        assert.match(header, /mkadoc-sidebar/)
+        assert.ok(header.querySelector('#mkadoc-topbar'))
+        assert.ok(header.querySelector('#mkadoc-chrome-body'))
+        assert.ok(header.querySelector('#mkadoc-sidebar'))
+        assert.deepEqual(
+          header.querySelectorAll('a.mkadoc-tab').map((el) => ({
+            mount: el.getAttribute('data-mount'),
+            text: el.text.trim(),
+          })),
+          [
+            { mount: '/docs', text: 'Site' },
+            { mount: '/apps/mkadoc/docs', text: 'mkadoc' },
+          ],
+        )
 
         const outRel = pageToOutRel(cfg.sources[1], 'apps/mkadoc/docs/guide.adoc')
         assert.equal(outRel, 'apps/mkadoc/docs/guide.html')
@@ -117,12 +123,14 @@ plugins:
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
-        const header = fs.readFileSync(
-          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
-          'utf8',
+        const header = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
-        assert.match(header, /href="\/docs\/index\.html"/)
-        assert.match(header, /href="\/docs\/other\.html"/)
+        const hrefs = header
+          .querySelectorAll('#mkadoc-sidebar a')
+          .map((el) => el.getAttribute('href'))
+        assert.ok(hrefs.includes('/docs/index.html'))
+        assert.ok(hrefs.includes('/docs/other.html'))
       },
     )
   })
@@ -143,16 +151,13 @@ Body.
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
-        const header = fs.readFileSync(
-          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
-          'utf8',
+        const header = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
-        assert.match(header, /mkadoc-brand/)
-        assert.match(header, />Nix-managed system and user configurations</)
-        assert.match(
-          header,
-          /data-site-title="Nix-managed system and user configurations"/,
-        )
+        const brand = header.querySelector('.mkadoc-brand')
+        assert.ok(brand)
+        assert.equal(brand.getAttribute('data-site-title'), 'Nix-managed system and user configurations')
+        assert.equal(brand.querySelector('p')?.text.trim(), 'Nix-managed system and user configurations')
       },
     )
   })
@@ -180,9 +185,11 @@ App.
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
-        assert.match(
+        const headerBefore = parseHtml(
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-          />mkadoc</,
+        )
+        assert.ok(
+          headerBefore.querySelectorAll('a.mkadoc-tab').some((el) => el.text.trim() === 'mkadoc'),
         )
 
         fs.writeFileSync(
@@ -197,20 +204,22 @@ App.
         const mode = await build(cfg, { paths: ['apps/mkadoc/docs/index.adoc'] })
         assert.equal(mode, 'full')
         assert.equal(cfg.sources[1].title, 'Mkadocx')
-        assert.match(
+
+        const headerAfter = parseHtml(
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-          />Mkadocx</,
         )
-        assert.match(
+        assert.ok(
+          headerAfter.querySelectorAll('a.mkadoc-tab').some((el) => el.text.trim() === 'Mkadocx'),
+        )
+
+        const appPage = parseHtml(
           fs.readFileSync(path.join(root, 'site/apps/mkadoc/docs/index.html'), 'utf8'),
-          />Mkadocx</,
         )
-        assert.match(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'), />Mkadocx</)
+        const docsPage = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
+        assert.ok(appPage.querySelectorAll('a.mkadoc-tab').some((el) => el.text.trim() === 'Mkadocx'))
+        assert.ok(docsPage.querySelectorAll('a.mkadoc-tab').some((el) => el.text.trim() === 'Mkadocx'))
         // Page <title> still follows doctitle / :title:, not :tab:
-        assert.match(
-          fs.readFileSync(path.join(root, 'site/apps/mkadoc/docs/index.html'), 'utf8'),
-          /<title>mkadoc<\/title>/,
-        )
+        assert.equal(appPage.querySelector('title')?.text.trim(), 'mkadoc')
       },
     )
   })

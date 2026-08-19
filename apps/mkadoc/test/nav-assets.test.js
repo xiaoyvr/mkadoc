@@ -5,6 +5,7 @@ import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
 import { extractMkadocCss } from '../src/chrome.js'
 import { loadConfig } from '../src/config.js'
+import { parseHtml } from './helpers/html.js'
 import { literateConfig, smokeFixture, withTempProject } from './helpers/project.js'
 
 describe('extractMkadocCss', () => {
@@ -54,17 +55,19 @@ plugins:
         const chromeCss = fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8')
         assert.doesNotMatch(chromeCss, /#123456/)
 
-        const header = fs.readFileSync(
-          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
-          'utf8',
+        const header = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
-        assert.match(header, /mkadoc-sidebar/)
-        assert.match(header, /Home/)
-        assert.doesNotMatch(header, /listingblock/)
-        assert.doesNotMatch(header, /#123456/)
+        const sidebar = header.querySelector('#mkadoc-sidebar')
+        assert.ok(sidebar)
+        assert.ok(sidebar.text.includes('Home'))
+        assert.equal(header.querySelector('.listingblock'), null)
+        assert.ok(!header.toString().includes('#123456'))
 
-        const docinfo = fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8')
-        assert.match(docinfo, /href="\/styles\/nav\.css"/)
+        const docinfo = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8'),
+        )
+        assert.ok(docinfo.querySelector('link[href="/styles/nav.css"]'))
       },
     )
   })

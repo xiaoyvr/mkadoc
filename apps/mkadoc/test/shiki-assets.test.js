@@ -5,6 +5,7 @@ import { after, describe, it } from 'node:test'
 import { build } from '../src/build.js'
 import { afterPluginsLoaded } from '../src/builtins/shiki.js'
 import { loadConfig } from '../src/config.js'
+import { parseHtml } from './helpers/html.js'
 import { literateConfig, smokeFixture, withTempProject } from './helpers/project.js'
 
 after(() => {
@@ -39,8 +40,10 @@ echo hello
           /Generated from Shiki/,
         )
 
-        const docinfo = fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8')
-        assert.match(docinfo, /href="\/styles\/shiki\.css"/)
+        const docinfo = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8'),
+        )
+        assert.ok(docinfo.querySelector('link[href="/styles/shiki.css"]'))
       },
     )
   })

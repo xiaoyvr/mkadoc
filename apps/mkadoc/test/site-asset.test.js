@@ -5,6 +5,7 @@ import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
 import { resolveSiteAsset } from '../src/fs-utils.js'
+import { parseHtml } from './helpers/html.js'
 import { literateConfig, smokeFixture, withTempProject } from './helpers/project.js'
 
 describe('resolveSiteAsset', () => {
@@ -31,13 +32,13 @@ describe('core site logo', () => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
 
-      const header = fs.readFileSync(
-        path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
-        'utf8',
+      const header = parseHtml(
+        fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
       )
-      assert.match(header, /class="mkadoc-logo"/)
-      assert.match(header, /href="\/docs\/index\.html"/)
-      assert.match(header, /src="\/styles\/default-logo\.svg"/)
+      const logo = header.querySelector('a.mkadoc-logo')
+      assert.ok(logo)
+      assert.equal(logo.getAttribute('href'), '/docs/index.html')
+      assert.equal(logo.querySelector('img')?.getAttribute('src'), '/styles/default-logo.svg')
       assert.ok(fs.existsSync(path.join(root, 'site/styles/default-logo.svg')))
     })
   })
@@ -51,12 +52,13 @@ describe('core site logo', () => {
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
-        const header = fs.readFileSync(
-          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
-          'utf8',
+        const header = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
-        assert.match(header, /src="\/docs\/_assets\/logo\.svg"/)
-        assert.doesNotMatch(header, /default-logo/)
+        assert.equal(
+          header.querySelector('a.mkadoc-logo img')?.getAttribute('src'),
+          '/docs/_assets/logo.svg',
+        )
       },
     )
 
@@ -67,11 +69,13 @@ describe('core site logo', () => {
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
-        const header = fs.readFileSync(
-          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
-          'utf8',
+        const header = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
-        assert.match(header, /src="\/docs\/_assets\/logo\.png"/)
+        assert.equal(
+          header.querySelector('a.mkadoc-logo img')?.getAttribute('src'),
+          '/docs/_assets/logo.png',
+        )
       },
     )
   })
@@ -101,20 +105,21 @@ describe('core chrome href write alignment', () => {
         assert.match(js, /mkadoc-tab/)
         assert.match(js, /getBoundingClientRect/)
 
-        const header = fs.readFileSync(
-          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
-          'utf8',
+        const header = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
-        assert.match(header, /mkadoc-topbar/)
-        assert.match(header, /mkadoc-logo/)
-        assert.match(header, /mkadoc-tab/)
-        assert.match(header, /mkadoc-chrome-body/)
-        assert.doesNotMatch(header, /mkadoc-sidebar/)
-        assert.doesNotMatch(header, /listingblock/)
+        assert.ok(header.querySelector('#mkadoc-topbar'))
+        assert.ok(header.querySelector('a.mkadoc-logo'))
+        assert.ok(header.querySelector('a.mkadoc-tab'))
+        assert.ok(header.querySelector('#mkadoc-chrome-body'))
+        assert.equal(header.querySelector('#mkadoc-sidebar'), null)
+        assert.equal(header.querySelector('.listingblock'), null)
 
-        const docinfo = fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8')
-        assert.match(docinfo, /href="\/styles\/chrome\.css"/)
-        assert.match(docinfo, /src="\/styles\/chrome\.js"/)
+        const docinfo = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8'),
+        )
+        assert.ok(docinfo.querySelector('link[href="/styles/chrome.css"]'))
+        assert.ok(docinfo.querySelector('script[src="/styles/chrome.js"]'))
         assert.equal(fs.existsSync(path.join(root, 'site/styles/nav.css')), false)
         assert.ok(fs.existsSync(path.join(root, 'site/styles/default-logo.svg')))
       },
@@ -144,16 +149,16 @@ App.
         const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
 
-        const header = fs.readFileSync(
-          path.join(root, cfg.docinfoDir, 'docinfo-header.html'),
-          'utf8',
+        const header = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
-        assert.match(header, /mkadoc-topbar/)
-        assert.match(header, /mkadoc-tab/)
-        assert.match(header, /mkadoc-chrome-body/)
-        assert.match(header, />Site</)
-        assert.match(header, />mkadoc</)
-        assert.doesNotMatch(header, /mkadoc-sidebar/)
+        assert.ok(header.querySelector('#mkadoc-topbar'))
+        assert.ok(header.querySelector('#mkadoc-chrome-body'))
+        assert.deepEqual(
+          header.querySelectorAll('a.mkadoc-tab').map((el) => el.text.trim()),
+          ['Site', 'mkadoc'],
+        )
+        assert.equal(header.querySelector('#mkadoc-sidebar'), null)
         assert.ok(fs.existsSync(path.join(root, 'site/styles/chrome.js')))
         assert.match(
           fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8'),
