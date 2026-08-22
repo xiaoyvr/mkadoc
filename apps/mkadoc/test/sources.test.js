@@ -202,7 +202,7 @@ App.
         )
 
         const mode = await build(cfg, { paths: ['apps/mkadoc/docs/index.adoc'] })
-        assert.equal(mode, 'full')
+        assert.equal(mode, 'incremental')
         assert.equal(cfg.sources[1].title, 'Mkadocx')
 
         const headerAfter = parseHtml(

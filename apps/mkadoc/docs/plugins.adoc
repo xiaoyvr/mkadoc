@@ -16,7 +16,7 @@ Use the existing builtins as the reference implementations under `src/builtins/`
 | Asciidoctor conversion | `registerExtension` + `addAttributes` in `setup` (blocks, macros, highlighters, …)
 | Generated CSS / JS on every page | Write files under `host.config.output`, then `contributeHead({ links, scripts })`
 | UI below the site topbar | `contributeChromeBody(html)` — HTML is inserted into `#mkadoc-chrome-body`
-| Rebuild sensitivity | `registerClassifier` (force **full** rebuild) or `registerAssetPrefix` (**assets** mode)
+| Rebuild sensitivity | `registerSiteWideDep` (rebuild every page), `registerClassifier` (force **full**), or `registerAssetPrefix` (**assets** mode)
 | Health checks | `check(host)` → `{ ok, message? }` for `mkadoc check`
 | On-disk cache | `cacheDir(name)` under `.cache/`
 |===
@@ -27,7 +27,7 @@ Use the existing builtins as the reference implementations under `src/builtins/`
 * **Topbar CSS/JS files** — core always writes `/styles/chrome.css` and `/styles/chrome.js`. Do not write those paths from a plugin (you would fight core on every build). Site authors can *override styles* by adding `[mkadoc-css]` in the first source’s `_chrome.adoc` (core appends that after package defaults). Topbar JS is not customizable. Ship plugin assets under your own paths (e.g. `/styles/my.css`).
 * **Page HTML body** — the article is Asciidoctor’s convert output. `#mkadoc-chrome-body` is only for shared site UI that appears on every page (for example a left sidebar), not for the article itself.
 * **Config schema / CLI / unknown locators** — plugins are registered only via known `mkadoc:*` locators and factory options you validate yourself.
-* **Build orchestration** — core decides `full` / `incremental` / `assets` and assembles the shared page chrome/head. You only influence rebuilds via `registerClassifier` / `registerAssetPrefix` (see below). You do not take over writing the topbar/header HTML or flushing head tags — use `contributeChromeBody` and `contributeHead` instead.
+* **Build orchestration** — core decides `full` / `incremental` / `assets` / `noop` and assembles the shared page chrome/head. You only influence rebuilds via `registerSiteWideDep` / `registerClassifier` / `registerAssetPrefix` (see below). You do not take over writing the topbar/header HTML or flushing head tags — use `contributeChromeBody` and `contributeHead` instead.
 
 == Plugin shape
 
@@ -43,7 +43,7 @@ Return:
 
 | `name` | Short id (e.g. `nav`)
 | `setup(host)` | Optional. Runs once after the plugin is constructed, **before** rebuild mode is decided. Register extensions, attributes, classifiers, asset prefixes here.
-| `contributeChrome(host, ctx)` | Optional. Runs each build after mode is known. Emit CSS/JS/HTML. `ctx`: `{ mode, pages, paths }` (`mode` is `full` \| `incremental` \| `assets`).
+| `contributeChrome(host, ctx)` | Optional. Runs each build after mode is known (not called for `noop`). Emit CSS/JS/HTML. `ctx`: `{ mode, pages, paths }` (`mode` is `full` \| `incremental` \| `assets`).
 | `check(host)` | Optional. Used by `mkadoc check` only. Keep it cheap.
 |===
 
@@ -51,8 +51,8 @@ Lifecycle order that matters to you:
 
 . Your factory runs (options validated).
 . `setup(host)` — classifiers / prefixes must be registered here to affect this build’s mode.
-. Core decides `full` / `incremental` / `assets`.
-. `contributeChrome(host, ctx)` — skip heavy work when `ctx.mode === 'assets'` if you only care about HTML chrome.
+. Core decides `full` / `incremental` / `assets` / `noop`.
+. `contributeChrome(host, ctx)` — skipped entirely for `noop`; skip heavy work when `ctx.mode === 'assets'` if you only care about HTML chrome.
 . Pages convert with the registry/attributes you registered.
 
 == Plugin host API
@@ -108,10 +108,14 @@ See xref:chrome-design.adoc[Site chrome design] for why.
 
 When files change under `serve`, core chooses a rebuild mode. These two APIs are how you nudge that choice:
 
+`host.registerSiteWideDep(relPath)`::
+“If this path changed, rebuild **every** live page (incremental).”  
+Use when your chrome is baked into every page’s HTML (same idea as a virtual include for the whole site). Register in `setup`. Example: `mkadoc:nav` registers each source’s `_nav.adoc`.
+
 `host.registerClassifier(fn)`::
-“If this path changed, rebuild **everything**.”  
+“If this path changed, rebuild **everything** (true full mode).”  
 `fn(relPath)` returns `'full'`, or `null`/`undefined` to leave the decision to core/other plugins.  
-Register in `setup`. Example: `mkadoc:nav` returns `'full'` for each source’s `_nav.adoc` so sidebar edits refresh chrome on all pages.
+Register in `setup`. Prefer `registerSiteWideDep` when reconverting all pages is enough; reserve classifiers for orchestration-level changes.
 
 `host.registerAssetPrefix(prefix)`::
 “Changes under this path are **styles/assets only** — don’t reconvert AsciiDoc pages.”  
@@ -145,12 +149,13 @@ These are site conventions your plugin may *read*; they are not host APIs:
 * First source’s `_chrome.adoc` — optional `[mkadoc-css]` overrides for **core topbar** styles (core reads this; not your job unless you document a parallel file).
 * Per-source `_nav.adoc` — used by `mkadoc:nav` for link lists; first source may also carry `[mkadoc-css]` nav overrides.
 * Use `----` (listing) delimiters for `[mkadoc-css]` (`////` comment blocks are not visible to the parser).
-* Files starting with `_` are partials (not pages), but path classifiers can still force full rebuilds when they change.
+* Files starting with `_` are partials (not pages). Article `include::` edges are tracked in the core dependency graph (`.cache/deps.json`); editing an included partial rebuilds only the pages that include it. Site-wide deps (`index.adoc`, logo overrides, `_nav.adoc` via `registerSiteWideDep`) rebuild every page. `_chrome.adoc` is CSS-only (assets mode). An unused partial with no known dependents is **`noop`**. Config still forces a **full** rebuild.
 
 === `contributeChrome` modes
 
 * `full` / `incremental` — update chrome HTML and CSS as needed.
 * `assets` — usually skip HTML chrome regeneration. If your only job is a stylesheet derived from config, you may still rewrite CSS here when appropriate.
+* `noop` — core does not call `contributeChrome` (nothing to do).
 
 === Composition with other plugins
 
@@ -169,7 +174,9 @@ export default function myPlugin(raw = {}) {
 
     async setup(host) {
       host.addAttributes({ 'my-flag': true })
-      host.registerClassifier((p) => (p.endsWith('/_my.adoc') ? 'full' : null))
+      host.registerSiteWideDep('docs/_my.adoc')
+     // or, for true full rebuilds only:
+     // host.registerClassifier((p) => (p.endsWith('/_my.adoc') ? 'full' : null))
     },
 
     async contributeChrome(host, { mode }) {

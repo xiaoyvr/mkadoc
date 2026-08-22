@@ -2,15 +2,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { load } from '@asciidoctor/core'
-import { resolveSiteAsset, writeIfChanged } from './fs-utils.js'
-import { chromePathForSource, isSourceIndexPath } from './sources.js'
+import { relToRoot, resolveSiteAsset, writeIfChanged } from './fs-utils.js'
+import { chromePathForSource } from './sources.js'
 
 const CSS_HREF = '/styles/chrome.css'
 const JS_HREF = '/styles/chrome.js'
 const DEFAULT_LOGO_HREF = '/styles/default-logo.svg'
 const DEFAULT_LOGO_SRC = fileURLToPath(new URL('./assets/default-logo.svg', import.meta.url))
 /** Prefer SVG, then PNG. First source only. */
-const LOGO_OVERRIDE_NAMES = Object.freeze(['logo.svg', 'logo.png'])
+export const LOGO_OVERRIDE_NAMES = Object.freeze(['logo.svg', 'logo.png'])
 
 /** Always applied base chrome styles; first-source `[mkadoc-css]` appends overrides. */
 const DEFAULT_CHROME_CSS = fs
@@ -38,6 +38,23 @@ export function isFirstSourceLogoPath(sources, relPath) {
   const first = sources[0]
   if (!first) return false
   return LOGO_OVERRIDE_NAMES.some((name) => relPath === `${first.path}/_assets/${name}`)
+}
+
+/**
+ * Core site-wide deps: every page embeds tab chrome from each `index.adoc` and
+ * the logo href from the first-source override paths.
+ * @param {import('./config.js').MkadocConfig} cfg
+ * @param {import('./deps.js').DependencyGraph} deps
+ */
+export function registerCoreSiteWideDeps(cfg, deps) {
+  for (const source of cfg.sources) {
+    deps.addSiteWide(`${source.path}/index.adoc`)
+  }
+  const first = cfg.sources[0]
+  if (!first) return
+  for (const name of LOGO_OVERRIDE_NAMES) {
+    deps.addSiteWide(`${first.path}/_assets/${name}`)
+  }
 }
 
 /**
@@ -74,7 +91,10 @@ export async function extractMkadocCss(sourceText) {
 
   return {
     css: css.join('\n\n').trim(),
-    markupSource: lines.filter((_, i) => !strip.has(i + 1)).join('\n').trim(),
+    markupSource: lines
+      .filter((_, i) => !strip.has(i + 1))
+      .join('\n')
+      .trim(),
   }
 }
 
@@ -258,22 +278,35 @@ async function readFirstSourceChromeCss(cfg) {
  * `_assets/logo.svg` or `logo.png` (no config); links to first-source home.
  *
  * @param {import('./plugin/contract.js').MkadocBuildHost} host
- * @param {{ mode: string, paths?: string[] }} ctx
+ * @param {{ mode: string, paths?: string[], deps?: import('./deps.js').DependencyGraph | null }} ctx
  */
-export async function writeSiteChrome(host, { mode, paths = [] }) {
-  if (mode === 'assets') return
+export async function writeSiteChrome(host, { mode, paths = [], deps = null }) {
   if (!host.config.sources.length) return
 
   const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
   const jsAsset = resolveSiteAsset(host.root, host.config.output, JS_HREF)
+  const relPaths = paths.map((p) => relToRoot(p, host.root))
 
-  const indexTouched = paths.some((p) => isSourceIndexPath(host.config.sources, p))
-  const logoTouched = paths.some((p) => isFirstSourceLogoPath(host.config.sources, p))
+  const chromeCssTouched = relPaths.some((p) =>
+    host.config.sources.some((source) => chromePathForSource(source) === p),
+  )
+  const siteWideTouched = relPaths.some((p) => deps?.isSiteWide(p))
+
+  // `_chrome.adoc` only changes the linked stylesheet — rewrite CSS without a full
+  // header/page rebuild when this is an assets-only pass.
+  if (mode === 'assets') {
+    if (chromeCssTouched) {
+      const css = await readFirstSourceChromeCss(host.config)
+      writeIfChanged(cssAsset.absPath, `${css}\n`)
+    }
+    return
+  }
+
   const defaultLogoAsset = resolveSiteAsset(host.root, host.config.output, DEFAULT_LOGO_HREF)
   const needChrome =
     mode === 'full' ||
-    indexTouched ||
-    logoTouched ||
+    siteWideTouched ||
+    chromeCssTouched ||
     !host.headerDocinfoExists() ||
     !fs.existsSync(cssAsset.absPath) ||
     !fs.existsSync(jsAsset.absPath) ||

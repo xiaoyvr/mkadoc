@@ -107,8 +107,7 @@ export default function navPlugin(rawOptions = {}) {
 
     async setup(host) {
       for (const source of host.config.sources) {
-        const navRel = navPathForSource(source)
-        host.registerClassifier((p) => (p === navRel ? 'full' : null))
+        host.registerSiteWideDep(navPathForSource(source))
       }
       host.addAttributes({ icons: 'font' })
     },
@@ -117,11 +116,8 @@ export default function navPlugin(rawOptions = {}) {
       if (mode === 'assets') return
 
       const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
-      // Only rewrite shared CSS on full builds. Incremental must not change
-      // selectors while existing pages still embed the previous chrome HTML.
-      if (mode === 'full' || !fs.existsSync(cssAsset.absPath)) {
-        writeIfChanged(cssAsset.absPath, await readNavCssBundle(host))
-      }
+      // Site-wide _nav edits rebuild every page, so CSS may change with markup.
+      writeIfChanged(cssAsset.absPath, await readNavCssBundle(host))
       host.contributeHead({
         links: [{ rel: 'stylesheet', href: cssAsset.href }],
       })
@@ -137,9 +133,7 @@ export default function navPlugin(rawOptions = {}) {
         const abs = path.join(host.root, navRel)
         if (fs.existsSync(abs)) {
           const { css } = await extractMkadocCss(fs.readFileSync(abs, 'utf8'))
-          notes.push(
-            css ? `${navRel} style overrides ok` : `${navRel} using plugin CSS defaults`,
-          )
+          notes.push(css ? `${navRel} style overrides ok` : `${navRel} using plugin CSS defaults`)
         } else {
           notes.push(`${navRel} missing (auto nav; plugin CSS defaults)`)
         }

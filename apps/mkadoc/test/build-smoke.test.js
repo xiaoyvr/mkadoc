@@ -52,7 +52,7 @@ describe('build smoke (no plugins)', () => {
     })
   })
 
-  it('index.adoc in a batch forces a full rebuild', async () => {
+  it('index.adoc in a batch rebuilds all pages incrementally (site-wide)', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
@@ -60,7 +60,7 @@ describe('build smoke (no plugins)', () => {
       fs.writeFileSync(path.join(root, 'docs/index.adoc'), `= Smoke Index\n\nMARKER_INDEX_V2\n`)
       fs.writeFileSync(path.join(root, 'docs/guide.adoc'), `= Smoke Guide\n\nMARKER_GUIDE_V2\n`)
       const mode = await build(cfg, { paths: ['docs/index.adoc', 'docs/guide.adoc'] })
-      assert.equal(mode, 'full')
+      assert.equal(mode, 'incremental')
       assert.match(read(root, 'site/docs/index.html'), /MARKER_INDEX_V2/)
       assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V2/)
     })
@@ -103,13 +103,13 @@ describe('build smoke (no plugins)', () => {
     })
   })
 
-  it('underscore partial change forces a full rebuild', async () => {
+  it('unused underscore partial is noop', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       await build(cfg, { forceFull: true })
 
       const mode = await build(cfg, { paths: ['docs/_partial.adoc'] })
-      assert.equal(mode, 'full')
+      assert.equal(mode, 'noop')
       assert.match(read(root, 'site/docs/index.html'), /MARKER_INDEX_V1/)
       assert.match(read(root, 'site/docs/guide.html'), /MARKER_GUIDE_V1/)
     })

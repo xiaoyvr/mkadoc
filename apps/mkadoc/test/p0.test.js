@@ -22,11 +22,11 @@ describe('P0: orphan HTML prune', () => {
       fs.rmSync(path.join(root, 'docs/guide.adoc'))
       fs.writeFileSync(path.join(root, 'docs/index.adoc'), `= Smoke Index\n\nMARKER_INDEX_V2\n`)
 
-      // index.adoc forces full (tab chrome is baked into every page)
+      // index.adoc is site-wide → rebuild live pages; deleted guide is pruned
       const mode = await build(cfg, {
         paths: ['docs/guide.adoc', 'docs/index.adoc'],
       })
-      assert.equal(mode, 'full')
+      assert.equal(mode, 'incremental')
       assert.equal(exists(root, 'site/docs/guide.html'), false)
       assert.match(
         fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'),

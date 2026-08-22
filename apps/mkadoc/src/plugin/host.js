@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Extensions } from '@asciidoctor/core'
 import { CACHE_DIR } from '../config.js'
+import { registerIncludeCollector } from '../deps.js'
 import { relToRoot, writeIfChanged } from '../fs-utils.js'
 import { escapeHtmlAttr } from '../html-utils.js'
 
@@ -9,9 +10,10 @@ import { escapeHtmlAttr } from '../html-utils.js'
  * Shared mutable state behind the plugin and build hosts.
  * @param {import('../config.js').MkadocConfig} cfg
  */
-function createHostState(cfg) {
+function createHostState(cfg, deps = null) {
   return {
     cfg,
+    deps,
     registry: Extensions.create(),
     attributes: {},
     headLinks: [],
@@ -65,6 +67,13 @@ function createPluginHost(state) {
 
     registerClassifier(fn) {
       state.classifiers.push(fn)
+    },
+
+    registerSiteWideDep(relPath) {
+      if (!state.deps) {
+        throw new Error('mkadoc: registerSiteWideDep requires a dependency graph')
+      }
+      state.deps.addSiteWide(relPath)
     },
 
     registerAssetPrefix(prefix) {
@@ -177,10 +186,13 @@ function createBuildHost(state) {
  * Pass `plugin` into plugins; keep `build` for core orchestration.
  *
  * @param {import('../config.js').MkadocConfig} cfg
+ * @param {{ deps?: import('../deps.js').DependencyGraph | null }} [opts]
  * @returns {{ plugin: import('./contract.js').MkadocPluginHost, build: import('./contract.js').MkadocBuildHost }}
  */
-export function createHosts(cfg) {
-  const state = createHostState(cfg)
+export function createHosts(cfg, { deps = null } = {}) {
+  const state = createHostState(cfg, deps)
+  // Core-owned include tracker (feeds the dependency graph during page convert).
+  registerIncludeCollector(state.registry)
   return {
     plugin: createPluginHost(state),
     build: createBuildHost(state),

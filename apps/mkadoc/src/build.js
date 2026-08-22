@@ -1,9 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { load } from '@asciidoctor/core'
-import { writeSiteChrome } from './chrome.js'
+import { registerCoreSiteWideDeps, writeSiteChrome } from './chrome.js'
 import { CACHE_DIR } from './config.js'
 import { decideMode } from './decide-mode.js'
+import { loadDependencyGraph, withIncludeCollector } from './deps.js'
 import { copyFileIfChanged, relToRoot, walkDir, writeIfChanged } from './fs-utils.js'
 import { defaultPoolConcurrency, mapPool } from './map-pool.js'
 import { createHosts } from './plugin/host.js'
@@ -31,14 +32,21 @@ export async function build(cfg, opts = {}) {
     await refreshSourceTitles(cfg)
   }
 
-  const { plugin: pluginHost, build: buildHost } = createHosts(cfg)
+  const deps = loadDependencyGraph(cfg.root)
+  registerCoreSiteWideDeps(cfg, deps)
+  const { plugin: pluginHost, build: buildHost } = createHosts(cfg, { deps })
   const plugins = await loadPlugins(cfg.plugins, pluginHost)
-  const { mode, pages } = decideMode(cfg, buildHost, opts)
+  const { mode, pages } = decideMode(cfg, buildHost, { ...opts, deps })
+
+  if (mode === 'noop') {
+    console.log('mkadoc: noop')
+    return mode
+  }
 
   fs.mkdirSync(path.join(cfg.root, cfg.output), { recursive: true })
   fs.mkdirSync(path.join(cfg.root, cfg.docinfoDir), { recursive: true })
   await plugins.contributeChrome({ mode, pages, paths: touched })
-  await writeSiteChrome(buildHost, { mode, paths: touched })
+  await writeSiteChrome(buildHost, { mode, paths: touched, deps })
 
   if (mode !== 'assets') buildHost.writeHeadDocinfo()
   copyFirstSourceAssets(cfg)
@@ -53,22 +61,27 @@ export async function build(cfg, opts = {}) {
         cfg,
         buildHost,
         listSourcePages(cfg.root, cfg.sources).map((p) => p.page),
-        { concurrency: opts.concurrency },
+        { concurrency: opts.concurrency, deps },
       )
       pruneStaleHtml(cfg)
       cleanupArtifacts(cfg)
       break
     case 'incremental':
       console.log(`mkadoc: incremental ${pages.join(' ')}`)
-      await buildPages(cfg, buildHost, pages, { concurrency: opts.concurrency })
+      await buildPages(cfg, buildHost, pages, { concurrency: opts.concurrency, deps })
       pruneStaleHtml(cfg)
       break
+  }
+
+  if (mode !== 'assets') {
+    deps.retainPages(listSourcePages(cfg.root, cfg.sources).map((p) => p.page))
+    deps.save()
   }
 
   return mode
 }
 
-async function buildPages(cfg, host, pages, { concurrency } = {}) {
+async function buildPages(cfg, host, pages, { concurrency, deps } = {}) {
   const attrs = { ...host.attributes }
   if (host.wantsDocinfo()) {
     attrs.docinfodir = path.join(cfg.root, cfg.docinfoDir)
@@ -91,17 +104,24 @@ async function buildPages(cfg, host, pages, { concurrency } = {}) {
     fs.mkdirSync(path.dirname(toFile), { recursive: true })
     try {
       const text = fs.readFileSync(absPath, 'utf8')
-      const doc = await load(text, {
-        safe: 'unsafe',
-        base_dir: baseDir,
-        standalone: true,
-        extension_registry: registry,
-        attributes: attrs,
-        catalog_assets: true,
-      })
-      const html = String(await doc.convert())
+      const { result: html, includes } = await withIncludeCollector(
+        { root: cfg.root, baseDir },
+        async () => {
+          const doc = await load(text, {
+            safe: 'unsafe',
+            base_dir: baseDir,
+            standalone: true,
+            extension_registry: registry,
+            attributes: attrs,
+            catalog_assets: true,
+          })
+          const converted = String(await doc.convert())
+          copyReferencedAssets(cfg, absPath, doc)
+          return converted
+        },
+      )
+      deps?.setPageIncludes(page, includes)
       writeIfChanged(toFile, html)
-      copyReferencedAssets(cfg, absPath, doc)
     } catch (err) {
       const detail = err?.message || String(err)
       throw new Error(`mkadoc: failed to convert ${page}: ${detail}`, { cause: err })

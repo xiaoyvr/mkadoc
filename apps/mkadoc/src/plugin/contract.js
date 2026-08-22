@@ -5,7 +5,7 @@
  * Plugins receive {@link MkadocPluginHost} only.
  * Core (`build.js`, `chrome.js`, `decide-mode.js`) uses {@link MkadocBuildHost}.
  *
- * @typedef {'full' | 'incremental' | 'assets'} BuildMode
+ * @typedef {'full' | 'incremental' | 'assets' | 'noop'} BuildMode
  *
  * @typedef {{ mode: BuildMode, pages: string[], paths?: string[] }} BuildContext
  *
@@ -19,6 +19,7 @@
  * @property {(contrib?: { links?: object[], scripts?: object[] }) => void} contributeHead
  * @property {(html: string) => void} contributeChromeBody append below-topbar chrome HTML
  * @property {(fn: (p: string) => 'full' | null | undefined) => void} registerClassifier
+ * @property {(relPath: string) => void} registerSiteWideDep mark path as rebuilding every page
  * @property {(prefix: string) => void} registerAssetPrefix
  * @property {(relOrAbs: string) => string} ensureDir
  * @property {(name: string) => string} cacheDir

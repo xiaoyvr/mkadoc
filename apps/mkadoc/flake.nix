@@ -22,7 +22,7 @@
         };
 
         version = "0.1.0";
-        npmDepsHash = "sha256-+sPh1ts/Rt1D55T8FV5AACcKT5ALxCyzzkmc7fufJ98=";
+        npmDepsHash =  "sha256-/KFE6A+jmTUmwLPgJ3tXUtRMXAYgs3YGfcJox6pjfdM=";
 
         packageFileset = lib.fileset.unions [
           ./bin

@@ -1,36 +1,48 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { isFirstSourceLogoPath } from './chrome.js'
 import { relToRoot } from './fs-utils.js'
-import { isSourceIndexPath, sourceForRepoPath } from './sources.js'
+import { chromePathForSource, listSourcePages, sourceForRepoPath } from './sources.js'
 
 function isPage(p, cfg) {
-  if (!p.endsWith('.adoc')) return false
+  if (!p.endsWith('.adoc') && !p.endsWith('.asciidoc')) return false
   if (path.basename(p).startsWith('_')) return false
   const source = sourceForRepoPath(cfg.sources, p)
   if (!source) return false
   return fs.existsSync(path.join(cfg.root, p))
 }
 
-function needsAllPages(p, cfg, host) {
-  const base = path.basename(p)
+function isSourceAdoc(p, cfg) {
+  if (!p.endsWith('.adoc') && !p.endsWith('.asciidoc')) return false
+  return Boolean(sourceForRepoPath(cfg.sources, p))
+}
+
+/** `_chrome.adoc` feeds `/styles/chrome.css` (linked, not baked into page HTML). */
+function isChromeCssPath(sources, p) {
+  return sources.some((source) => chromePathForSource(source) === p)
+}
+
+function needsFullRebuild(p, cfg, host) {
   const configRel = relToRoot(cfg.configPath, cfg.root)
   if (p === configRel) return true
-  if (base.startsWith('_') && base.endsWith('.adoc')) return true
-  // Tab labels from index.adoc are baked into every page via docinfo header.
-  if (isSourceIndexPath(cfg.sources, p)) return true
-  // Logo override is baked into header HTML (src href).
-  if (isFirstSourceLogoPath(cfg.sources, p)) return true
   return host.classifyPath(p) === 'full'
 }
 
-export function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
+/**
+ * @param {import('./config.js').MkadocConfig} cfg
+ * @param {import('./plugin/contract.js').MkadocBuildHost} host
+ * @param {{ forceFull?: boolean, paths?: string[], deps?: import('./deps.js').DependencyGraph | null }} [opts]
+ */
+export function decideMode(cfg, host, { forceFull = false, paths = [], deps = null } = {}) {
   if (forceFull || paths.length === 0) {
     return { mode: 'full', pages: [] }
   }
 
-  const pages = []
+  const livePages = listSourcePages(cfg.root, cfg.sources).map((p) => p.page)
+
+  /** @type {Set<string>} */
+  const pages = new Set()
   let assetsOnly = false
+  let orphanPartial = false
   const firstSourcePath = cfg.sources[0]?.path
 
   for (const raw of paths) {
@@ -39,16 +51,50 @@ export function decideMode(cfg, host, { forceFull = false, paths = [] } = {}) {
       assetsOnly = true
       continue
     }
-    if (needsAllPages(p, cfg, host)) {
+    if (needsFullRebuild(p, cfg, host)) {
       return { mode: 'full', pages: [] }
     }
+    // CSS-only chrome override — rewrite stylesheet, do not reconvert pages.
+    if (isChromeCssPath(cfg.sources, p)) {
+      assetsOnly = true
+      continue
+    }
+
+    // Site-wide (index, logo, _nav, …) or article include → dependent pages.
+    const dependents = deps?.pagesDependingOn(p, { livePages }) || []
+    if (dependents.length > 0) {
+      for (const page of dependents) {
+        if (isPage(page, cfg)) pages.add(page)
+      }
+      continue
+    }
+
+    if (isPage(p, cfg)) {
+      pages.add(p)
+      continue
+    }
+
     if (firstSourcePath && p.startsWith(`${firstSourcePath}/_assets/`)) {
       assetsOnly = true
       continue
     }
-    if (isPage(p, cfg)) pages.push(p)
+
+    if (isSourceAdoc(p, cfg)) {
+      // No known dependents (unused partial, or cache empty — restart serve to refresh).
+      orphanPartial = true
+      continue
+    }
+
+    // Unknown non-page path (e.g. README.md) — keep previous safe behavior.
+    return { mode: 'full', pages: [] }
   }
-  if (pages.length === 0 && assetsOnly) return { mode: 'assets', pages: [] }
-  if (pages.length === 0) return { mode: 'full', pages: [] }
-  return { mode: 'incremental', pages }
+
+  if (pages.size === 0 && assetsOnly) {
+    return { mode: 'assets', pages: [] }
+  }
+  if (pages.size === 0 && orphanPartial) {
+    return { mode: 'noop', pages: [] }
+  }
+  if (pages.size === 0) return { mode: 'full', pages: [] }
+  return { mode: 'incremental', pages: [...pages].sort() }
 }
