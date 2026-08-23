@@ -90,6 +90,24 @@ function createPluginHost(state) {
     relToRoot(p) {
       return relToRoot(p, cfg.root)
     },
+
+    /**
+     * Resolve + import a module from mkadoc's own dependencies.
+     * Anchored at this module, so the same single instance is shared with core.
+     * @param {string} specifier
+     * @returns {Promise<Record<string, unknown>>}
+     */
+    async import(specifier) {
+      let resolved
+      try {
+        resolved = await import.meta.resolve(specifier, import.meta.url)
+      } catch (err) {
+        throw new Error(
+          `mkadoc: host.import('${specifier}') failed: not resolvable from mkadoc's dependencies (${err?.message || err})`,
+        )
+      }
+      return import(resolved)
+    },
   })
 }
 

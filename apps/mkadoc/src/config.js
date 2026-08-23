@@ -6,7 +6,7 @@ import { parseProjectConfig, parseServeConfig } from './config-schema.js'
 import { normalizeSources } from './sources.js'
 
 /** Fixed build-cache directory (not configurable). */
-export const CACHE_DIR = '.cache'
+export const CACHE_DIR = '.mkadoc'
 
 /**
  * Runtime project config exposed to plugins as `host.config`.

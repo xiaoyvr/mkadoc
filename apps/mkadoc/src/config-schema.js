@@ -1,3 +1,4 @@
+import npa from 'npm-package-arg'
 import { z } from 'zod'
 import { BUILTIN_LOCATORS } from './plugin/locators.js'
 
@@ -17,10 +18,22 @@ const PluginsSchema = z.preprocess(
   (v) => (v == null ? {} : v),
   z.record(z.string(), z.record(z.string(), z.unknown())).superRefine((plugins, ctx) => {
     for (const key of Object.keys(plugins)) {
-      if (!BUILTIN_LOCATORS.includes(key)) {
+      if (key.startsWith('mkadoc:')) {
+        if (!BUILTIN_LOCATORS.includes(key)) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `Unknown builtin plugin "${key}"`,
+            path: [key],
+          })
+        }
+        continue
+      }
+      try {
+        npa(key)
+      } catch (err) {
         ctx.addIssue({
           code: 'custom',
-          message: `Unknown plugin "${key}"`,
+          message: `Invalid plugin locator "${key}": ${err?.message || err}`,
           path: [key],
         })
       }

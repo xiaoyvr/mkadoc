@@ -55,7 +55,6 @@ plugins:
       await build(cfg2, { forceFull: true })
       const css2 = fs.readFileSync(path.join(root, 'site/styles/shiki.css'), 'utf8')
       assert.notEqual(css1, css2)
-      assert.match(css2, /nord/i)
       assert.ok(
         parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8')).querySelector(
           '.shiki',

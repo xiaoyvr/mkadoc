@@ -14,10 +14,10 @@ describe('extractMkadocCss', () => {
 
 [mkadoc-css]
 ----
-.mkadoc-sidebar a { color: red; }
+.mkadoc-articles a { color: red; }
 ----
 `)
-    assert.equal(css, '.mkadoc-sidebar a { color: red; }')
+    assert.equal(css, '.mkadoc-articles a { color: red; }')
   })
 
   it('returns empty css when no [mkadoc-css] blocks', async () => {
@@ -40,7 +40,7 @@ plugins:
 
 [mkadoc-css]
 ----
-.mkadoc-sidebar a { color: #123456; }
+.mkadoc-articles a { color: #123456; }
 ----
 `,
       }),
@@ -49,7 +49,7 @@ plugins:
         await build(cfg, { forceFull: true })
 
         const navCss = fs.readFileSync(path.join(root, 'site/styles/nav.css'), 'utf8')
-        assert.match(navCss, /\.mkadoc-sidebar a/)
+        assert.match(navCss, /\.mkadoc-articles a/)
         assert.match(navCss, /#123456/)
 
         const chromeCss = fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8')
@@ -58,7 +58,7 @@ plugins:
         const header = parseHtml(
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
-        const sidebar = header.querySelector('#mkadoc-sidebar')
+        const sidebar = header.querySelector('#mkadoc-articles')
         assert.ok(sidebar)
         assert.ok(sidebar.text.includes('Home'))
         assert.equal(header.querySelector('.listingblock'), null)
@@ -68,6 +68,9 @@ plugins:
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8'),
         )
         assert.ok(docinfo.querySelector('link[href="/styles/nav.css"]'))
+        assert.ok(docinfo.querySelector('script[src="/styles/nav.js"]'))
+        // extraction succeeded: the asset exists and is wired into the head
+        assert.ok(fs.existsSync(path.join(root, 'site/styles/nav.js')))
       },
     )
   })

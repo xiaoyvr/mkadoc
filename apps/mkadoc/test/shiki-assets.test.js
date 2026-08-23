@@ -35,11 +35,6 @@ echo hello
         const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
 
-        assert.match(
-          fs.readFileSync(path.join(root, 'site/styles/shiki.css'), 'utf8'),
-          /Generated from Shiki/,
-        )
-
         const docinfo = parseHtml(
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8'),
         )

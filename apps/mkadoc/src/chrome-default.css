@@ -1,7 +1,6 @@
-/* Core chrome: sticky site title + section tabs */
+/* Core chrome: sticky site title + brand */
 :root {
   --mkadoc-topbar-height: 3rem;
-  --mkadoc-tabs-height: 2.5rem;
 }
 
 .mkadoc-topbar {
@@ -9,7 +8,7 @@
   top: 0;
   z-index: 1100;
   /* Full width even with body padding-left for the sidebar. */
-  margin-left: calc(-1 * var(--mkadoc-sidebar-width, 0px));
+  margin-left: calc(-1 * var(--mkadoc-articles-width, 0px));
   display: flex;
   align-items: center;
   height: var(--mkadoc-topbar-height);
@@ -67,67 +66,18 @@ html.mkadoc-scrolled .mkadoc-topbar {
 }
 
 @keyframes mkadoc-brand-fade {
-  from { opacity: 0.35; }
-  to { opacity: 1; }
-}
-
-.mkadoc-tabs {
-  /* Tabs are above the sidebar in hierarchy, so span the full width. */
-  margin-left: calc(-1 * var(--mkadoc-sidebar-width, 0px));
-  display: flex;
-  align-items: stretch;
-  height: 2.5rem;
-  gap: 0.25rem;
-  padding: 0 1.25rem;
-  background: #fff;
-  border-bottom: 1px solid #e0e0dc;
-  box-sizing: border-box;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-
-.mkadoc-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.mkadoc-tab {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-  height: 100%;
-  font-family: "Open Sans", "DejaVu Sans", sans-serif;
-  font-size: 0.9rem;
-  color: rgba(0, 0, 0, 0.6);
-  text-decoration: none;
-  padding: 0 0.85rem;
-  border-bottom: 2px solid transparent;
-}
-
-.mkadoc-tab:hover,
-.mkadoc-tab:focus {
-  color: #2156a5;
-}
-
-.mkadoc-tab.is-active {
-  color: #ba3925;
-  font-weight: 600;
-  border-bottom-color: #ba3925;
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media screen and (max-width: 767px) {
   .mkadoc-topbar {
     /* No sidebar padding on mobile, so no left extension. */
     margin-left: 0;
-  }
-
-  .mkadoc-tabs {
-    margin-left: 0;
-  }
-
-  .mkadoc-topbar,
-  .mkadoc-tabs {
     padding-left: 1rem;
     padding-right: 1rem;
   }

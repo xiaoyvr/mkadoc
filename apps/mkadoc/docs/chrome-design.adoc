@@ -36,29 +36,28 @@ Conceptually:
 ----
 <body>
   <header id="mkadoc-topbar">…site title…</header>
-  <nav class="mkadoc-tabs">…section tabs…</nav>
-  <div id="mkadoc-chrome-body">
-    <!-- optional plugin UI, e.g. left sidebar -->
-  </div>
+  <!-- plugin chrome fragments, in plugin load order: -->
+  <nav class="mkadoc-sources">…level-1 sources…</nav>
+  <aside id="mkadoc-articles">…level-2 articles…</aside>
 
   <!-- Asciidoctor article: unchanged convert output -->
 </body>
 ----
 
 * **Topbar** — core sticky site title, from `sources` (always present).
-* **Tabs** — core section tabs, from `sources` (always present); a sibling that scrolls under the sticky topbar.
-* **`#mkadoc-chrome-body`** — plugins may append shared UI (sidebar, future side panels, …).
-* **Article** — normal Asciidoctor body; **sibling** of the chrome mount, not nested inside it.
+* **Plugin fragments** — everything below the topbar comes from `host.contributeChromeBody`,
+  concatenated in **plugin load order** (config key order). `mkadoc:nav` owns the
+  whole site nav: the level-1 source bar (`<nav class="mkadoc-sources">`) and the
+  level-2 article sidebar (`<aside id="mkadoc-articles">`).
+* **Article** — normal Asciidoctor body; sibling of the chrome fragments, not nested inside any wrapper.
 
-== Why the article is not inside `#mkadoc-chrome-body`
+== Why the article is not inside a chrome wrapper
 
 It is tempting to wrap the article for CSS grid/flex:
 
 ----
-<div id="mkadoc-chrome-body">
-  <aside>sidebar</aside>
-  <main>article</main>
-</div>
+<aside>sidebar</aside>
+<main>article</main>
 ----
 
 mkadoc deliberately **does not** do that.
@@ -69,7 +68,7 @@ The header snippet is injected as a fixed prefix on every page.
 At that moment the pipeline is not “here is a slot; drop the article in.”
 The article is produced separately as convert output and follows the header in the body.
 
-Nesting the article under `#mkadoc-chrome-body` would require an extra step: **rewrite the HTML after convert** (find the article root, move it into the div) or a **custom HTML template** that replaces Asciidoctor’s page structure.
+Nesting the article inside a wrapper would require an extra step: **rewrite the HTML after convert** (find the article root, move it into the wrapper) or a **custom HTML template** that replaces Asciidoctor’s page structure.
 
 === Siblings avoid fragile rewrites
 
@@ -83,14 +82,14 @@ Keeping **siblings** means: inject chrome, leave the article alone.
 
 === Layout still works with CSS
 
-Side UI (like the nav sidebar) uses positioning and padding, for example fixed `aside` + `body:has(#mkadoc-sidebar) { padding-left: … }`.
+Side UI (like the article sidebar) uses positioning and padding, for example fixed `aside` + `body:has(#mkadoc-articles) { padding-left: … }`.
 That is enough for common docs layouts without owning the article’s parent node.
 
 == Design goals this serves
 
 * **Safe** — no HTML rewriter between Asciidoctor and the published page for layout.
-* **Simple plugins** — append markup under `#mkadoc-chrome-body` and ship your own CSS; no “main slot” protocol.
-* **Clear ownership** — core: topbar; plugins: optional shared UI; Asciidoctor: article.
+* **Simple plugins** — append markup via `host.contributeChromeBody` and ship your own CSS; no “main slot” protocol.
+* **Clear ownership** — core: topbar; plugins: below-topbar chrome fragments; Asciidoctor: article.
 * **Shared vs per-page** — chrome is the same on every page; the article changes per file. That matches “inject once, convert many.”
 
 == Tradeoff (accepted)

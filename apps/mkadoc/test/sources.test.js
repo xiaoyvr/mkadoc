@@ -4,7 +4,12 @@ import path from 'node:path'
 import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
-import { mountFromSourcePath, pageToOutRel, rootRedirectHref, sourceForPathname } from '../src/sources.js'
+import {
+  mountFromSourcePath,
+  pageToOutRel,
+  rootRedirectHref,
+  sourceForPathname,
+} from '../src/sources.js'
 import { parseHtml } from './helpers/html.js'
 import { literateConfig, withTempProject } from './helpers/project.js'
 
@@ -57,7 +62,7 @@ Root body.
 
 [mkadoc-css]
 ----
-.mkadoc-sidebar a { color: #111; }
+.mkadoc-articles a { color: #111; }
 ----
 `,
         'apps/mkadoc/docs/index.adoc': `= mkadoc
@@ -85,10 +90,9 @@ Guide body.
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
         assert.ok(header.querySelector('#mkadoc-topbar'))
-        assert.ok(header.querySelector('#mkadoc-chrome-body'))
-        assert.ok(header.querySelector('#mkadoc-sidebar'))
+        assert.ok(header.querySelector('#mkadoc-articles'))
         assert.deepEqual(
-          header.querySelectorAll('a.mkadoc-tab').map((el) => ({
+          header.querySelectorAll('a.mkadoc-source').map((el) => ({
             mount: el.getAttribute('data-mount'),
             text: el.text.trim(),
           })),
@@ -127,7 +131,7 @@ plugins:
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
         const hrefs = header
-          .querySelectorAll('#mkadoc-sidebar a')
+          .querySelectorAll('#mkadoc-articles a')
           .map((el) => el.getAttribute('href'))
         assert.ok(hrefs.includes('/docs/index.html'))
         assert.ok(hrefs.includes('/docs/other.html'))
@@ -156,8 +160,14 @@ Body.
         )
         const brand = header.querySelector('.mkadoc-brand')
         assert.ok(brand)
-        assert.equal(brand.getAttribute('data-site-title'), 'Nix-managed system and user configurations')
-        assert.equal(brand.querySelector('p')?.text.trim(), 'Nix-managed system and user configurations')
+        assert.equal(
+          brand.getAttribute('data-site-title'),
+          'Nix-managed system and user configurations',
+        )
+        assert.equal(
+          brand.querySelector('p')?.text.trim(),
+          'Nix-managed system and user configurations',
+        )
       },
     )
   })
@@ -189,7 +199,9 @@ App.
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
         assert.ok(
-          headerBefore.querySelectorAll('a.mkadoc-tab').some((el) => el.text.trim() === 'mkadoc'),
+          headerBefore
+            .querySelectorAll('a.mkadoc-source')
+            .some((el) => el.text.trim() === 'mkadoc'),
         )
 
         fs.writeFileSync(
@@ -209,15 +221,21 @@ App.
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
         assert.ok(
-          headerAfter.querySelectorAll('a.mkadoc-tab').some((el) => el.text.trim() === 'Mkadocx'),
+          headerAfter
+            .querySelectorAll('a.mkadoc-source')
+            .some((el) => el.text.trim() === 'Mkadocx'),
         )
 
         const appPage = parseHtml(
           fs.readFileSync(path.join(root, 'site/apps/mkadoc/docs/index.html'), 'utf8'),
         )
         const docsPage = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
-        assert.ok(appPage.querySelectorAll('a.mkadoc-tab').some((el) => el.text.trim() === 'Mkadocx'))
-        assert.ok(docsPage.querySelectorAll('a.mkadoc-tab').some((el) => el.text.trim() === 'Mkadocx'))
+        assert.ok(
+          appPage.querySelectorAll('a.mkadoc-source').some((el) => el.text.trim() === 'Mkadocx'),
+        )
+        assert.ok(
+          docsPage.querySelectorAll('a.mkadoc-source').some((el) => el.text.trim() === 'Mkadocx'),
+        )
         // Page <title> still follows doctitle / :title:, not :tab:
         assert.equal(appPage.querySelector('title')?.text.trim(), 'mkadoc')
       },

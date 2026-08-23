@@ -13,6 +13,7 @@ import {
   withIncludeCollector,
 } from '../src/deps.js'
 import { createHosts } from '../src/plugin/host.js'
+import { loadPlugins } from '../src/plugin/load.js'
 import { literateConfig, smokeFixture, withTempProject } from './helpers/project.js'
 
 function read(root, rel) {
@@ -50,13 +51,13 @@ describe('DependencyGraph', () => {
     })
   })
 
-  it('persists and reloads from .cache/deps.json', async () => {
+  it('persists and reloads from .mkadoc/deps.json', async () => {
     await withTempProject({}, async (root) => {
       const g = new DependencyGraph(root)
       g.setPageIncludes('docs/guide.adoc', ['docs/_p.adoc'])
       g.addSiteWide('docs/index.adoc')
       g.save()
-      assert.ok(fs.existsSync(path.join(root, '.cache/deps.json')))
+      assert.ok(fs.existsSync(path.join(root, '.mkadoc/deps.json')))
 
       const loaded = loadDependencyGraph(root)
       assert.deepEqual(loaded.pagesDependingOn('docs/_p.adoc'), ['docs/guide.adoc'])
@@ -193,15 +194,14 @@ describe('decideMode + dependency graph', () => {
     })
   })
 
-  it('expands index.adoc as site-wide to all live pages', async () => {
+  it('expands index.adoc as site-wide to all live pages (via mkadoc:nav)', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       const deps = new DependencyGraph(root)
-      const { registerCoreSiteWideDeps } = await import('../src/chrome.js')
-      registerCoreSiteWideDeps(cfg, deps)
+      const { plugin, build: host } = createHosts(cfg, { deps })
+      await loadPlugins({ 'mkadoc:nav': {} }, plugin)
       deps.setPageIncludes('docs/guide.adoc', [])
       deps.setPageIncludes('docs/index.adoc', [])
-      const { build: host } = createHosts(cfg, { deps })
 
       const decided = decideMode(cfg, host, {
         paths: ['docs/index.adoc'],

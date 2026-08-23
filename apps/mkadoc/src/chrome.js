@@ -47,9 +47,6 @@ export function isFirstSourceLogoPath(sources, relPath) {
  * @param {import('./deps.js').DependencyGraph} deps
  */
 export function registerCoreSiteWideDeps(cfg, deps) {
-  for (const source of cfg.sources) {
-    deps.addSiteWide(`${source.path}/index.adoc`)
-  }
   const first = cfg.sources[0]
   if (!first) return
   for (const name of LOGO_OVERRIDE_NAMES) {
@@ -115,7 +112,15 @@ function tabHref(source) {
 }
 
 /**
- * Core chrome: topbar/tabs + empty body region for plugins.
+ * Core chrome: topbar (logo + brand) followed by plugin fragments
+ * (`host.contributeChromeBody`, e.g. source bar, article sidebar) in load order.
+ * @param {import('./sources.js').MkadocSource[]} sources
+ * @param {string[]} bodyParts HTML from host.contributeChromeBody
+ * @param {{ logoSrc?: string }} [opts]
+ */
+/**
+ * Core chrome: topbar (logo + brand) followed by plugin fragments
+ * (`host.contributeChromeBody`, e.g. tabs, sidebar) in load order.
  * @param {import('./sources.js').MkadocSource[]} sources
  * @param {string[]} bodyParts HTML from host.contributeChromeBody
  * @param {{ logoSrc?: string }} [opts]
@@ -125,13 +130,6 @@ export function buildChromeHtml(sources, bodyParts = [], { logoSrc = DEFAULT_LOG
   const homeHref = first ? tabHref(first) : '/'
   const brandRaw = first?.description || first?.title || 'Docs'
   const brand = escapeHtml(brandRaw)
-  const tabs = sources
-    .map((source) => {
-      const href = tabHref(source)
-      return `<a class="mkadoc-tab" data-mount="${escapeHtmlAttr(source.mount)}" href="${escapeHtmlAttr(href)}">${escapeHtml(source.title)}</a>`
-    })
-    .join('\n')
-
   const body = bodyParts.filter(Boolean).join('\n')
   const logo = `<a class="mkadoc-logo" href="${escapeHtmlAttr(homeHref)}" aria-label="Home"><img src="${escapeHtmlAttr(logoSrc)}" alt=""></a>`
 
@@ -139,66 +137,35 @@ export function buildChromeHtml(sources, bodyParts = [], { logoSrc = DEFAULT_LOG
 ${logo}
 <div class="mkadoc-brand" data-site-title="${escapeHtmlAttr(brandRaw)}"><p>${brand}</p></div>
 </header>
-<nav class="mkadoc-tabs" aria-label="Documentation sections">
-${tabs}
-</nav>
-<div id="mkadoc-chrome-body" class="mkadoc-chrome-body">
 ${body}
-</div>
 `
 }
 
-/** Tab active-state + optional sidebar current-link script (no-ops if nav absent). */
+/** Tab active-state + brand swap; exposes `window.mkadocMountMatch` for plugin
+ * assets (e.g. mkadoc:nav panel activation) to derive the active mount from the URL. */
 const CHROME_JS = `(function () {
-  var path = location.pathname;
-  if (path.endsWith("/")) path += "index.html";
-
-  function mountMatchLen(mount) {
-    var prefix = mount.endsWith("/") ? mount : mount + "/";
-    if (path === mount || path === mount + ".html") return mount.length;
-    if (path.startsWith(prefix)) return mount.length;
-    return -1;
-  }
-
-  var tabs = Array.prototype.slice.call(document.querySelectorAll(".mkadoc-tab"));
-  var panels = Array.prototype.slice.call(document.querySelectorAll(".mkadoc-tab-panel"));
-  var best = null;
-  var bestLen = -1;
-  tabs.forEach(function (tab) {
-    var mount = tab.getAttribute("data-mount") || "/";
-    var len = mountMatchLen(mount);
-    if (len > bestLen) {
-      best = mount;
-      bestLen = len;
-    }
-  });
-  if (best == null && tabs.length) best = tabs[0].getAttribute("data-mount") || "/";
-
-  tabs.forEach(function (tab) {
-    var mount = tab.getAttribute("data-mount") || "/";
-    if (mount === best) tab.classList.add("is-active");
-  });
-  panels.forEach(function (panel) {
-    var mount = panel.getAttribute("data-mount") || "/";
-    if (mount === best) panel.classList.add("is-active");
-  });
-
-  document.querySelectorAll("#mkadoc-sidebar a").forEach(function (a) {
-    if (a.classList.contains("mkadoc-tab")) return;
-    if (a.getAttribute("href") === path) a.classList.add("current");
-  });
+  // Shared mount matcher: longest data-mount that matches the current path.
+  // Exposed for plugin assets; they run after this deferred script in the head
+  // (plugins contribute head assets first), so consumers retry at DOMContentLoaded.
+  window.mkadocMountMatch = (function () {
+    var path = location.pathname;
+    if (path.endsWith("/")) path += "index.html";
+    return function (mount) {
+      var m = mount || "/";
+      var prefix = m.endsWith("/") ? m : m + "/";
+      if (path === m || path === m + ".html") return m.length;
+      if (path.startsWith(prefix)) return m.length;
+      return -1;
+    };
+  })();
 
   // The sticky topbar keeps the site title floating; swap it to the document
-  // title once the article h1 scrolls under the bar. The sidebar rides up
-  // with the scrolling tabs until it sits flush below the floating title.
+  // title once the article h1 scrolls under the bar. The source bar (owned by
+  // the mkadoc:nav plugin) scrolling away gets its own bottom line.
   var root = document.documentElement;
   var topbar = document.getElementById("mkadoc-topbar");
-  var tabs = document.querySelector(".mkadoc-tabs");
-  var tabsHeight = tabs ? tabs.offsetHeight : 0;
-  var sidebar = document.querySelector(".mkadoc-sidebar");
-  var sidebarTop = sidebar ? sidebar.getBoundingClientRect().top : 0;
-  var topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : 0;
-  var maxOffset = Math.max(sidebarTop - topbarBottom, 0);
+  var sourcesNav = document.querySelector(".mkadoc-sources");
+  var sourcesHeight = sourcesNav ? sourcesNav.offsetHeight : 0;
   var brand = document.querySelector(".mkadoc-brand");
   var brandEl = brand ? brand.querySelector("p") : null;
   var siteTitle = (brand ? brand.getAttribute("data-site-title") : "") || "";
@@ -217,15 +184,9 @@ const CHROME_JS = `(function () {
   function updateBrand() {
     ticking = false;
     var y = window.scrollY || document.documentElement.scrollTop || 0;
-    // Once the tabs have fully scrolled under the bar, the floating title
-    // needs its own bottom line.
-    root.classList.toggle("mkadoc-scrolled", y >= tabsHeight);
-    if (maxOffset > 0) {
-      root.style.setProperty(
-        "--mkadoc-scroll-offset",
-        Math.min(Math.max(y, 0), maxOffset) + "px",
-      );
-    }
+    // Once the source bar has fully scrolled under the floating title, it
+    // needs its own bottom line (only when a source bar exists).
+    if (sourcesNav) root.classList.toggle("mkadoc-scrolled", y >= sourcesHeight);
     if (!topbar || !h1) {
       setBrand(siteTitle);
       return;
@@ -271,7 +232,7 @@ async function readFirstSourceChromeCss(cfg) {
 }
 
 /**
- * Core site chrome: section tabs from `sources` + `#mkadoc-chrome-body` for plugins.
+ * Core site chrome: topbar + plugin fragments (tabs, sidebar) below it.
  * CSS: always `chrome-default.css`, then optional first-source `_chrome.adoc` (`[mkadoc-css]`).
  * JS: always package `CHROME_JS` → `/styles/chrome.js`.
  * Logo: package default `/styles/default-logo.svg`, overridden by first-source

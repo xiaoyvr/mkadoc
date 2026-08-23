@@ -1,11 +1,17 @@
 = Writing mkadoc plugins
 
-This guide is for authors of `mkadoc:*` plugins.
+This guide is for authors of mkadoc plugins.
 You receive a **plugin host** in each hook — that is the only API you call.
-Types live in `src/plugin/contract.js` (`MkadocPluginHost`, `MkadocPluginFactory`).
+Canonical types live in the `@mkadoc/plugin-host` package (`MkadocPluginHost`, `MkadocPluginFactory`).
 
-Today only built-in locators listed in `src/plugin/locators.js` can be enabled from config.
-Use the existing builtins as the reference implementations under `src/builtins/`.
+Plugins are enabled from config by **locator**:
+
+* `mkadoc:<name>` — built-in factories shipped with mkadoc (allow-listed)
+* `file:./path/to/plugin` (or `./path`, absolute paths) — **external** local-folder plugins (installed into `.mkadoc/plugins/` on first use)
+* registry specs (`name@range`), `git:…`, `github:user/repo`, `https://…` tarballs — accepted by the config schema, not implemented yet
+
+Use the builtins under `src/builtins/` as reference implementations, and
+`apps/mkadoc-plugin-kroki` as the reference *external* plugin.
 
 == What you can extend
 
@@ -15,23 +21,23 @@ Use the existing builtins as the reference implementations under `src/builtins/`
 
 | Asciidoctor conversion | `registerExtension` + `addAttributes` in `setup` (blocks, macros, highlighters, …)
 | Generated CSS / JS on every page | Write files under `host.config.output`, then `contributeHead({ links, scripts })`
-| UI below the site topbar | `contributeChromeBody(html)` — HTML is inserted into `#mkadoc-chrome-body`
+| UI below the site topbar | `contributeChromeBody(html)` — HTML appended below the topbar, in plugin load order
 | Rebuild sensitivity | `registerSiteWideDep` (rebuild every page), `registerClassifier` (force **full**), or `registerAssetPrefix` (**assets** mode)
 | Health checks | `check(host)` → `{ ok, message? }` for `mkadoc check`
-| On-disk cache | `cacheDir(name)` under `.cache/`
+| On-disk cache | `cacheDir(name)` under `.mkadoc/`
 |===
 
 == What you cannot extend (core-owned)
 
-* **Topbar / section tabs** — built from `sources` by core. You do not replace or rewrite the topbar markup.
-* **Topbar CSS/JS files** — core always writes `/styles/chrome.css` and `/styles/chrome.js`. Do not write those paths from a plugin (you would fight core on every build). Site authors can *override styles* by adding `[mkadoc-css]` in the first source’s `_chrome.adoc` (core appends that after package defaults). Topbar JS is not customizable. Ship plugin assets under your own paths (e.g. `/styles/my.css`).
-* **Page HTML body** — the article is Asciidoctor’s convert output. `#mkadoc-chrome-body` is only for shared site UI that appears on every page (for example a left sidebar), not for the article itself.
-* **Config schema / CLI / unknown locators** — plugins are registered only via known `mkadoc:*` locators and factory options you validate yourself.
+* **Topbar / logo / brand** — the sticky topbar with site logo + title is core-owned; you do not replace or rewrite it. Everything below it comes from plugins via `host.contributeChromeBody` (the built-in `mkadoc:nav` is the reference implementation).
+* **Topbar CSS/JS files** — core always writes `/styles/chrome.css` and `/styles/chrome.js`. Do not write those paths from a plugin (you would fight core on every build). Site authors can *override styles* by adding `[mkadoc-css]` in the first source’s `_chrome.adoc` (core appends that after package defaults, so it also wins over plugin assets like `/styles/tabs.css`). Topbar JS is not customizable. Ship plugin assets under your own paths (e.g. `/styles/my.css`).
+* **Page HTML body** — the article is Asciidoctor’s convert output. `contributeChromeBody` is only for shared site UI that appears on every page (for example a left sidebar), not for the article itself.
+* **Config schema / CLI / unknown locators** — plugins are registered via known `mkadoc:*` locators or valid package specs (`npm-package-arg` grammar); factory options you validate yourself.
 * **Build orchestration** — core decides `full` / `incremental` / `assets` / `noop` and assembles the shared page chrome/head. You only influence rebuilds via `registerSiteWideDep` / `registerClassifier` / `registerAssetPrefix` (see below). You do not take over writing the topbar/header HTML or flushing head tags — use `contributeChromeBody` and `contributeHead` instead.
 
 == Plugin shape
 
-Export a factory: `(options?) => plugin`.
+Export a factory: `(options, host) => plugin` (may be async).
 
 Validate `options` in the factory (Zod + `parsePluginOptions`). Reject unknown keys.
 
@@ -68,6 +74,15 @@ Every hook receives the same host object.
 
 `host.registerExtension(fn)`::
 Call `fn(registry)` to register Asciidoctor.js extensions. Used by diagram / syntax plugins.
+Never import `@asciidoctor/core` yourself — the registry is handed over; using a second
+instance would break registration.
+
+`host.import(specifier)`::
+Resolve + import a module from **mkadoc's own dependencies** (single shared instance).
+Use this for shared libraries instead of declaring them as plugin deps:
+`const { z } = await host.import('zod')`. Anchored at mkadoc, so plugins never ship
+duplicate copies of shared stateful/stateless libs. Only imports that mkadoc itself
+depends on are resolvable.
 
 `host.addAttributes(attrs)`::
 Merge document attributes applied on every convert (e.g. `source-highlighter`, `kroki-server-url`, `icons`).
@@ -88,20 +103,19 @@ Core always emits:
 
 ----
 <header id="mkadoc-topbar" class="mkadoc-topbar">…</header>
-<nav class="mkadoc-tabs">…</nav>
-<div id="mkadoc-chrome-body" class="mkadoc-chrome-body"></div>
+<!-- plugin chrome fragments follow, in plugin load order -->
 ----
 
 `host.contributeChromeBody(html)`::
-Append a HTML fragment inside `#mkadoc-chrome-body`. Fragments from multiple plugins are concatenated in **plugin load order** (config key order).
+Append a HTML fragment below the topbar. Fragments from multiple plugins are concatenated in **plugin load order** (config key order) — each plugin owns its own element (e.g. `<nav class="mkadoc-sources">`, `<aside id="…">`).
 
 Own your markup and CSS. Typical pattern for a fixed side column (e.g. sidebar):
 
 * Contribute an `<aside id="…">` (stable id).
 * Ship CSS that positions it (often `position: fixed`) and adjusts `body` padding with `:has(#your-id)`.
-* Do not assume another plugin’s sidebar exists unless you document that dependency.
+* Do not assume another plugin’s fragment exists unless you document that dependency.
 
-The article itself is **not** inside `#mkadoc-chrome-body`; it stays in the normal page body from Asciidoctor.
+The article itself stays in the normal page body from Asciidoctor.
 See xref:chrome-design.adoc[Site chrome design] for why.
 
 === Rebuild hints
@@ -125,16 +139,25 @@ Example: `mkadoc:shiki` registers the directory of its generated CSS so a CSS-on
 === Filesystem helpers
 
 `host.ensureDir(relOrAbs)`:: Ensure a directory exists; returns absolute path.
-`host.cacheDir(name)`:: Ensure `.cache/<name>/` under the project; returns absolute path.
+`host.cacheDir(name)`:: Ensure `.mkadoc/<name>/` under the project; returns absolute path.
 `host.relToRoot(p)`:: Normalize a path to repo-relative form.
 
 == Conventions
 
 === Locator and options
 
-* Locator form: `mkadoc:<name>` (must be allow-listed in `locators.js` today).
-* Enable in config as `plugins: { "mkadoc:you": { … } }` or `{}` for defaults.
-* Validate options in the factory; do not scrape undeclared keys from `host.config.plugins` inside hooks.
+* Built-in locators: `mkadoc:<name>` (allow-listed in `src/plugin/locators.js`).
+* External locators: `file:./path`, `./path`, or absolute paths — parsed with
+  `npm-package-arg` (the same spec grammar pacote/npm use). Relative paths resolve
+  against the project root.
+* External plugins are installed into `.mkadoc/plugins/<name>/` on first load:
+  source is copied (fingerprinted — edits re-copy), runtime deps materialized with
+  arborist (`ignoreScripts`, `--omit=dev`, cache under `.mkadoc/cache`), entry
+  resolved from `package.json` `main`/`exports` else `index.js`.
+* Enable in config as `plugins: { "file:./plugins/you": { … } }`.
+* Validate options in the factory; shared libraries come from `host.import`
+  (e.g. `zod`) instead of being declared as plugin deps. Do not scrape undeclared
+  keys from `host.config.plugins` inside hooks.
 
 === Assets
 
@@ -149,7 +172,7 @@ These are site conventions your plugin may *read*; they are not host APIs:
 * First source’s `_chrome.adoc` — optional `[mkadoc-css]` overrides for **core topbar** styles (core reads this; not your job unless you document a parallel file).
 * Per-source `_nav.adoc` — used by `mkadoc:nav` for link lists; first source may also carry `[mkadoc-css]` nav overrides.
 * Use `----` (listing) delimiters for `[mkadoc-css]` (`////` comment blocks are not visible to the parser).
-* Files starting with `_` are partials (not pages). Article `include::` edges are tracked in the core dependency graph (`.cache/deps.json`); editing an included partial rebuilds only the pages that include it. Site-wide deps (`index.adoc`, logo overrides, `_nav.adoc` via `registerSiteWideDep`) rebuild every page. `_chrome.adoc` is CSS-only (assets mode). An unused partial with no known dependents is **`noop`**. Config still forces a **full** rebuild.
+* Files starting with `_` are partials (not pages). Article `include::` edges are tracked in the core dependency graph (`.cache/deps.json`); editing an included partial rebuilds only the pages that include it. Site-wide deps (`index.adoc`, logo overrides, `_nav.adoc` via `registerSiteWideDep`) rebuild every page. `_chrome.adoc` is CSS-only (assets mode). An unused partial with no known dependents is **`noop`**. Config still forces a **full** rebuild. The dependency graph lives at `.mkadoc/deps.json`.
 
 === `contributeChrome` modes
 
@@ -166,8 +189,10 @@ These are site conventions your plugin may *read*; they are not host APIs:
 == Minimal sketch
 [source,js]
 ----
-export default function myPlugin(raw = {}) {
-  parsePluginOptions('mkadoc:my', OptionsSchema, raw)
+export default async function myPlugin(raw = {}, host) {
+  const { z } = await host.import('zod')
+  const OptionsSchema = z.object({}).strict()
+  const options = OptionsSchema.parse(raw)
 
   return {
     name: 'my',
@@ -193,4 +218,4 @@ export default function myPlugin(raw = {}) {
 }
 ----
 
-Study `src/builtins/nav.js`, `shiki.js`, and `kroki-diagram.js` for complete patterns (options parsing, `resolveSiteAsset`, classifiers, extensions).
+Study `src/builtins/nav.js` and `shiki.js` for built-in patterns (options parsing, `resolveSiteAsset`, classifiers, extensions), and `apps/mkadoc-plugin-kroki` for the external-plugin pattern (`host.import('zod')`, self-contained package, its own test suite).

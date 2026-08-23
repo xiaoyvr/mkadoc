@@ -311,12 +311,13 @@ describe('parseProjectConfig (zod schema)', () => {
       plugins: {
         'mkadoc:nav': {},
         'mkadoc:shiki': { theme: 'nord', thme: 'typo' },
-        'mkadoc:kroki-diagram': { server_url: 'http://127.0.0.1:8080' },
+        'file:./plugins/x': { server_url: 'http://127.0.0.1:8080' },
       },
     })
     assert.deepEqual(cfg.plugins['mkadoc:nav'], {})
     assert.equal(cfg.plugins['mkadoc:shiki'].theme, 'nord')
     assert.equal(cfg.plugins['mkadoc:shiki'].thme, 'typo')
+    assert.deepEqual(cfg.plugins['file:./plugins/x'], { server_url: 'http://127.0.0.1:8080' })
   })
 
   it('loadConfig surfaces schema errors from literate configs', async () => {

@@ -26,7 +26,7 @@ Some conventions:
 * **Site root**: `serve` redirects `/` to the *first* source's index page
 * **Tab title**: `:tab:` on `{source}/index.adoc`, else doctitle, else last mount segment, else `Docs`
 * **Pages**: normal `.adoc` files; names starting with `_` are ignored
-* **Cache**: `.cache/` under repository root (not configurable — add it to `.gitignore`). Includes the include-dependency graph (`.cache/deps.json`) used for incremental rebuilds when an `include::` target changes.
+* **Cache**: `.mkadoc/` under repository root (not configurable — add it to `.gitignore`). Includes the include-dependency graph (`.mkadoc/deps.json`) used for incremental rebuilds when an `include::` target changes.
 * **Output**: HTML under `site/` by default, configurable with `output:`
 * **Includes**: `include::` edges are recorded at convert time. Editing an included partial rebuilds only the pages that depend on it. Site-wide chrome inputs (`index.adoc`, logo overrides, `_nav.adoc`) rebuild every page incrementally. `_chrome.adoc` only rewrites `/styles/chrome.css` (assets). An unused partial with no known dependents is a no-op. Config changes still force a full rebuild.
 
@@ -40,7 +40,7 @@ From a project with `mkadoc.adoc` and source trees:
 
 | `build` | Full rebuild of all sources.
 | `serve` | Full build, watch, serve `output/` with live reload.
-| `publish` | Delete `output` + `.cache/`, then full rebuild (for deployment).
+| `publish` | Delete `output` + `.mkadoc/`, then full rebuild (for deployment).
 | `check` | Verify source dirs and run enabled plugin health checks.
 |===
 
@@ -88,16 +88,17 @@ topbar linking to the first source's home (`…/index.html`).
 
 === Plugins
 
-Enable under `plugins:` with a `mkadoc:*` locator.
-For authoring plugins (host API, extension points, conventions), see xref:plugins.adoc[Writing mkadoc plugins].
+Enable under `plugins:` with a `mkadoc:*` built-in locator or an external
+`file:./path` locator (installed into `.mkadoc/plugins/` on first use — see
+xref:plugins.adoc[Writing mkadoc plugins]).
 
 [cols="1,3"]
 |===
 | Locator | Role
 
-| `mkadoc:nav` | Left sidebar under the topbar (`#mkadoc-chrome-body`): layout + link styles, panels from each source's `_nav.adoc`.
+| `mkadoc:nav` | Site navigation: level-1 **source bar** under the topbar (one link per source) + level-2 **article sidebar** (per-source lists from each `_nav.adoc`).
 | `mkadoc:shiki` | Build-time syntax highlighting for `[source]` blocks.
-| `mkadoc:kroki-diagram` | Diagram blocks via Kroki (`server_url` required).
+| `file:./apps/mkadoc-plugin-kroki` | Diagram blocks via Kroki (`server_url` required) — external plugin in this repo.
 |===
 
 Common options (defaults shown):
@@ -105,4 +106,15 @@ Common options (defaults shown):
 * `mkadoc:nav` — enable with `{}` (no options)
 * `mkadoc:shiki` — `theme: github-light-default`
 * `mkadoc:kroki-diagram` — `server_url: …` (required)
+
+
+
+[plantuml]
+----
+@startuml
+
+Bob -> Alice: Hello!
+
+@enduml
+----
 

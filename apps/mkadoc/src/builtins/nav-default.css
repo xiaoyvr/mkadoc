@@ -1,14 +1,18 @@
-/* mkadoc:nav — sidebar shell + content */
+/* mkadoc:nav — level-2 article sidebar */
 :root {
-  --mkadoc-sidebar-width: 16rem;
+  --mkadoc-articles-width: 16rem;
 }
 
-.mkadoc-sidebar {
+.mkadoc-articles {
   position: fixed;
-  top: calc(var(--mkadoc-topbar-height, 3rem) + var(--mkadoc-tabs-height, 2.5rem) - var(--mkadoc-scroll-offset, 0px));
+  top: calc(
+    var(--mkadoc-topbar-height, 3rem) +
+    var(--mkadoc-sources-height, 2.5rem) -
+    var(--mkadoc-scroll-offset, 0px)
+  );
   left: 0;
   bottom: 0;
-  width: var(--mkadoc-sidebar-width);
+  width: var(--mkadoc-articles-width);
   overflow: auto;
   padding: 1.25rem 1rem;
   background: #f8f8f7;
@@ -17,17 +21,17 @@
   z-index: 1000;
 }
 
-.mkadoc-tab-panel {
+.mkadoc-article-list {
   display: none;
 }
 
-.mkadoc-tab-panel.is-active {
+.mkadoc-article-list.is-active {
   display: block;
 }
 
-.mkadoc-sidebar h1,
-.mkadoc-sidebar h2,
-.mkadoc-sidebar h3 {
+.mkadoc-articles h1,
+.mkadoc-articles h2,
+.mkadoc-articles h3 {
   font-family: "Open Sans", "DejaVu Sans", sans-serif;
   font-weight: 600;
   color: rgba(0, 0, 0, 0.8);
@@ -35,18 +39,22 @@
   line-height: 1.25;
 }
 
-.mkadoc-sidebar h1 { font-size: 1.1rem; }
-.mkadoc-sidebar h2 {
+.mkadoc-articles h1 {
+  font-size: 1.1rem;
+}
+.mkadoc-articles h2 {
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: rgba(0, 0, 0, 0.55);
 }
 
-.mkadoc-sidebar .paragraph { margin: 0 0 0.75rem; }
+.mkadoc-articles .paragraph {
+  margin: 0 0 0.75rem;
+}
 
-.mkadoc-sidebar .ulist,
-.mkadoc-sidebar ul {
+.mkadoc-articles .ulist,
+.mkadoc-articles ul {
   list-style: none;
   list-style-type: none;
   margin: 0;
@@ -56,54 +64,56 @@
   line-height: 1.35;
 }
 
-.mkadoc-sidebar li {
+.mkadoc-articles li {
   list-style: none;
   list-style-type: none;
   margin: 0 0 0.35rem;
 }
-.mkadoc-sidebar li::marker {
+.mkadoc-articles li::marker {
   content: none;
 }
-.mkadoc-sidebar li > p {
+.mkadoc-articles li > p {
   margin: 0;
   padding: 0.2rem 0.4rem;
 }
-.mkadoc-sidebar ul ul { margin: 0.25rem 0 0.5rem 0.75rem; }
+.mkadoc-articles ul ul {
+  margin: 0.25rem 0 0.5rem 0.75rem;
+}
 
-.mkadoc-sidebar a {
+.mkadoc-articles a {
   color: rgba(0, 0, 0, 0.75);
   text-decoration: none;
   display: block;
   border-radius: 3px;
 }
 
-.mkadoc-sidebar a:hover,
-.mkadoc-sidebar a:focus {
+.mkadoc-articles a:hover,
+.mkadoc-articles a:focus {
   color: #2156a5;
   background: rgba(33, 86, 165, 0.08);
 }
 
-.mkadoc-sidebar a.current {
+.mkadoc-articles a.current {
   color: #ba3925;
   font-weight: 600;
   background: rgba(186, 57, 37, 0.08);
 }
 
 @media screen and (min-width: 768px) {
-  body:has(#mkadoc-sidebar) {
-    padding-left: var(--mkadoc-sidebar-width);
+  body:has(#mkadoc-articles) {
+    padding-left: var(--mkadoc-articles-width);
   }
 }
 
 @media screen and (max-width: 767px) {
-  .mkadoc-sidebar {
+  .mkadoc-articles {
     position: static;
     width: auto;
     border-right: 0;
     border-bottom: 1px solid #e0e0dc;
   }
 
-  body:has(#mkadoc-sidebar) {
+  body:has(#mkadoc-articles) {
     padding-left: 0;
   }
 }

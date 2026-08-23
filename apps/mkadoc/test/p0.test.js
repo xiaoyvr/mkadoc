@@ -43,7 +43,7 @@ describe('P0: publish clean', () => {
       await build(cfg, { forceFull: true })
 
       const stale = path.join(root, 'site/stale-orphan.html')
-      const staleCache = path.join(root, '.cache/junk.txt')
+      const staleCache = path.join(root, '.mkadoc/junk.txt')
       fs.writeFileSync(stale, '<p>stale</p>\n')
       fs.mkdirSync(path.dirname(staleCache), { recursive: true })
       fs.writeFileSync(staleCache, 'junk\n')
@@ -51,7 +51,7 @@ describe('P0: publish clean', () => {
       await build(cfg, { forceFull: true, clean: true })
 
       assert.equal(exists(root, 'site/stale-orphan.html'), false)
-      assert.equal(exists(root, '.cache/junk.txt'), false)
+      assert.equal(exists(root, '.mkadoc/junk.txt'), false)
       assert.ok(exists(root, 'site/docs/index.html'))
       assert.ok(exists(root, 'site/docs/guide.html'))
     })

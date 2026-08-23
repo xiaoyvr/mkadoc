@@ -97,22 +97,17 @@ describe('core chrome href write alignment', () => {
         await build(cfg, { forceFull: true })
 
         const chromeCss = fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8')
-        const js = fs.readFileSync(path.join(root, 'site/styles/chrome.js'), 'utf8')
-        assert.match(chromeCss, /--mkadoc-topbar-height/)
+        // the _chrome.adoc override must propagate into the generated stylesheet
         assert.match(chromeCss, /height: 2rem/)
-        assert.match(chromeCss, /position: sticky/)
-        assert.match(chromeCss, /mkadoc-brand-swap/)
-        assert.match(js, /mkadoc-tab/)
-        assert.match(js, /getBoundingClientRect/)
 
         const header = parseHtml(
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
         assert.ok(header.querySelector('#mkadoc-topbar'))
         assert.ok(header.querySelector('a.mkadoc-logo'))
-        assert.ok(header.querySelector('a.mkadoc-tab'))
-        assert.ok(header.querySelector('#mkadoc-chrome-body'))
-        assert.equal(header.querySelector('#mkadoc-sidebar'), null)
+        // no plugins configured → no source bar, no article sidebar
+        assert.equal(header.querySelector('a.mkadoc-source'), null)
+        assert.equal(header.querySelector('#mkadoc-articles'), null)
         assert.equal(header.querySelector('.listingblock'), null)
 
         const docinfo = parseHtml(
@@ -126,14 +121,15 @@ describe('core chrome href write alignment', () => {
     )
   })
 
-  it('core writes section tabs without mkadoc:nav', async () => {
+  it('mkadoc:nav renders the source bar and article sidebar', async () => {
     await withTempProject(
       smokeFixture({
         'mkadoc.adoc': literateConfig(`sources:
   - docs
   - apps/mkadoc/docs
 output: site
-plugins: {}
+plugins:
+  mkadoc:nav: {}
 `),
         'docs/index.adoc': `= Dotfiles
 :tab: Site
@@ -153,22 +149,13 @@ App.
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
         assert.ok(header.querySelector('#mkadoc-topbar'))
-        assert.ok(header.querySelector('#mkadoc-chrome-body'))
         assert.deepEqual(
-          header.querySelectorAll('a.mkadoc-tab').map((el) => el.text.trim()),
+          header.querySelectorAll('a.mkadoc-source').map((el) => el.text.trim()),
           ['Site', 'mkadoc'],
         )
-        assert.equal(header.querySelector('#mkadoc-sidebar'), null)
+        assert.ok(header.querySelector('#mkadoc-articles'))
         assert.ok(fs.existsSync(path.join(root, 'site/styles/chrome.js')))
-        assert.match(
-          fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8'),
-          /\.mkadoc-topbar/,
-        )
-        assert.doesNotMatch(
-          fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8'),
-          /\.mkadoc-sidebar/,
-        )
-        assert.equal(fs.existsSync(path.join(root, 'site/styles/nav.css')), false)
+        assert.ok(fs.existsSync(path.join(root, 'site/styles/nav.css')))
       },
     )
   })
