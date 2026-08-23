@@ -1,64 +1,12 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { load } from '@asciidoctor/core'
-import { relToRoot, resolveSiteAsset, writeIfChanged } from './fs-utils.js'
-import { chromePathForSource } from './sources.js'
-
-const CSS_HREF = '/styles/chrome.css'
-const JS_HREF = '/styles/chrome.js'
-const DEFAULT_LOGO_HREF = '/styles/default-logo.svg'
-const DEFAULT_LOGO_SRC = fileURLToPath(new URL('./assets/default-logo.svg', import.meta.url))
-/** Prefer SVG, then PNG. First source only. */
-export const LOGO_OVERRIDE_NAMES = Object.freeze(['logo.svg', 'logo.png'])
-
-/** Always applied base chrome styles; first-source `[mkadoc-css]` appends overrides. */
-const DEFAULT_CHROME_CSS = fs
-  .readFileSync(fileURLToPath(new URL('./chrome-default.css', import.meta.url)), 'utf8')
-  .trim()
-
-/**
- * Site logo: first-source `_assets/logo.svg` or `logo.png`, else package default.
- * @param {{ root: string, sources: import('./sources.js').MkadocSource[] }} cfg
- */
-export function resolveLogoHref(cfg) {
-  const first = cfg.sources[0]
-  if (!first) return DEFAULT_LOGO_HREF
-  for (const name of LOGO_OVERRIDE_NAMES) {
-    const rel = `${first.path}/_assets/${name}`
-    if (fs.existsSync(path.join(cfg.root, rel))) {
-      return `${first.mount}/_assets/${name}`
-    }
-  }
-  return DEFAULT_LOGO_HREF
-}
-
-/** True when `relPath` is the first source's logo override file. */
-export function isFirstSourceLogoPath(sources, relPath) {
-  const first = sources[0]
-  if (!first) return false
-  return LOGO_OVERRIDE_NAMES.some((name) => relPath === `${first.path}/_assets/${name}`)
-}
-
-/**
- * Core site-wide deps: every page embeds tab chrome from each `index.adoc` and
- * the logo href from the first-source override paths.
- * @param {import('./config.js').MkadocConfig} cfg
- * @param {import('./deps.js').DependencyGraph} deps
- */
-export function registerCoreSiteWideDeps(cfg, deps) {
-  const first = cfg.sources[0]
-  if (!first) return
-  for (const name of LOGO_OVERRIDE_NAMES) {
-    deps.addSiteWide(`${first.path}/_assets/${name}`)
-  }
-}
+import { relToRoot } from './fs-utils.js'
 
 /**
  * Split AsciiDoc into markup vs `[mkadoc-css]` blocks using the Asciidoctor
  * parser. Blocks styled `mkadoc-css` (delimiters `----`, `++++`, `....`) are
  * extracted; `////` comment blocks are not visible to the parser and cannot
- * be used.
+ * be used. Shared by the `mkadoc:topbar` (`_chrome.adoc`) and `mkadoc:nav`
+ * (`_nav.adoc`) builtins.
  * @param {string} sourceText
  * @returns {Promise<{ css: string, markupSource: string }>}
  */
@@ -95,197 +43,31 @@ export async function extractMkadocCss(sourceText) {
   }
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-function escapeHtmlAttr(value) {
-  return escapeHtml(value)
-}
-
-function tabHref(source) {
-  return `${source.mount}/index.html`
-}
-
 /**
- * Core chrome: topbar (logo + brand) followed by plugin fragments
- * (`host.contributeChromeBody`, e.g. source bar, article sidebar) in load order.
- * @param {import('./sources.js').MkadocSource[]} sources
- * @param {string[]} bodyParts HTML from host.contributeChromeBody
- * @param {{ logoSrc?: string }} [opts]
- */
-/**
- * Core chrome: topbar (logo + brand) followed by plugin fragments
- * (`host.contributeChromeBody`, e.g. tabs, sidebar) in load order.
- * @param {import('./sources.js').MkadocSource[]} sources
- * @param {string[]} bodyParts HTML from host.contributeChromeBody
- * @param {{ logoSrc?: string }} [opts]
- */
-export function buildChromeHtml(sources, bodyParts = [], { logoSrc = DEFAULT_LOGO_HREF } = {}) {
-  const first = sources[0]
-  const homeHref = first ? tabHref(first) : '/'
-  const brandRaw = first?.description || first?.title || 'Docs'
-  const brand = escapeHtml(brandRaw)
-  const body = bodyParts.filter(Boolean).join('\n')
-  const logo = `<a class="mkadoc-logo" href="${escapeHtmlAttr(homeHref)}" aria-label="Home"><img src="${escapeHtmlAttr(logoSrc)}" alt=""></a>`
-
-  return `<header id="mkadoc-topbar" class="mkadoc-topbar">
-${logo}
-<div class="mkadoc-brand" data-site-title="${escapeHtmlAttr(brandRaw)}"><p>${brand}</p></div>
-</header>
-${body}
-`
-}
-
-/** Tab active-state + brand swap; exposes `window.mkadocMountMatch` for plugin
- * assets (e.g. mkadoc:nav panel activation) to derive the active mount from the URL. */
-const CHROME_JS = `(function () {
-  // Shared mount matcher: longest data-mount that matches the current path.
-  // Exposed for plugin assets; they run after this deferred script in the head
-  // (plugins contribute head assets first), so consumers retry at DOMContentLoaded.
-  window.mkadocMountMatch = (function () {
-    var path = location.pathname;
-    if (path.endsWith("/")) path += "index.html";
-    return function (mount) {
-      var m = mount || "/";
-      var prefix = m.endsWith("/") ? m : m + "/";
-      if (path === m || path === m + ".html") return m.length;
-      if (path.startsWith(prefix)) return m.length;
-      return -1;
-    };
-  })();
-
-  // The sticky topbar keeps the site title floating; swap it to the document
-  // title once the article h1 scrolls under the bar. The source bar (owned by
-  // the mkadoc:nav plugin) scrolling away gets its own bottom line.
-  var root = document.documentElement;
-  var topbar = document.getElementById("mkadoc-topbar");
-  var sourcesNav = document.querySelector(".mkadoc-sources");
-  var sourcesHeight = sourcesNav ? sourcesNav.offsetHeight : 0;
-  var brand = document.querySelector(".mkadoc-brand");
-  var brandEl = brand ? brand.querySelector("p") : null;
-  var siteTitle = (brand ? brand.getAttribute("data-site-title") : "") || "";
-  var h1 = document.querySelector("#header h1");
-  var docTitle = h1 ? String(h1.textContent || "").trim() : "";
-  var ticking = false;
-
-  function setBrand(text) {
-    if (!brandEl || brandEl.textContent === text) return;
-    brandEl.textContent = text;
-    brandEl.classList.remove("mkadoc-brand-swap");
-    void brandEl.offsetWidth;
-    brandEl.classList.add("mkadoc-brand-swap");
-  }
-
-  function updateBrand() {
-    ticking = false;
-    var y = window.scrollY || document.documentElement.scrollTop || 0;
-    // Once the source bar has fully scrolled under the floating title, it
-    // needs its own bottom line (only when a source bar exists).
-    if (sourcesNav) root.classList.toggle("mkadoc-scrolled", y >= sourcesHeight);
-    if (!topbar || !h1) {
-      setBrand(siteTitle);
-      return;
-    }
-    var past = h1.getBoundingClientRect().bottom <= topbar.getBoundingClientRect().bottom;
-    setBrand(past && docTitle ? docTitle : siteTitle);
-  }
-
-  function onScroll() {
-    if (ticking) return;
-    ticking = true;
-    window.requestAnimationFrame(updateBrand);
-  }
-
-  window.addEventListener("scroll", onScroll, { passive: true });
-  window.addEventListener("resize", onScroll);
-  updateBrand();
-})();
-`
-
-function readFirstSourceFile(cfg, relPath) {
-  const abs = path.join(cfg.root, relPath)
-  if (!fs.existsSync(abs)) return null
-  return fs.readFileSync(abs, 'utf8')
-}
-
-/**
- * Package chrome defaults always apply; first source may append topbar overrides.
- * Below-topbar UI/CSS is owned by plugins via contributeChromeBody.
- */
-async function readFirstSourceChromeCss(cfg) {
-  const cssParts = [DEFAULT_CHROME_CSS]
-  const first = cfg.sources[0]
-  if (!first) return cssParts.join('\n\n').trim()
-
-  const chromeText = readFirstSourceFile(cfg, chromePathForSource(first))
-  const chrome = chromeText ? await extractMkadocCss(chromeText) : { css: '' }
-  if (chrome.css) {
-    cssParts.push(`/* Overrides from first source _chrome.adoc */\n${chrome.css}`)
-  }
-
-  return cssParts.join('\n\n').trim()
-}
-
-/**
- * Core site chrome: topbar + plugin fragments (tabs, sidebar) below it.
- * CSS: always `chrome-default.css`, then optional first-source `_chrome.adoc` (`[mkadoc-css]`).
- * JS: always package `CHROME_JS` → `/styles/chrome.js`.
- * Logo: package default `/styles/default-logo.svg`, overridden by first-source
- * `_assets/logo.svg` or `logo.png` (no config); links to first-source home.
+ * Site chrome assembly. Nothing here is core-owned markup: the topbar
+ * (`mkadoc:topbar`), source bar + article sidebar (`mkadoc:nav`), and any
+ * other fragments are contributed via `host.contributeChromeBody`. Core only
+ * concatenates them into the shared `docinfo-header` and marks the header
+ * provided so pages embed it.
+ *
+ * `_chrome.adoc` edits (site topbar CSS overrides) are classified as
+ * assets-only by decide-mode; the CSS rewrite itself belongs to mkadoc:topbar.
  *
  * @param {import('./plugin/contract.js').MkadocBuildHost} host
  * @param {{ mode: string, paths?: string[], deps?: import('./deps.js').DependencyGraph | null }} ctx
  */
 export async function writeSiteChrome(host, { mode, paths = [], deps = null }) {
-  if (!host.config.sources.length) return
+  if (mode === 'assets') return
 
-  const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
-  const jsAsset = resolveSiteAsset(host.root, host.config.output, JS_HREF)
   const relPaths = paths.map((p) => relToRoot(p, host.root))
-
-  const chromeCssTouched = relPaths.some((p) =>
-    host.config.sources.some((source) => chromePathForSource(source) === p),
-  )
   const siteWideTouched = relPaths.some((p) => deps?.isSiteWide(p))
 
-  // `_chrome.adoc` only changes the linked stylesheet — rewrite CSS without a full
-  // header/page rebuild when this is an assets-only pass.
-  if (mode === 'assets') {
-    if (chromeCssTouched) {
-      const css = await readFirstSourceChromeCss(host.config)
-      writeIfChanged(cssAsset.absPath, `${css}\n`)
-    }
-    return
-  }
-
-  const defaultLogoAsset = resolveSiteAsset(host.root, host.config.output, DEFAULT_LOGO_HREF)
-  const needChrome =
-    mode === 'full' ||
-    siteWideTouched ||
-    chromeCssTouched ||
-    !host.headerDocinfoExists() ||
-    !fs.existsSync(cssAsset.absPath) ||
-    !fs.existsSync(jsAsset.absPath) ||
-    !fs.existsSync(defaultLogoAsset.absPath)
+  const needChrome = mode === 'full' || siteWideTouched || !host.headerDocinfoExists()
 
   if (needChrome) {
-    const css = await readFirstSourceChromeCss(host.config)
-    const logoSrc = resolveLogoHref(host.config)
-    const chrome = buildChromeHtml(host.config.sources, host.chromeBody, { logoSrc })
-    writeIfChanged(cssAsset.absPath, `${css}\n`)
-    writeIfChanged(jsAsset.absPath, `${CHROME_JS}\n`)
-    writeIfChanged(defaultLogoAsset.absPath, fs.readFileSync(DEFAULT_LOGO_SRC, 'utf8'))
-    await host.writeHeaderDocinfo(chrome)
+    const body = host.chromeBody.filter(Boolean).join('\n').trim()
+    await host.writeHeaderDocinfo(`${body}\n`)
   }
 
-  host.contributeHead({
-    links: [{ rel: 'stylesheet', href: cssAsset.href }],
-    scripts: [{ src: jsAsset.href, defer: true }],
-  })
   host.markHeaderProvided()
 }

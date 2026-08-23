@@ -52,9 +52,6 @@ plugins:
         assert.match(navCss, /\.mkadoc-articles a/)
         assert.match(navCss, /#123456/)
 
-        const chromeCss = fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8')
-        assert.doesNotMatch(chromeCss, /#123456/)
-
         const header = parseHtml(
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )

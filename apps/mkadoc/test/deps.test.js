@@ -212,15 +212,14 @@ describe('decideMode + dependency graph', () => {
     })
   })
 
-  it('expands logo override as site-wide to all live pages', async () => {
+  it('expands logo override as site-wide to all live pages (via mkadoc:topbar)', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.adoc', root)
       const deps = new DependencyGraph(root)
-      const { registerCoreSiteWideDeps } = await import('../src/chrome.js')
-      registerCoreSiteWideDeps(cfg, deps)
+      const { plugin, build: host } = createHosts(cfg, { deps })
+      await loadPlugins({ 'mkadoc:topbar': {} }, plugin)
       deps.setPageIncludes('docs/guide.adoc', [])
       deps.setPageIncludes('docs/index.adoc', [])
-      const { build: host } = createHosts(cfg, { deps })
 
       const decided = decideMode(cfg, host, {
         paths: ['docs/_assets/logo.svg'],
@@ -381,9 +380,15 @@ include::parts/_p.adoc[]
     })
   })
 
-  it('_chrome.adoc edit rewrites CSS in assets mode without reconverting pages', async () => {
+  it('_chrome.adoc edit rewrites topbar CSS in assets mode without reconverting pages', async () => {
     await withTempProject(
       smokeFixture({
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
+output: site
+plugins:
+  mkadoc:topbar: {}
+`),
         'docs/_chrome.adoc': `
 [mkadoc-css]
 ----
@@ -394,7 +399,7 @@ include::parts/_p.adoc[]
       async (root) => {
         const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
-        assert.match(read(root, 'site/styles/chrome.css'), /height: 2rem/)
+        assert.match(read(root, 'site/styles/topbar.css'), /height: 2rem/)
 
         const indexBefore = read(root, 'site/docs/index.html')
         fs.writeFileSync(
@@ -408,7 +413,7 @@ include::parts/_p.adoc[]
         )
         const mode = await build(cfg, { paths: ['docs/_chrome.adoc'] })
         assert.equal(mode, 'assets')
-        assert.match(read(root, 'site/styles/chrome.css'), /height: 4rem/)
+        assert.match(read(root, 'site/styles/topbar.css'), /height: 4rem/)
         assert.equal(read(root, 'site/docs/index.html'), indexBefore)
       },
     )

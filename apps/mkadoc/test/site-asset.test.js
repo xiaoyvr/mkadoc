@@ -26,26 +26,43 @@ describe('resolveSiteAsset', () => {
   })
 })
 
-describe('core site logo', () => {
+describe('topbar site logo', () => {
   it('uses package default logo linked to first-source home', async () => {
-    await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
-      await build(cfg, { forceFull: true })
+    await withTempProject(
+      smokeFixture({
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
+output: site
+plugins:
+  mkadoc:topbar: {}
+`),
+      }),
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.adoc', root)
+        await build(cfg, { forceFull: true })
 
-      const header = parseHtml(
-        fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-      )
-      const logo = header.querySelector('a.mkadoc-logo')
-      assert.ok(logo)
-      assert.equal(logo.getAttribute('href'), '/docs/index.html')
-      assert.equal(logo.querySelector('img')?.getAttribute('src'), '/styles/default-logo.svg')
-      assert.ok(fs.existsSync(path.join(root, 'site/styles/default-logo.svg')))
-    })
+        const header = parseHtml(
+          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
+        )
+        const logo = header.querySelector('a.mkadoc-logo')
+        assert.ok(logo)
+        assert.equal(logo.getAttribute('href'), '/docs/index.html')
+        assert.equal(logo.querySelector('img')?.getAttribute('src'), '/styles/default-logo.svg')
+        assert.ok(fs.existsSync(path.join(root, 'site/styles/default-logo.svg')))
+      },
+    )
   })
 
   it('overrides with first-source _assets/logo.svg then logo.png', async () => {
+    const topbarConfig = `sources:
+  - docs
+output: site
+plugins:
+  mkadoc:topbar: {}
+`
     await withTempProject(
       smokeFixture({
+        'mkadoc.adoc': literateConfig(topbarConfig),
         'docs/_assets/logo.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
         'docs/_assets/logo.png': 'PNG',
       }),
@@ -64,6 +81,7 @@ describe('core site logo', () => {
 
     await withTempProject(
       smokeFixture({
+        'mkadoc.adoc': literateConfig(topbarConfig),
         'docs/_assets/logo.png': 'PNG',
       }),
       async (root) => {
@@ -82,9 +100,15 @@ describe('core site logo', () => {
 })
 
 describe('core chrome href write alignment', () => {
-  it('core chrome writes CSS/JS under /styles/chrome.*', async () => {
+  it('mkadoc:topbar writes /styles/topbar.* and propagates _chrome.adoc overrides', async () => {
     await withTempProject(
       smokeFixture({
+        'mkadoc.adoc': literateConfig(`sources:
+  - docs
+output: site
+plugins:
+  mkadoc:topbar: {}
+`),
         'docs/_chrome.adoc': `
 [mkadoc-css]
 ----
@@ -96,16 +120,16 @@ describe('core chrome href write alignment', () => {
         const cfg = await loadConfig('mkadoc.adoc', root)
         await build(cfg, { forceFull: true })
 
-        const chromeCss = fs.readFileSync(path.join(root, 'site/styles/chrome.css'), 'utf8')
+        const topbarCss = fs.readFileSync(path.join(root, 'site/styles/topbar.css'), 'utf8')
         // the _chrome.adoc override must propagate into the generated stylesheet
-        assert.match(chromeCss, /height: 2rem/)
+        assert.match(topbarCss, /height: 2rem/)
 
         const header = parseHtml(
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
         )
         assert.ok(header.querySelector('#mkadoc-topbar'))
         assert.ok(header.querySelector('a.mkadoc-logo'))
-        // no plugins configured → no source bar, no article sidebar
+        // no nav plugin → no source bar, no article sidebar
         assert.equal(header.querySelector('a.mkadoc-source'), null)
         assert.equal(header.querySelector('#mkadoc-articles'), null)
         assert.equal(header.querySelector('.listingblock'), null)
@@ -113,9 +137,10 @@ describe('core chrome href write alignment', () => {
         const docinfo = parseHtml(
           fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8'),
         )
-        assert.ok(docinfo.querySelector('link[href="/styles/chrome.css"]'))
-        assert.ok(docinfo.querySelector('script[src="/styles/chrome.js"]'))
-        assert.equal(fs.existsSync(path.join(root, 'site/styles/nav.css')), false)
+        assert.ok(docinfo.querySelector('link[href="/styles/topbar.css"]'))
+        assert.ok(docinfo.querySelector('script[src="/styles/topbar.js"]'))
+        // core no longer ships its own chrome assets
+        assert.equal(fs.existsSync(path.join(root, 'site/styles/chrome.css')), false)
         assert.ok(fs.existsSync(path.join(root, 'site/styles/default-logo.svg')))
       },
     )
@@ -129,6 +154,7 @@ describe('core chrome href write alignment', () => {
   - apps/mkadoc/docs
 output: site
 plugins:
+  mkadoc:topbar: {}
   mkadoc:nav: {}
 `),
         'docs/index.adoc': `= Dotfiles
@@ -154,7 +180,7 @@ App.
           ['Site', 'mkadoc'],
         )
         assert.ok(header.querySelector('#mkadoc-articles'))
-        assert.ok(fs.existsSync(path.join(root, 'site/styles/chrome.js')))
+        assert.ok(fs.existsSync(path.join(root, 'site/styles/topbar.js')))
         assert.ok(fs.existsSync(path.join(root, 'site/styles/nav.css')))
       },
     )

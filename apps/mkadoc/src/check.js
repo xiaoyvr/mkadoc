@@ -1,6 +1,5 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { registerCoreSiteWideDeps } from './chrome.js'
 import { loadDependencyGraph } from './deps.js'
 import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
@@ -19,7 +18,6 @@ export async function check(cfg) {
   }
 
   const deps = loadDependencyGraph(cfg.root)
-  registerCoreSiteWideDeps(cfg, deps)
   const { plugin: pluginHost } = createHosts(cfg, { deps })
   const plugins = await loadPlugins(cfg.plugins, pluginHost)
   const results = await plugins.check()

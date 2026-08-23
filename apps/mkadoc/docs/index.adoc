@@ -79,7 +79,7 @@ Convention: the **first source's `_assets` folder is always copied** to
 Put chrome-level files there (favicon, …); no page reference is needed.
 The `_` prefix keeps the folder out of page discovery.
 
-**Site logo (convention, no config):** core always emits a clickable logo in the
+**Site logo (convention, no config):** `mkadoc:topbar` emits a clickable logo in the
 topbar linking to the first source's home (`…/index.html`).
 
 * Default: package icon at `/styles/default-logo.svg`
@@ -96,6 +96,7 @@ xref:plugins.adoc[Writing mkadoc plugins]).
 |===
 | Locator | Role
 
+| `mkadoc:topbar` | Sticky topbar: site logo + brand from `sources` (first in config order).
 | `mkadoc:nav` | Site navigation: level-1 **source bar** under the topbar (one link per source) + level-2 **article sidebar** (per-source lists from each `_nav.adoc`).
 | `mkadoc:shiki` | Build-time syntax highlighting for `[source]` blocks.
 | `file:./apps/mkadoc-plugin-kroki` | Diagram blocks via Kroki (`server_url` required) — external plugin in this repo.

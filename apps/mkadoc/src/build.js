@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { load } from '@asciidoctor/core'
-import { registerCoreSiteWideDeps, writeSiteChrome } from './chrome.js'
+import { writeSiteChrome } from './chrome.js'
 import { CACHE_DIR } from './config.js'
 import { decideMode } from './decide-mode.js'
 import { loadDependencyGraph, withIncludeCollector } from './deps.js'
@@ -33,7 +33,6 @@ export async function build(cfg, opts = {}) {
   }
 
   const deps = loadDependencyGraph(cfg.root)
-  registerCoreSiteWideDeps(cfg, deps)
   const { plugin: pluginHost, build: buildHost } = createHosts(cfg, { deps })
   const plugins = await loadPlugins(cfg.plugins, pluginHost)
   const { mode, pages } = decideMode(cfg, buildHost, { ...opts, deps })

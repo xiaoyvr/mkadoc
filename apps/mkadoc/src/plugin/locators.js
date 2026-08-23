@@ -1,1 +1,1 @@
-export const BUILTIN_LOCATORS = Object.freeze(['mkadoc:nav', 'mkadoc:shiki'])
+export const BUILTIN_LOCATORS = Object.freeze(['mkadoc:nav', 'mkadoc:shiki', 'mkadoc:topbar'])

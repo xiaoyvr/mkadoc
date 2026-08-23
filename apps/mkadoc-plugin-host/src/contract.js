@@ -10,7 +10,7 @@
  * @typedef {object} MkadocSource
  * @property {string} path        repo-relative source dir (posix)
  * @property {string} mount       site mount, e.g. `/` or `/apps/mkadoc`
- * @property {string} title       tab / section label
+ * @property {string} title       source bar / section label
  * @property {string} description `:description:` from index.adoc (brand for first source)
  *
  * @typedef {object} MkadocConfig

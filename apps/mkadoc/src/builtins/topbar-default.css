@@ -1,4 +1,4 @@
-/* Core chrome: sticky site title + brand */
+/* mkadoc:topbar — sticky site title + brand */
 :root {
   --mkadoc-topbar-height: 3rem;
 }
@@ -7,7 +7,7 @@
   position: sticky;
   top: 0;
   z-index: 1100;
-  /* Full width even with body padding-left for the sidebar. */
+  /* Full width even with body padding-left for the article sidebar. */
   margin-left: calc(-1 * var(--mkadoc-articles-width, 0px));
   display: flex;
   align-items: center;
@@ -18,8 +18,9 @@
   overflow: hidden;
 }
 
-/* Scrolled: the tabs have scrolled away, so the floating title gets its own bottom line. */
-/* box-shadow (not border) so the 1px line doesn't shrink the bar's content box. */
+/* Scrolled: the source bar has scrolled away, so the floating title gets its
+   own bottom line. box-shadow (not border) so the 1px line doesn't shrink the
+   bar's content box. */
 html.mkadoc-scrolled .mkadoc-topbar {
   box-shadow: 0 1px 0 #e0e0dc;
 }

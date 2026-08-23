@@ -5,8 +5,9 @@
 
 .mkadoc-articles {
   position: fixed;
+  /* topbar-height falls back to 0 when mkadoc:topbar is disabled */
   top: calc(
-    var(--mkadoc-topbar-height, 3rem) +
+    var(--mkadoc-topbar-height, 0px) +
     var(--mkadoc-sources-height, 2.5rem) -
     var(--mkadoc-scroll-offset, 0px)
   );

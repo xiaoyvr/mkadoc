@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url'
 import nav from '../builtins/nav.js'
 import shiki, { afterPluginsLoaded } from '../builtins/shiki.js'
+import topbar from '../builtins/topbar.js'
 import { installLocalPlugin, parseLocator, resolveEntry } from './installer.js'
 import { BUILTIN_LOCATORS } from './locators.js'
 
@@ -8,6 +9,7 @@ import { BUILTIN_LOCATORS } from './locators.js'
 const BUILTINS = {
   'mkadoc:nav': nav,
   'mkadoc:shiki': shiki,
+  'mkadoc:topbar': topbar,
 }
 
 for (const locator of BUILTIN_LOCATORS) {

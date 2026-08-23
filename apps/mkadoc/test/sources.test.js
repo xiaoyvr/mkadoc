@@ -51,6 +51,7 @@ describe('multi-source build', () => {
   - apps/mkadoc/docs
 output: site
 plugins:
+  mkadoc:topbar: {}
   mkadoc:nav: {}
 `),
         'docs/index.adoc': `= Dotfiles
@@ -119,6 +120,7 @@ Guide body.
   - docs
 output: site
 plugins:
+  mkadoc:topbar: {}
   mkadoc:nav: {}
 `),
         'docs/index.adoc': '= Site\n\nHi.\n',
@@ -145,6 +147,8 @@ plugins:
         'mkadoc.adoc': literateConfig(`sources:
   - docs
 output: site
+plugins:
+  mkadoc:topbar: {}
 `),
         'docs/index.adoc': `= Dotfiles
 :description: Nix-managed system and user configurations
@@ -180,6 +184,7 @@ Body.
   - apps/mkadoc/docs
 output: site
 plugins:
+  mkadoc:topbar: {}
   mkadoc:nav: {}
 `),
         'docs/index.adoc': `= Dotfiles

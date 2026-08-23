@@ -44,7 +44,7 @@ Conceptually:
 </body>
 ----
 
-* **Topbar** — core sticky site title, from `sources` (always present).
+* **Topbar** — the `mkadoc:topbar` built-in plugin: sticky site title (logo + brand) from `sources`. Configure it **first** so it renders above everything else.
 * **Plugin fragments** — everything below the topbar comes from `host.contributeChromeBody`,
   concatenated in **plugin load order** (config key order). `mkadoc:nav` owns the
   whole site nav: the level-1 source bar (`<nav class="mkadoc-sources">`) and the
@@ -89,7 +89,7 @@ That is enough for common docs layouts without owning the article’s parent nod
 
 * **Safe** — no HTML rewriter between Asciidoctor and the published page for layout.
 * **Simple plugins** — append markup via `host.contributeChromeBody` and ship your own CSS; no “main slot” protocol.
-* **Clear ownership** — core: topbar; plugins: below-topbar chrome fragments; Asciidoctor: article.
+* **Clear ownership** — everything is a plugin: topbar (`mkadoc:topbar`), site nav (`mkadoc:nav`), extensions (`mkadoc:shiki`, external). Core only assembles fragments into the header docinfo. Asciidoctor: article.
 * **Shared vs per-page** — chrome is the same on every page; the article changes per file. That matches “inject once, convert many.”
 
 == Tradeoff (accepted)
