@@ -1,0 +1,35 @@
+= mkadoc monorepo
+
+Build and serve AsciiDoc as a static site.
+
+This repository is a monorepo with three packages under `apps/`:
+
+* `apps/mkadoc` — the `mkadoc` CLI (build, serve, check) and its builtin
+  plugins (`mkadoc:topbar`, `mkadoc:nav`, `mkadoc:shiki`). Contains its own
+  Nix flake (`apps/mkadoc/flake.nix`) that packages the CLI and its tests.
+* `apps/mkadoc-plugin-host` — the `@mkadoc/plugin-host` package: the plugin
+  contract and test host. A devDependency of `apps/mkadoc` and of
+  `apps/mkadoc-plugin-kroki`.
+* `apps/mkadoc-plugin-kroki` — the reference *external* plugin: renders
+  `[diagram]` blocks through a Kroki server (`server_url` required).
+
+== Develop
+
+Each package is a standalone npm package with its own `package-lock.json`:
+
+[source,console]
+----
+cd apps/mkadoc
+npm install
+npm test
+npm run check
+----
+
+`file:../mkadoc-plugin-host` devDependencies resolve to the sibling package
+in this monorepo, so install from the package directory (or use npm
+workspaces at the root if you prefer a single lockfile).
+
+== Nix
+
+`apps/mkadoc/flake.nix` builds the `mkadoc` package and the `mkadoc-test`
+check derivation (`nix flake check` inside `apps/mkadoc`).
