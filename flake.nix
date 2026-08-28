@@ -36,6 +36,7 @@
           packages = [
             pkgs.nodejs_24
             pkgs.nixfmt
+            pkgs.just
             # mkadoc is deliberately NOT here: the repo's own CLI should always
             # run from source via npm (`npm link` in apps/mkadoc) so edits take
             # effect without a nix rebuild. Requires `npm install` in apps/mkadoc.

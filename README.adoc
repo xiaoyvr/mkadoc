@@ -44,6 +44,10 @@ mkadoc build   # render site/ (no server needed; diagrams fall back to listings)
 mkadoc serve   # live-reload preview at http://127.0.0.1:8000
 ----
 
+Or, with the devShell's `just` (see `justfile`): `just deps` once, then
+`just check` / `just build` / `just serve` (extra args forward, e.g.
+`just serve --port 9000`).
+
 The `[plantuml]` diagram in the docs needs a running Kroki server
 (`server_url: http://127.0.0.1:8080` in `mkadoc.adoc`) — e.g. the dotfiles
 repo's `scripts/kroki.sh`, or any Kroki instance. Without one, `mkadoc check`
@@ -54,8 +58,8 @@ fails and diagram blocks fall back to their source listing.
 * `apps/mkadoc/flake.nix` builds the `mkadoc` package and the `mkadoc-test`
   check derivation (`nix flake check` inside `apps/mkadoc`).
 * The repo root `flake.nix` re-exports that package and provides a devShell
-  with `nodejs_24` and `nixfmt` — loaded automatically by direnv (`.envrc`;
-  run `direnv allow` once) or via `nix develop`.
+  with `nodejs_24`, `nixfmt`, and `just` — loaded automatically by direnv
+  (`.envrc`; run `direnv allow` once) or via `nix develop`.
 * The `mkadoc` CLI is *not* installed from nix or direnv: it runs from source
   via npm. Either `npm link` once in `apps/mkadoc` (then plain `mkadoc`
   works), or invoke `node apps/mkadoc/bin/mkadoc.js` directly. Requires
