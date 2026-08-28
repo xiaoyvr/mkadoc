@@ -1,6 +1,9 @@
 # npm
 node_modules/
 
+# direnv / nix-direnv cache
+.direnv/
+
 # mkadoc build output / caches
 site/
 .mkadoc/

@@ -31,5 +31,9 @@ workspaces at the root if you prefer a single lockfile).
 
 == Nix
 
-`apps/mkadoc/flake.nix` builds the `mkadoc` package and the `mkadoc-test`
-check derivation (`nix flake check` inside `apps/mkadoc`).
+* `apps/mkadoc/flake.nix` builds the `mkadoc` package and the `mkadoc-test`
+  check derivation (`nix flake check` inside `apps/mkadoc`).
+* The repo root `flake.nix` re-exports that package and provides a devShell
+  with `mkadoc`, `nodejs_24`, and `nixfmt` — loaded automatically by direnv
+  (`.envrc`; run `direnv allow` once) or via `nix develop`.
+* `nix flake check` at the repo root runs the mkadoc test suite and checks.
