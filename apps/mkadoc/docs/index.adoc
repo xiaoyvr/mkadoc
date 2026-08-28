@@ -106,7 +106,7 @@ Common options (defaults shown):
 
 * `mkadoc:nav` — enable with `{}` (no options)
 * `mkadoc:shiki` — `theme: github-light-default`
-* `mkadoc:kroki-diagram` — `server_url: …` (required)
+* `file:./apps/mkadoc-plugin-kroki` — `server_url: …` (required; reference external plugin in this repo)
 
 
 

@@ -1,0 +1,72 @@
+= mkadoc documentation site
+:description: Literate configuration for mkadoc (loaded in memory; not tangled to YAML)
+
+This file is the human-readable configuration for `mkadoc` — the repo's own
+site, built from `apps/mkadoc/docs`.
+Narrative is for people; `[mkadoc-config]` blocks are what the tool reads at runtime.
+
+== Content layout
+
+AsciiDoc sources are listed under `sources`.
+Each path is a doc tree; the site mount is the path verbatim
+(`apps/mkadoc/docs` → `/apps/mkadoc/docs`).
+Tab labels come from each source's `index.adoc` (`:tab:`, else doctitle).
+
+HTML output goes to `site/` (generated; not the source of truth).
+Build caches stay under `.mkadoc/` by convention (add it to `.gitignore`).
+
+[mkadoc-config]
+----
+sources:
+  - apps/mkadoc/docs
+output: site
+----
+
+== Plugins
+
+`mkadoc:topbar` ships the sticky topbar (logo + brand) and its CSS/JS; optional overrides live in the
+*first* source's `_chrome.adoc` (`[mkadoc-css]`; later sources ignored).
+`mkadoc:nav` renders the level-1 source bar (one link per source) plus the level-2
+article sidebar from each source's `_nav.adoc`
+(optional; otherwise an auto page list).
+`mkadoc:nav` ships sidebar content CSS; optional `[mkadoc-css]` on the first `_nav.adoc` overrides it
+(use `----` listing delimiters).
+
+`file:./apps/mkadoc-plugin-kroki` renders `[plantuml]`/diagram blocks through a
+Kroki service — this repo's reference *external* plugin (mkadoc copies the
+folder into `.mkadoc/plugins/` and installs its runtime deps on first use).
+`server_url` is required; start a Kroki instance first (e.g. the dotfiles repo's
+`scripts/kroki.sh`, or any Kroki server). If it is unreachable, `mkadoc check`
+reports it and diagram blocks fall back to their source listing.
+
+`mkadoc:shiki` highlights `[source]` blocks at build time with Shiki.
+Set `theme` to any bundled Shiki theme (default `github-light-default`).
+
+[mkadoc-config]
+----
+plugins:
+  mkadoc:topbar: {}
+  file:./apps/mkadoc-plugin-kroki:
+    server_url: http://127.0.0.1:8080
+  mkadoc:nav: {}
+  mkadoc:shiki:
+    theme: andromeeda # material-theme
+----
+
+== Preview server
+
+`mkadoc serve` watches sources and serves `site/` with live reload.
+
+* `remote: false` (default) — listen on `127.0.0.1` only
+* `remote: true` — listen on `0.0.0.0` (LAN access), or pass `--remote`
+* `port` — respected from this config or `--port` (default `8000`)
+
+The site root `/` redirects to the first source's index page
+(`apps/mkadoc/docs` → `/apps/mkadoc/docs/index.html`).
+
+[mkadoc-config]
+----
+serve:
+  remote: false
+  port: 8000
+----

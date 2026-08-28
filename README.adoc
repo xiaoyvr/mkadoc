@@ -29,6 +29,23 @@ npm run check
 in this monorepo, so install from the package directory (or use npm
 workspaces at the root if you prefer a single lockfile).
 
+== Site
+
+The repo is itself a mkadoc site: the root `mkadoc.adoc` configures a build
+of `apps/mkadoc/docs` into `site/`.
+
+[source,console]
+----
+mkadoc check   # validate config + plugins (reports Kroki reachability)
+mkadoc build   # render site/ (no server needed; diagrams fall back to listings)
+mkadoc serve   # live-reload preview at http://127.0.0.1:8000
+----
+
+The `[plantuml]` diagram in the docs needs a running Kroki server
+(`server_url: http://127.0.0.1:8080` in `mkadoc.adoc`) — e.g. the dotfiles
+repo's `scripts/kroki.sh`, or any Kroki instance. Without one, `mkadoc check`
+fails and diagram blocks fall back to their source listing.
+
 == Nix
 
 * `apps/mkadoc/flake.nix` builds the `mkadoc` package and the `mkadoc-test`
