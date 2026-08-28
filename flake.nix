@@ -4,7 +4,8 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     # The mkadoc app flake packages the CLI and its test suite; the root
-    # flake re-exports it and exposes it in the devShell.
+    # flake re-exports it (packages/apps/checks) but the devShell intentionally
+    # does not install it — mkadoc runs from source via npm (see README).
     mkadoc = {
       url = "path:./apps/mkadoc";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -35,7 +36,9 @@
           packages = [
             pkgs.nodejs_24
             pkgs.nixfmt
-            mkadoc.packages.${system}.default
+            # mkadoc is deliberately NOT here: the repo's own CLI should always
+            # run from source via npm (`npm link` in apps/mkadoc) so edits take
+            # effect without a nix rebuild. Requires `npm install` in apps/mkadoc.
           ];
         };
     in

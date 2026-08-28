@@ -11,6 +11,11 @@ AsciiDoc sources are listed under `sources`.
 Each path is a doc tree; the site mount is the path verbatim
 (`apps/mkadoc/docs` → `/apps/mkadoc/docs`).
 Tab labels come from each source's `index.adoc` (`:tab:`, else doctitle).
+This repo has three sources — one per package under `apps/`:
+
+* `apps/mkadoc/docs` — mkadoc itself (overview, chrome design, plugin guide)
+* `apps/mkadoc-plugin-host/docs` — the plugin contract + test host
+* `apps/mkadoc-plugin-kroki/docs` — the reference external plugin (diagrams via Kroki)
 
 HTML output goes to `site/` (generated; not the source of truth).
 Build caches stay under `.mkadoc/` by convention (add it to `.gitignore`).
@@ -19,6 +24,8 @@ Build caches stay under `.mkadoc/` by convention (add it to `.gitignore`).
 ----
 sources:
   - apps/mkadoc/docs
+  - apps/mkadoc-plugin-host/docs
+  - apps/mkadoc-plugin-kroki/docs
 output: site
 ----
 
@@ -67,6 +74,6 @@ The site root `/` redirects to the first source's index page
 [mkadoc-config]
 ----
 serve:
-  remote: false
-  port: 8000
+  remote: true
+  port: 8001
 ----

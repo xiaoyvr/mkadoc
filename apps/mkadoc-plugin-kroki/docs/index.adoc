@@ -1,0 +1,97 @@
+= mkadoc-plugin-kroki
+:tab: Kroki plugin
+:description: Reference external mkadoc plugin — renders [diagram] blocks through a Kroki server.
+
+`mkadoc-plugin-kroki` is this repo's reference **external** plugin: it renders
+`[plantuml]`, `[ditaa]`, `[mermaid]`, and other `[diagram]` blocks through a
+https://kroki.io[Kroki] server at build time.
+
+It is also the worked example of the external-plugin pattern: a self-contained
+npm package that validates its options with Zod from `host.import`, registers an
+Asciidoctor extension, ships a health check, and has its own test suite built on
+the link:/apps/mkadoc-plugin-host/docs/index.html[plugin host].
+
+== Enable
+
+External plugins are enabled by **locator**; mkadoc copies the folder into
+`.mkadoc/plugins/` and materializes its runtime deps on first use
+(`ignoreScripts`, `--omit=dev`). A running Kroki instance is required
+(`server_url`).
+
+[mkadoc-config]
+----
+plugins:
+  file:./apps/mkadoc-plugin-kroki:
+    server_url: http://127.0.0.1:8080
+----
+
+[cols="1,3"]
+|===
+| Command | What it does
+| `mkadoc check` | Verifies config, then pings the Kroki server (health check below).
+| `mkadoc build` | Renders diagram blocks via the server; falls back to source listings when unreachable.
+|===
+
+== Options
+
+[cols="2,1,1,4"]
+|===
+| Key | Type | Default | Meaning
+| `server_url` | string | *required* | Base URL of a running Kroki instance, e.g. `http://127.0.0.1:8080`. Trailing slash is tolerated.
+| `allow_uri_read` | boolean | `true` | Passed through as `allow-uri-read` — lets Kroki fetch referenced URIs inside diagrams.
+| `cache_dir` | string | `diagram` | Name of the directory under `.mkadoc/` used for rendered diagram assets (`imagesoutdir`).
+|===
+
+The schema is strict: unknown keys are rejected (`Unrecognized key: "…"`).
+
+== How it works
+
+* `setup(host)` registers the `asciidoctor-kroki` extension via
+  `host.registerExtension`, then sets document attributes:
+  `kroki-server-url`, `kroki-fetch-diagram`, `kroki-data-uri`,
+  `allow-uri-read`, and `imagesoutdir` pointing at
+  `<root>/.mkadoc/<cache_dir>`.
+* **Data-URI scoping** — `kroki-data-uri` is enabled so diagram output embeds
+  as data URIs in the page; regular images stay file references and go through
+  core's asset-copy pipeline instead.
+* **Shared deps** — the plugin only declares `asciidoctor-kroki` as a runtime
+  dependency; Zod comes from `host.import('zod')` (mkadoc's single instance),
+  the canonical external-plugin pattern.
+
+== Health check
+
+`check(host)` issues `GET <server_url>/` with a 3-second timeout:
+
+* reachable + `ok` status → `{ ok: true, message: "Kroki ok (<url>)" }`
+* HTTP error → `{ ok: false, message: "Kroki HTTP <status> at <url>" }`
+* timeout / connection error → `{ ok: false, message: "Kroki unreachable at <url>: …" }`
+
+Without a running server, `mkadoc check` reports the failure and `mkadoc build`
+falls back to rendering diagram blocks as source listings.
+
+== Example
+
+A `[plantuml]` block in any page of a source:
+
+[source,plantuml]
+----
+@startuml
+Alice -> Bob: hello
+@enduml
+----
+
+== Developing
+
+The package is a standalone npm package:
+
+[source,console]
+----
+cd apps/mkadoc-plugin-kroki
+npm install      # devDeps incl. @mkadoc/plugin-host (file:../mkadoc-plugin-host)
+npm test         # node --test test/**/*.test.js
+npm run check    # lint (biome) + test
+----
+
+Tests use `createTestHost` from `@mkadoc/plugin-host` with
+`imports: { zod: { z } }` — factory option validation, registered extension /
+attributes, and `check` failure paths, all without a Kroki server or mkadoc core.

@@ -1,0 +1,6 @@
+////
+Sidebar links for apps/mkadoc-plugin-kroki/docs.
+Not the first source: [mkadoc-css] here is ignored.
+////
+
+* xref:index.adoc[Kroki plugin overview]

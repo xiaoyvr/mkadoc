@@ -1,0 +1,148 @@
+= @mkadoc/plugin-host
+:tab: Plugin host
+:description: The canonical plugin contract for mkadoc — host API types, the plugin factory shape, and the test host.
+
+`@mkadoc/plugin-host` is the **contract** between mkadoc core and its plugins.
+Plugins never touch core internals: every hook receives a *plugin host*, and
+that host is the only API a plugin calls. This package is where that API is
+defined, typed, and testable in isolation.
+
+== What this package gives you
+
+* **Types** — `MkadocPluginHost`, `MkadocPluginFactory`, `MkadocPlugin`, and the
+  supporting types (`MkadocConfig`, `BuildMode`, `BuildContext`, `CheckResult`,
+  `MkadocSource`, `MkadocBuildHost`), declared in `src/contract.js` and
+  re-exported from `src/index.js`. Factories annotate with
+  `@type {import('@mkadoc/plugin-host').MkadocPluginFactory}`.
+* **The test host** — `createTestHost(...)` from `src/test-host.js`: an
+  in-memory / on-disk double of the real host, used by plugin test suites.
+* **No runtime surface** — the package has **zero dependencies**. Its only
+  runtime export is `createTestHost`. The host object plugins receive at build
+  time is implemented by mkadoc core (`apps/mkadoc/src/plugin/host.js`), never
+  by this package.
+
+== Who uses it
+
+[cols="1,3"]
+|===
+| Consumer | How it depends
+| `apps/mkadoc` builtins (`mkadoc:topbar`, `mkadoc:nav`, `mkadoc:shiki`) | `devDependencies` — types only (JSDoc)
+| External plugins (e.g. `apps/mkadoc-plugin-kroki`) | `devDependencies` — types + test host
+|===
+
+External plugins are installed by mkadoc with `--omit=dev` (see the
+link:/apps/mkadoc/docs/plugins.html[writing plugins] guide), so anything a
+plugin needs at **runtime** must come from its own `dependencies` or from
+`host.import` — never from `@mkadoc/plugin-host`.
+
+== Plugin factory shape
+
+A plugin module exports a factory `(rawOptions, host) => plugin` (may be async).
+
+`rawOptions` is the parsed config value from `plugins: { "<locator>": { … } }`.
+Validate it in the factory — use Zod from `host.import('zod')` (never import it
+yourself) plus the strict `{}.strict()` shape, and reject unknown keys.
+
+Returned plugin:
+
+[cols="1,3"]
+|===
+| Field | Purpose
+| `name` | Short id, e.g. `nav`, `kroki-diagram`
+| `setup(host)` | Optional. Runs once after construction, **before** rebuild mode is decided. Register extensions, attributes, classifiers, asset prefixes here.
+| `contributeChrome(host, ctx)` | Optional. Runs each build after mode is known (not called for `noop`). Emit CSS/JS/HTML. `ctx`: `{ mode, pages, paths }`.
+| `check(host)` | Optional. Used by `mkadoc check` only; keep it cheap.
+|===
+
+== Plugin host API
+
+Every hook receives the same host object.
+
+=== Context
+
+`host.config`:: Resolved project config (`sources`, `output`, `plugins`, `serve`, …).
+`host.root`:: Absolute project root; join with relative paths from config.
+
+=== Asciidoctor
+
+`host.registerExtension(fn)`:: Call `fn(registry)` to register Asciidoctor.js
+  extensions. Never import `@asciidoctor/core` yourself — the registry is handed
+  over; a second instance would break registration.
+`host.import(specifier)`:: Resolve + import a module from **mkadoc's own
+  dependencies** (single shared instance). Use this for shared libraries instead
+  of declaring them as plugin deps: `const { z } = await host.import('zod')`.
+  Only specifiers mkadoc itself depends on are resolvable.
+`host.addAttributes(attrs)`:: Merge document attributes applied on every convert
+  (e.g. `source-highlighter`, `kroki-server-url`, `icons`).
+
+=== Head assets
+
+`host.contributeHead({ links?, scripts? })`:: Queue `<link>` / `<script>` tags
+  that core injects into every page's `<head>`.
+  * `links` — objects like `{ rel: 'stylesheet', href: '/styles/my.css' }`
+  * `scripts` — objects like `{ src: '/styles/my.js', defer: true }`
+  Convention: write the file under `output/` yourself and use a **root-absolute**
+  `href`/`src` (e.g. `/styles/nav.css`).
+
+=== Below-topbar chrome
+
+`host.contributeChromeBody(html)`:: Append a HTML fragment below the site topbar.
+  Fragments from multiple plugins are concatenated in **plugin load order**
+  (config key order); each plugin owns its own element (e.g. `<nav …>`,
+  `<aside id="…">`). The article itself stays in the normal page body.
+
+=== Rebuild hints
+
+`host.registerSiteWideDep(relPath)`:: "If this path changed, rebuild **every**
+  live page (incremental)." Use when your chrome is baked into every page's HTML.
+  Register in `setup`.
+`host.registerClassifier(fn)`:: "If this path changed, rebuild **everything**
+  (true full mode)." `fn(relPath)` returns `'full'` or `null`/`undefined`.
+  Register in `setup`.
+`host.registerAssetPrefix(prefix)`:: "Changes under this path are styles/assets
+  only — don't reconvert AsciiDoc pages." Pass a repo-relative output prefix.
+
+=== Filesystem helpers
+
+`host.ensureDir(relOrAbs)`:: Ensure a directory exists; returns absolute path.
+`host.cacheDir(name)`:: Ensure `<root>/.mkadoc/<name>/`; returns absolute path.
+`host.relToRoot(p)`:: Normalize a path to repo-relative (posix) form.
+
+== Testing plugins: `createTestHost`
+
+`createTestHost({ config?, imports?, root? })` returns a host with every hook
+recorded into `host._test` for assertions, and `import` served from a
+caller-provided module map — so tests never touch the network, disk, or mkadoc
+core.
+
+`imports` matters because plugins must **not** bundle shared libraries: a test
+that exercises `host.import('zod')` registers it explicitly:
+
+[source,js]
+----
+import { createTestHost } from '@mkadoc/plugin-host'
+import { z } from 'zod'
+
+const host = createTestHost({ imports: { zod: { z } } })
+
+// host._test.attributes        — merged via addAttributes
+// host._test.extensions        — registered via registerExtension
+// host._test.headLinks         — queued via contributeHead
+// host._test.chromeBody        — appended via contributeChromeBody
+// host._test.siteWideDeps      — via registerSiteWideDep
+// host._test.assetPrefixes     — via registerAssetPrefix
+----
+
+`ensureDir` / `cacheDir` really create directories (under `root`, default
+`process.cwd()`); `config` defaults to a minimal valid project config
+(`sources: []`, `output: 'site'`, …) and can be overridden per test.
+
+See `apps/mkadoc-plugin-kroki/test/options.test.js` for a full worked example
+(factory validation, `setup` attributes, `check` failure paths).
+
+== See also
+
+* link:/apps/mkadoc/docs/plugins.html[Writing mkadoc plugins] — the author's
+  guide: lifecycle, conventions, minimal sketch.
+* `apps/mkadoc-plugin-kroki` — the reference *external* plugin built on this
+  contract (link:/apps/mkadoc-plugin-kroki/docs/index.html[its docs]).
