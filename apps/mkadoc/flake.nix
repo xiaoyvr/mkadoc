@@ -21,8 +21,8 @@
           nodejs = pkgs.nodejs_24;
         };
 
-        version = "0.1.0";
-        npmDepsHash =  "sha256-5ZoSnAOIjHHU7CjBGQqmtB+1e5LtQnPpkVKT8V4BzMw=";
+        version = "1.0.0";
+        npmDepsHash =  "sha256-FVPQ34UN+6unyf0VxVOdbxVPUs4b0RDIqOCtsmAWfKA=";
 
         packageFileset = lib.fileset.unions [
           ./bin
