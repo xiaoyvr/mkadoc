@@ -15,52 +15,103 @@ function sidebarOf(root) {
   return parseHtml(html).querySelector('#mkadoc-articles')
 }
 
+function sidebarLinks(root) {
+  return sidebarOf(root)
+    .querySelectorAll('a')
+    .map((a) => [a.text.trim(), a.getAttribute('href')])
+}
+
 describe('_nav.yaml (declarative nav)', () => {
-  it('renders a flat page list with normalized .html hrefs', async () => {
+  it('derives labels from page titles', async () => {
     await withTempProject(
       {
         'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: site\nplugins:\n  mkadoc:nav: {}\n`),
         'docs/index.md': '# Home\n',
         'docs/guide.md': '# Guide\n',
-        'docs/_nav.yaml': '- label: Home\n  page: index\n- label: Guide\n  page: guide\n',
+        'docs/_nav.yaml': '- page: index\n- page: guide\n',
       },
       async (root) => {
         const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
-        const sidebar = sidebarOf(root)
-        const links = sidebar.querySelectorAll('a')
-        assert.deepEqual(
-          links.map((a) => [a.text.trim(), a.getAttribute('href')]),
-          [
-            ['Home', '/docs/index.html'],
-            ['Guide', '/docs/guide.html'],
-          ],
-        )
+        assert.deepEqual(sidebarLinks(root), [
+          ['Home', '/docs/index.html'],
+          ['Guide', '/docs/guide.html'],
+        ])
       },
     )
   })
 
-  it('renders nested children as a section with a sub-list', async () => {
+  it('page title wins over the optional label', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: site\nplugins:\n  mkadoc:nav: {}\n`),
+        'docs/index.md': '# Real Title\n',
+        'docs/_nav.yaml': '- page: index\n  label: Fallback\n',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await build(cfg, { forceFull: true })
+        assert.deepEqual(sidebarLinks(root), [['Real Title', '/docs/index.html']])
+      },
+    )
+  })
+
+  it('uses the optional label when the page has no title', async () => {
     await withTempProject(
       {
         'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: site\nplugins:\n  mkadoc:nav: {}\n`),
         'docs/index.md': '# Home\n',
-        'docs/_nav.yaml': `- label: Overview\n  page: index\n- label: Reference\n  children:\n    - label: Plugins\n      page: plugins\n    - label: Chrome\n      page: chrome-design\n`,
+        'docs/guide.md': 'Just a paragraph, no heading.\n',
+        'docs/_nav.yaml': '- page: guide\n  label: Guide Manual\n',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await build(cfg, { forceFull: true })
+        assert.deepEqual(sidebarLinks(root), [['Guide Manual', '/docs/guide.html']])
+      },
+    )
+  })
+
+  it('supports a clickable parent (page + children)', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: site\nplugins:\n  mkadoc:nav: {}\n`),
+        'docs/index.md': '# Home\n',
+        'docs/guide.md': '# Guide\n',
+        'docs/guide/setup.md': '# Setup\n',
+        'docs/_nav.yaml': '- page: guide\n  children:\n    - page: guide/setup\n',
       },
       async (root) => {
         const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
         const sidebar = sidebarOf(root)
-        assert.ok(sidebar.text.includes('Overview'))
-        assert.ok(sidebar.text.includes('Reference'))
-        const nested = sidebar.querySelectorAll('li ul a')
         assert.deepEqual(
-          nested.map((a) => [a.text.trim(), a.getAttribute('href')]),
+          sidebar.querySelectorAll('a').map((a) => [a.text.trim(), a.getAttribute('href')]),
           [
-            ['Plugins', '/docs/plugins.html'],
-            ['Chrome', '/docs/chrome-design.html'],
+            ['Guide', '/docs/guide.html'],
+            ['Setup', '/docs/guide/setup.html'],
           ],
         )
+        // the parent link and its nested list sit under the same <li>
+        assert.ok(sidebar.querySelector('li:has(> p > a) li'))
+      },
+    )
+  })
+
+  it('supports a non-clickable section header (label + children)', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: site\nplugins:\n  mkadoc:nav: {}\n`),
+        'docs/index.md': '# Home\n',
+        'docs/plugins.md': '# Plugins\n',
+        'docs/_nav.yaml': '- label: Reference\n  children:\n    - page: plugins\n',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await build(cfg, { forceFull: true })
+        const sidebar = sidebarOf(root)
+        assert.ok(sidebar.text.includes('Reference'))
+        assert.deepEqual(sidebarLinks(root), [['Plugins', '/docs/plugins.html']])
       },
     )
   })
@@ -75,9 +126,7 @@ describe('_nav.yaml (declarative nav)', () => {
       async (root) => {
         const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
-        const link = sidebarOf(root).querySelector('a')
-        assert.equal(link.text.trim(), 'GitHub')
-        assert.equal(link.getAttribute('href'), 'https://github.com/xiaoyvr/mkadoc')
+        assert.deepEqual(sidebarLinks(root), [['GitHub', 'https://github.com/xiaoyvr/mkadoc']])
       },
     )
   })
@@ -88,14 +137,12 @@ describe('_nav.yaml (declarative nav)', () => {
         'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: site\nplugins:\n  mkadoc:nav: {}\n`),
         'docs/index.adoc': '= Home\n',
         'docs/_nav.adoc': '* xref:index.adoc[FromAdoc]\n',
-        'docs/_nav.yaml': '- label: FromYaml\n  page: index\n',
+        'docs/_nav.yaml': '- page: index\n',
       },
       async (root) => {
         const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
-        const sidebar = sidebarOf(root)
-        assert.ok(sidebar.text.includes('FromAdoc'))
-        assert.ok(!sidebar.text.includes('FromYaml'))
+        assert.ok(sidebarOf(root).text.includes('FromAdoc'))
       },
     )
   })
@@ -106,6 +153,34 @@ describe('_nav.yaml (declarative nav)', () => {
         'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: site\nplugins:\n  mkadoc:nav: {}\n`),
         'docs/index.md': '# Home\n',
         'docs/_nav.yaml': '- label: Broken\n',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await assert.rejects(() => build(cfg, { forceFull: true }), /invalid _nav\.yaml/)
+      },
+    )
+  })
+
+  it('rejects href without a label', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: site\nplugins:\n  mkadoc:nav: {}\n`),
+        'docs/index.md': '# Home\n',
+        'docs/_nav.yaml': '- href: https://example.com\n',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await assert.rejects(() => build(cfg, { forceFull: true }), /invalid _nav\.yaml/)
+      },
+    )
+  })
+
+  it('rejects an item with both page and href', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: site\nplugins:\n  mkadoc:nav: {}\n`),
+        'docs/index.md': '# Home\n',
+        'docs/_nav.yaml': '- page: index\n  href: https://example.com\n',
       },
       async (root) => {
         const cfg = await loadConfig('mkadoc.yaml', root)

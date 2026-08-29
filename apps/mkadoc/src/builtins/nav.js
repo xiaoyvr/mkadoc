@@ -12,17 +12,44 @@ import { readThemeOverride, themeDirForSource } from '../theme.js'
 
 const OptionsSchema = z.object({}).strict()
 
-/** One declarative nav entry. Exactly one of page/href/children is required. */
+/**
+ * One declarative nav entry.
+ * - `page` + optional `label` (fallback; the page's own title wins)
+ * - `href` + required `label`
+ * - `children` section; `label` required when there is no `page`
+ */
 const NavItemSchema = z
   .object({
-    label: z.string().min(1),
+    label: z.string().min(1).optional(),
     page: z.string().min(1).optional(),
     href: z.string().min(1).optional(),
     children: z.array(z.lazy(() => NavItemSchema)).optional(),
   })
   .strict()
-  .refine((item) => Boolean(item.page || item.href || item.children?.length), {
-    message: 'each nav item needs one of "page", "href", or "children"',
+  .superRefine((item, ctx) => {
+    const hasPage = Boolean(item.page)
+    const hasHref = Boolean(item.href)
+    const hasChildren = Boolean(item.children?.length)
+    if (!hasPage && !hasHref && !hasChildren) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'each nav item needs one of "page", "href", or "children"',
+      })
+    }
+    if (hasPage && hasHref) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'an item cannot have both "page" and "href"',
+        path: ['href'],
+      })
+    }
+    if (!hasPage && !item.label) {
+      ctx.addIssue({
+        code: 'custom',
+        message: '"label" is required when there is no "page"',
+        path: ['label'],
+      })
+    }
   })
 
 const NavFileSchema = z.array(NavItemSchema).min(1)
@@ -211,17 +238,77 @@ function navPageHref(source, page) {
   return `${mount}/${p}.html`
 }
 
-/** Render a validated `_nav.yaml` item tree to sidebar HTML. */
-function renderYamlNav(items, source) {
-  const renderItem = (item) => {
-    const label = escapeHtml(item.label)
-    if (item.children?.length) {
-      return `<li><p>${label}</p>\n<ul>\n${item.children.map(renderItem).join('\n')}\n</ul></li>`
+/** Normalize a `page:` value to `dir/basename` (no extension, no leading slash). */
+function normalizePage(page) {
+  return String(page)
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\.[^./]+$/, '')
+}
+
+/**
+ * Find the page file a `page:` entry refers to (any renderer extension).
+ * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('../sources.js').MkadocSource} source
+ * @param {string} page
+ * @returns {{ abs: string, renderer: import('../plugin/contract.js').MkadocRenderer } | null}
+ */
+function findPageFile(host, source, page) {
+  const p = normalizePage(page)
+  const base = path.basename(p)
+  const baseDir = path.join(host.root, source.path, path.dirname(p))
+  for (const renderer of host.renderers) {
+    for (const ext of renderer.extensions || []) {
+      const abs = path.join(baseDir, `${base}${ext}`)
+      if (fs.existsSync(abs)) return { abs, renderer }
     }
-    const href = item.href ?? (item.page ? navPageHref(source, item.page) : '')
-    return `<li><p><a href="${escapeHtmlAttr(href)}">${label}</a></p></li>`
   }
-  return `<div class="ulist"><ul>\n${items.map(renderItem).join('\n')}\n</ul></div>\n`
+  return null
+}
+
+/**
+ * Derive a `page:` entry's label from the page itself: `tab` → title.
+ * Returns '' when the page has no title (caller falls back to `label`/basename).
+ * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('../sources.js').MkadocSource} source
+ * @param {string} page
+ */
+async function derivePageLabel(host, source, page) {
+  const found = findPageFile(host, source, page)
+  if (!found) return ''
+  const text = fs.readFileSync(found.abs, 'utf8')
+  const meta = await found.renderer.extractMeta(text, found.abs)
+  return String(meta.tab || meta.title || '').trim()
+}
+
+/** Render a validated `_nav.yaml` item tree to sidebar HTML. */
+async function renderYamlNav(items, host, source) {
+  const renderItem = async (item) => {
+    const hasChildren = Boolean(item.children?.length)
+    let label = ''
+    let href = null
+
+    if (item.page) {
+      href = navPageHref(source, item.page)
+      const derived = await derivePageLabel(host, source, item.page)
+      label = derived || item.label || path.basename(normalizePage(item.page))
+    } else {
+      label = item.label || ''
+      href = item.href ?? null
+    }
+
+    const labelHtml = escapeHtml(label)
+    const linkHtml = href ? `<a href="${escapeHtmlAttr(href)}">${labelHtml}</a>` : ''
+    const headHtml = linkHtml ? `<p>${linkHtml}</p>` : `<p>${labelHtml}</p>`
+
+    if (hasChildren) {
+      const kids = (await Promise.all(item.children.map(renderItem))).join('\n')
+      return `<li>${headHtml}\n<ul>\n${kids}\n</ul></li>`
+    }
+    return `<li>${headHtml}</li>`
+  }
+  const listHtml = (await Promise.all(items.map(renderItem))).join('\n')
+  return `<div class="ulist"><ul>\n${listHtml}\n</ul></div>\n`
 }
 
 /**
@@ -283,7 +370,7 @@ async function buildArticlesHtml(host) {
       })
     } else {
       const items = readNavYaml(host, source)
-      if (items) html = renderYamlNav(items, source)
+      if (items) html = await renderYamlNav(items, host, source)
     }
     if (!String(html).trim()) {
       html = autoNavHtml(host, source)

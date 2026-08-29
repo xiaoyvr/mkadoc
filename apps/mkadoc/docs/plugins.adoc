@@ -230,15 +230,23 @@ These are site conventions your plugin may *read*; they are not host APIs:
 * First source's `_theme/theme.css` — optional global overrides appended after the default theme.
 * Per-source `_nav.adoc` (rich markup) or `_nav.yaml` (declarative) — used by `mkadoc:nav` for link lists. No other nav formats are supported.
 +
-`_nav.yaml` entries take `label` plus exactly one of `page` (source-relative, normalized to `.html`), `href` (raw), or `children` (nested list):
+`_nav.yaml` entries are one of:
++
+* `page` — link to a page (source-relative, normalized to `.html`); the label comes from the page's `tab`/title, with an optional `label` as fallback when the page has no title.
+* `page` + `children` — a clickable parent (label from its page) with a nested list.
+* `label` + `children` — a non-clickable section header.
+* `label` + `href` — a raw/external link.
 +
 ----
-- label: Overview
-  page: index
+- page: index
+- page: guide
+  children:
+    - page: guide/setup
 - label: Reference
   children:
-    - label: Plugins
-      page: plugins
+    - page: plugins
+- label: GitHub
+  href: https://github.com/xiaoyvr/mkadoc
 ----
 * Files starting with `_` are partials (not pages). Article `include::` edges are tracked in the core dependency graph (`.mkadoc/deps.json`); editing an included partial rebuilds only the pages that include it. Site-wide deps (`index.*`, logo overrides, `_nav.adoc`/`_nav.yaml` via `registerSiteWideDep`) rebuild every page. `_theme/*.css` is CSS-only (assets mode). An unused partial with no known dependents is **`noop`**. Config still forces a **full** rebuild.
 
