@@ -6,7 +6,7 @@ import { relToRoot, walkDir } from './fs-utils.js'
  * @typedef {object} MkadocSource
  * @property {string} path        repo-relative source dir (posix)
  * @property {string} mount       site mount, e.g. `/` or `/apps/mkadoc`
- * @property {string} title       tab / section label
+ * @property {string} title       source bar / section label
  * @property {string} description `:description:` / frontmatter description (brand for first source)
  */
 
@@ -51,8 +51,8 @@ export function findSourceFile(root, sourcePath, basename, renderers) {
 }
 
 /**
- * Read `{source}/index.<ext>` metadata used for tabs and the site brand.
- * Tab title: `:tab:` / frontmatter `tab`, else doctitle, else mount fallback.
+ * Read `{source}/index.<ext>` metadata used for the source bar and the site brand.
+ * Source-bar label: `:nav_label:` / frontmatter `nav_label`, else doctitle, else mount fallback.
  * @param {string} root
  * @param {string} sourcePath
  * @param {string} mount
@@ -65,7 +65,7 @@ export async function sourceMetaForIndex(root, sourcePath, mount, renderers) {
 
   const text = fs.readFileSync(found.path, 'utf8')
   const meta = await found.renderer.extractMeta(text, found.path)
-  const title = String(meta.tab || meta.title || '').trim() || titleFallback(mount)
+  const title = String(meta.navLabel || meta.title || '').trim() || titleFallback(mount)
   const description = String(meta.description || '').trim()
   return { title, description }
 }
@@ -104,7 +104,7 @@ export function normalizeSources(sourcePaths) {
 }
 
 /**
- * Fill tab titles/descriptions from each source's index file via its renderer.
+ * Fill source-bar labels/descriptions from each source's index file via its renderer.
  * @param {import('./config.js').MkadocConfig} cfg
  * @param {import('./plugin/contract.js').MkadocRenderer[]} renderers
  */

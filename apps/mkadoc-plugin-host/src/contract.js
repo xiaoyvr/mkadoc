@@ -68,7 +68,7 @@
  * @property {string[]} [assets]     repo-relative referenced files to copy
  * @property {string[]} [includes]   repo-relative files this page depends on
  *
- * @typedef {{ title: string, description: string, tab?: string }} SourceMeta
+ * @typedef {{ title: string, description: string, navLabel?: string }} SourceMeta
  *
  * @typedef {object} MkadocRenderer
  * @property {string} name

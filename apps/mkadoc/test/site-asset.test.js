@@ -141,7 +141,7 @@ plugins:
   mkadoc:nav: {}
 `),
         'docs/index.adoc': `= Dotfiles
-:tab: Site
+:nav_label: Site
 
 Root.
 `,

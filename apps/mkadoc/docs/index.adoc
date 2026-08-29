@@ -25,7 +25,7 @@ Some conventions:
 
 * **Config file**: `mkadoc.yaml` under repository root
 * **Site root**: `serve` redirects `/` to the *first* source's index page
-* **Tab title**: `:tab:` / frontmatter `tab`, else doctitle/title, else last mount segment, else `Docs`
+* **Source-bar label**: `:nav_label:` / frontmatter `nav_label`, else doctitle/title, else last mount segment, else `Docs`
 * **Pages**: files owned by a renderer; names starting with `_` are ignored
 * **Cache**: `.mkadoc/` under repository root (not configurable — add it to `.gitignore`). Includes the include-dependency graph (`.mkadoc/deps.json`) used for incremental rebuilds when an included partial changes.
 * **Output**: HTML under `site/` by default, configurable with `output:`

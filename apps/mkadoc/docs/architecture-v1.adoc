@@ -41,8 +41,8 @@ A renderer is a plugin with `kind: 'renderer'` and these additions:
   kind: 'renderer',
   extensions: ['.adoc', '.asciidoc'],
 
-  // Parse a source's index file (or any page) into { title, description, tab }.
-  // Used for tab labels and the site brand.
+  // Parse a source's index file (or any page) into { title, description, navLabel }.
+  // Used for source-bar labels and the site brand.
   async extractMeta(sourceText, path) { ... },
 
   // Render one full page's article body.

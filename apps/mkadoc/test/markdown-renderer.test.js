@@ -43,7 +43,7 @@ Mixed formats.
         assert.equal(
           md.querySelector('a.mkadoc-source')?.text.trim(),
           'Markdown Home',
-          'tab title derives from frontmatter',
+          'source-bar label derives from frontmatter',
         )
 
         const adoc = parseHtml(fs.readFileSync(path.join(root, 'site/docs/guide.html'), 'utf8'))

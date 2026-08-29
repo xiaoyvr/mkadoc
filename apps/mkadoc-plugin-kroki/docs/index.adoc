@@ -1,5 +1,5 @@
 = mkadoc-plugin-kroki
-:tab: Kroki plugin
+:nav_label: Kroki plugin
 :description: Reference external mkadoc plugin — renders [diagram] blocks through a Kroki server.
 
 `mkadoc-plugin-kroki` is this repo's reference **external** plugin: it renders

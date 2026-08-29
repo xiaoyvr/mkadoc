@@ -1,5 +1,5 @@
 = @mkadoc/plugin-host
-:tab: Plugin host
+:nav_label: Plugin host
 :description: The canonical plugin contract for mkadoc — host API types, the plugin factory shape, and the test host.
 
 `@mkadoc/plugin-host` is the **contract** between mkadoc core and its plugins.

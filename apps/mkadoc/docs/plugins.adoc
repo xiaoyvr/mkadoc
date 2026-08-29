@@ -42,7 +42,7 @@ export default function myRenderer(options = {}, host) {
     kind: 'renderer',
     extensions: ['.xyz'],
 
-    // → { title, description, tab } from an index file / frontmatter
+    // → { title, description, navLabel } from an index file / frontmatter
     async extractMeta(sourceText, path) { ... },
 
     // → { html, title, lang, bodyClass, head, assets, includes }

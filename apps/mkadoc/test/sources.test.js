@@ -43,7 +43,7 @@ describe('rootRedirectHref', () => {
 })
 
 describe('multi-source build', () => {
-  it('writes pages under convention mounts and builds tab chrome', async () => {
+  it('writes pages under convention mounts and builds source-bar chrome', async () => {
     await withTempProject(
       {
         'mkadoc.yaml': yamlConfig(`sources:
@@ -55,7 +55,7 @@ plugins:
   mkadoc:nav: {}
 `),
         'docs/index.adoc': `= Dotfiles
-:tab: Site
+:nav_label: Site
 
 Root body.
 `,
@@ -166,7 +166,7 @@ Body.
     )
   })
 
-  it('index.adoc :tab: change refreshes tab chrome', async () => {
+  it('index.adoc :nav_label: change refreshes source-bar chrome', async () => {
     await withTempProject(
       {
         'mkadoc.yaml': yamlConfig(`sources:
@@ -178,7 +178,7 @@ plugins:
   mkadoc:nav: {}
 `),
         'docs/index.adoc': `= Dotfiles
-:tab: Site
+:nav_label: Site
 
 Root.
 `,
@@ -202,7 +202,7 @@ App.
         fs.writeFileSync(
           path.join(root, 'apps/mkadoc/docs/index.adoc'),
           `= mkadoc
-:tab: Mkadocx
+:nav_label: Mkadocx
 
 App.
 `,
@@ -231,7 +231,7 @@ App.
         assert.ok(
           docsPage.querySelectorAll('a.mkadoc-source').some((el) => el.text.trim() === 'Mkadocx'),
         )
-        // Page <title> still follows doctitle / :title:, not :tab:
+        // Page <title> still follows doctitle / :title:, not :nav_label:
         assert.equal(appPage.querySelector('title')?.text.trim(), 'mkadoc')
       },
     )

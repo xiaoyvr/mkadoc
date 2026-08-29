@@ -41,14 +41,14 @@ serve:
     )
   })
 
-  it('derives tab title from :tab: on index.adoc via the renderer', async () => {
+  it('derives source-bar label from :nav_label: on index.adoc via the renderer', async () => {
     await withTempProject(
       {
         'mkadoc.yaml': `sources:
   - docs
 `,
         'docs/index.adoc': `= Long Root Title
-:tab: Site
+:nav_label: Site
 
 Body.
 `,
@@ -110,7 +110,7 @@ Body.
     )
   })
 
-  it('derives tab title from Markdown frontmatter via the renderer', async () => {
+  it('derives source-bar label from Markdown frontmatter via the renderer', async () => {
     await withTempProject(
       {
         'mkadoc.yaml': `sources:

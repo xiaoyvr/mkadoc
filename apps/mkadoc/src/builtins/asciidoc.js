@@ -202,10 +202,10 @@ export default function asciidocRenderer(rawOptions = {}, host) {
         standalone: false,
         base_dir: absPath ? path.dirname(absPath) : undefined,
       })
-      const tab = String(doc.getAttribute?.('tab') || '').trim()
+      const navLabel = String(doc.getAttribute?.('nav_label') || '').trim()
       const title = String(doc.getDoctitle?.() || doc.getAttribute?.('doctitle') || '').trim()
       const description = String(doc.getAttribute?.('description') || '').trim()
-      return { title, description, tab }
+      return { title, description, navLabel }
     },
 
     /**
