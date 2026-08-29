@@ -165,6 +165,26 @@ export default function asciidocRenderer(rawOptions = {}, host) {
 
   const registry = Extensions.create()
   registerIncludeCollector(registry)
+  let diagramRegistered = false
+
+  /**
+   * Apply the `diagram` service (provided by e.g. mkadoc-plugin-kroki).
+   * Register its Asciidoctor adapter once, then merge its attributes.
+   * @param {Record<string, unknown>} attrs
+   * @returns {Record<string, unknown>}
+   */
+  function applyDiagramService(attrs) {
+    const svc = hostRef?.getService('diagram')
+    if (!svc) return attrs
+    if (!diagramRegistered && typeof svc.register === 'function') {
+      svc.register(registry)
+      diagramRegistered = true
+    }
+    if (svc.attributes && typeof svc.attributes === 'object') {
+      return { ...attrs, ...svc.attributes }
+    }
+    return attrs
+  }
 
   return {
     name: 'asciidoc',
@@ -193,10 +213,11 @@ export default function asciidocRenderer(rawOptions = {}, host) {
      * @returns {Promise<import('../plugin/contract.js').RenderOutput>}
      */
     async render({ sourceText, absPath, baseDir, attributes }) {
-      const attrs = { ...attributes }
+      let attrs = { ...attributes }
       if (hostRef?.getService('syntax-highlight')) {
         attrs['source-highlighter'] = 'mkadoc-syntax'
       }
+      attrs = applyDiagramService(attrs)
 
       const { result, includes } = await withIncludeCollector(
         { root: hostRef?.root ?? '', baseDir },
@@ -235,10 +256,11 @@ export default function asciidocRenderer(rawOptions = {}, host) {
      * @returns {Promise<string>}
      */
     async renderFragment({ sourceText, baseDir, attributes }) {
-      const attrs = { ...attributes }
+      let attrs = { ...attributes }
       if (hostRef?.getService('syntax-highlight')) {
         attrs['source-highlighter'] = 'mkadoc-syntax'
       }
+      attrs = applyDiagramService(attrs)
       const doc = await load(sourceText, {
         safe: 'unsafe',
         base_dir: baseDir,

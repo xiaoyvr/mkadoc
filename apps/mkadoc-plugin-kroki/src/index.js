@@ -46,17 +46,22 @@ export default async function krokiDiagramPlugin(rawOptions = {}, host) {
 
     async setup(host) {
       diagramDir = host.cacheDir(cacheName)
-      host.registerExtension((registry) => {
-        asciidoctorKroki.register(registry)
-      })
-      // Scope data-URI embedding to kroki diagrams only (kroki-data-uri),
-      // leaving regular images as file references that get copied.
-      host.addAttributes({
-        'kroki-server-url': serverUrl,
-        'kroki-fetch-diagram': '',
-        'kroki-data-uri': '',
-        'allow-uri-read': allowUriRead,
-        imagesoutdir: diagramDir,
+      // Provide a renderer-agnostic `diagram` capability. The Asciidoctor
+      // renderer consumes `register` + `attributes`; future renderers can add
+      // other adapters (e.g. a generic `render(source, type)`).
+      host.provideService('diagram', {
+        register(registry) {
+          asciidoctorKroki.register(registry)
+        },
+        attributes: {
+          'kroki-server-url': serverUrl,
+          'kroki-fetch-diagram': '',
+          // Scope data-URI embedding to kroki diagrams only (kroki-data-uri),
+          // leaving regular images as file references that get copied.
+          'kroki-data-uri': '',
+          'allow-uri-read': allowUriRead,
+          imagesoutdir: diagramDir,
+        },
       })
     },
 

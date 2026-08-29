@@ -114,7 +114,8 @@ export default function shikiPlugin(rawOptions = {}) {
       const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
       const css = `/* Generated from Shiki theme: ${theme} — do not edit. */
 .listingblock > .content > pre.shiki,
-.listingblock > .content > pre.shiki code {
+.listingblock > .content > pre.shiki code,
+pre:has(> code[class*="language-"]) {
   background: ${shared.colors.bg};
   color: ${shared.colors.fg};
 }

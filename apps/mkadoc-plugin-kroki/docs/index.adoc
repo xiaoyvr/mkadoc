@@ -46,11 +46,12 @@ The schema is strict: unknown keys are rejected (`Unrecognized key: "…"`).
 
 == How it works
 
-* `setup(host)` registers the `asciidoctor-kroki` extension via
-  `host.registerExtension`, then sets document attributes:
-  `kroki-server-url`, `kroki-fetch-diagram`, `kroki-data-uri`,
-  `allow-uri-read`, and `imagesoutdir` pointing at
-  `<root>/.mkadoc/<cache_dir>`.
+* `setup(host)` provides a renderer-agnostic `diagram` service whose
+  Asciidoctor adapter registers the `asciidoctor-kroki` extension and exposes
+  the document attributes `kroki-server-url`, `kroki-fetch-diagram`,
+  `kroki-data-uri`, `allow-uri-read`, and `imagesoutdir` (pointing at
+  `<root>/.mkadoc/<cache_dir>`). The `mkadoc:asciidoc` renderer consumes the
+  service, so the plugin never touches renderer-specific host APIs.
 * **Data-URI scoping** — `kroki-data-uri` is enabled so diagram output embeds
   as data URIs in the page; regular images stay file references and go through
   core's asset-copy pipeline instead.

@@ -125,18 +125,27 @@ host.provideService('syntax-highlight', {
 
 // renderer (mkadoc:asciidoc, mkadoc:markdown)
 const hl = host.getService('syntax-highlight')
+
+// another provider (mkadoc-plugin-kroki) with a renderer adapter
+host.provideService('diagram', {
+  register(registry) { ... },   // Asciidoctor adapter
+  attributes: { ... },
+})
 ----
 
 * Providers register services in `setup` (or lazily).
 * Consumers resolve services at *render time*, so load order is irrelevant.
 * `mkadoc:shiki` provides `syntax-highlight`; renderers consume it for code
   fences / source blocks and degrade to plain listings when absent.
+* `mkadoc-plugin-kroki` provides `diagram`; the `mkadoc:asciidoc` renderer
+  consumes its `register` + `attributes` adapter, so the plugin never touches
+  renderer-specific host APIs.
 * This replaces the v0 `afterPluginsLoaded` global and the Asciidoctor-only
   `SyntaxHighlighter` registration.
 
 == Configuration
 
-Config is plain YAML (`mkadoc.yaml`, default `mkadoc.yml` fallback). The
+Config is plain YAML (default `mkadoc.yaml`; `.yml` also accepted). The
 schema shape is unchanged from v0 (`sources`, `output`, `plugins`, `serve`) —
 the only change is the file format, not the data model.
 

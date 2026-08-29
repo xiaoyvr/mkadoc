@@ -20,15 +20,17 @@ describe('mkadoc-plugin-kroki', () => {
     )
   })
 
-  it('setup registers the kroki extension and attributes', async () => {
+  it('setup provides the diagram service (register + attributes)', async () => {
     const plugin = await krokiPlugin({ server_url: 'http://127.0.0.1:8080' }, host)
     assert.equal(plugin.name, 'kroki-diagram')
     await plugin.setup(host)
 
-    assert.equal(host._test.extensions.length, 1)
-    assert.equal(host._test.attributes['kroki-server-url'], 'http://127.0.0.1:8080')
-    assert.equal(host._test.attributes['kroki-fetch-diagram'], '')
-    assert.ok(host._test.attributes.imagesoutdir.endsWith(path.join('.mkadoc', 'diagram')))
+    const svc = host._test.services.get('diagram')
+    assert.ok(svc)
+    assert.equal(typeof svc.register, 'function')
+    assert.equal(svc.attributes['kroki-server-url'], 'http://127.0.0.1:8080')
+    assert.equal(svc.attributes['kroki-fetch-diagram'], '')
+    assert.ok(svc.attributes.imagesoutdir.endsWith(path.join('.mkadoc', 'diagram')))
   })
 
   it('check reports unreachable server as failure', async () => {

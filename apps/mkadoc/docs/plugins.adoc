@@ -81,6 +81,8 @@ const hl = host.getService('syntax-highlight')
   order is irrelevant.
 * `mkadoc:shiki` provides `syntax-highlight`; renderers consume it for code
   blocks/fences and degrade to plain listings when it is absent.
+* `mkadoc-plugin-kroki` provides `diagram`; the `mkadoc:asciidoc` renderer
+  consumes its `register` + `attributes` adapter.
 
 == What you cannot extend (core-owned)
 
