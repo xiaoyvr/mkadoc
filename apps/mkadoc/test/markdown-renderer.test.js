@@ -81,7 +81,7 @@ echo hello
     )
   })
 
-  it('renders _nav.md fragments via the markdown renderer', async () => {
+  it('ignores _nav.md and falls back to auto-nav', async () => {
     await withTempProject(
       {
         'mkadoc.yaml': yamlConfig(`sources:
@@ -100,8 +100,10 @@ plugins:
         const page = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         const sidebar = page.querySelector('#mkadoc-articles')
         assert.ok(sidebar)
-        assert.ok(sidebar.text.includes('Home'))
-        assert.ok(sidebar.text.includes('Other'))
+        // auto-nav lists pages by basename; the _nav.md link hrefs must NOT leak through
+        assert.ok(sidebar.text.includes('index'))
+        assert.ok(sidebar.text.includes('other'))
+        assert.equal(sidebar.querySelector('a[href="index.md"]'), null)
       },
     )
   })

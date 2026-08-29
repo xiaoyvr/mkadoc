@@ -118,7 +118,7 @@ export async function loadPlugins(pluginsConfig, host) {
   }
 
   // Renderers register + setup before feature plugins so feature plugins can
-  // discover them (e.g. mkadoc:nav finds `_nav.<ext>` via the renderer list).
+  // discover them (e.g. mkadoc:nav finds the `.adoc` renderer for _nav.adoc).
   for (const { plugin } of loaded) {
     if (plugin.kind === 'renderer') {
       host.registerRenderer(plugin)

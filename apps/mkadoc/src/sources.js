@@ -238,8 +238,3 @@ export function sourceIndexRels(cfg, renderers) {
   }
   return rels
 }
-
-/** Convention: `{source}/_nav.<ext>` rendered by the owning renderer. */
-export function navFileForSource(root, source, renderers) {
-  return findSourceFile(root, source.path, '_nav', renderers)
-}

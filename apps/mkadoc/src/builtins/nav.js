@@ -1,20 +1,31 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
+import { formatConfigZodError } from '../config-schema.js'
 import { resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
 import { escapeHtml, escapeHtmlAttr } from '../html-utils.js'
 import { parsePluginOptions } from '../plugin/options.js'
-import {
-  findSourceFile,
-  listSourcePages,
-  mountPrefix,
-  navFileForSource,
-  pageToHref,
-} from '../sources.js'
+import { findSourceFile, listSourcePages, mountPrefix, pageToHref } from '../sources.js'
 import { readThemeOverride, themeDirForSource } from '../theme.js'
 
 const OptionsSchema = z.object({}).strict()
+
+/** One declarative nav entry. Exactly one of page/href/children is required. */
+const NavItemSchema = z
+  .object({
+    label: z.string().min(1),
+    page: z.string().min(1).optional(),
+    href: z.string().min(1).optional(),
+    children: z.array(z.lazy(() => NavItemSchema)).optional(),
+  })
+  .strict()
+  .refine((item) => Boolean(item.page || item.href || item.children?.length), {
+    message: 'each nav item needs one of "page", "href", or "children"',
+  })
+
+const NavFileSchema = z.array(NavItemSchema).min(1)
 const CSS_HREF = '/styles/nav.css'
 const JS_HREF = '/styles/nav.js'
 
@@ -190,6 +201,53 @@ function autoNavHtml(host, source) {
   return `<div class="ulist"><ul>\n${items}\n</ul></div>\n`
 }
 
+/** Resolve a `page:` entry to the mounted `.html` href (extension stripped). */
+function navPageHref(source, page) {
+  const p = String(page)
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\.[^./]+$/, '')
+  const mount = source.mount.replace(/\/$/, '')
+  return `${mount}/${p}.html`
+}
+
+/** Render a validated `_nav.yaml` item tree to sidebar HTML. */
+function renderYamlNav(items, source) {
+  const renderItem = (item) => {
+    const label = escapeHtml(item.label)
+    if (item.children?.length) {
+      return `<li><p>${label}</p>\n<ul>\n${item.children.map(renderItem).join('\n')}\n</ul></li>`
+    }
+    const href = item.href ?? (item.page ? navPageHref(source, item.page) : '')
+    return `<li><p><a href="${escapeHtmlAttr(href)}">${label}</a></p></li>`
+  }
+  return `<div class="ulist"><ul>\n${items.map(renderItem).join('\n')}\n</ul></div>\n`
+}
+
+/**
+ * Read + validate `<source>/_nav.yaml`, or return null when absent.
+ * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('../sources.js').MkadocSource} source
+ */
+function readNavYaml(host, source) {
+  const abs = path.join(host.root, source.path, '_nav.yaml')
+  if (!fs.existsSync(abs)) return null
+  const text = fs.readFileSync(abs, 'utf8')
+  let raw
+  try {
+    raw = parseYaml(text)
+  } catch (err) {
+    throw new Error(`mkadoc:nav: invalid _nav.yaml (${source.path}): ${err?.message || err}`)
+  }
+  const result = NavFileSchema.safeParse(raw ?? [])
+  if (!result.success) {
+    throw new Error(
+      `mkadoc:nav: invalid _nav.yaml (${source.path}): ${formatConfigZodError(result.error)}`,
+    )
+  }
+  return result.data
+}
+
 async function readNavCssBundle(host) {
   const cssParts = [SOURCES_CSS, DEFAULT_NAV_CSS]
   const first = host.config.sources[0]
@@ -205,21 +263,27 @@ async function readNavCssBundle(host) {
 /**
  * Level-2 article sidebar: one `data-mount` list per source, contributed via
  * host.contributeChromeBody.
+ * Nav sources, in precedence order: `_nav.adoc` (rich markup), `_nav.yaml`
+ * (declarative), else an auto-generated page list. No other formats.
  * @param {import('../plugin/contract.js').MkadocPluginHost} host
  */
 async function buildArticlesHtml(host) {
+  const adocRenderer = host.renderers.find((r) => r.extensions?.includes('.adoc'))
   const lists = []
   for (const source of host.config.sources) {
     let html = ''
-    const navFile = navFileForSource(host.root, source, host.renderers)
-    if (navFile) {
-      const sourceText = fs.readFileSync(navFile.path, 'utf8')
-      html = await navFile.renderer.renderFragment({
+    const adocPath = path.join(host.root, source.path, '_nav.adoc')
+    if (adocRenderer && fs.existsSync(adocPath)) {
+      const sourceText = fs.readFileSync(adocPath, 'utf8')
+      html = await adocRenderer.renderFragment({
         sourceText,
-        absPath: navFile.path,
+        absPath: adocPath,
         baseDir: path.join(host.root, source.path),
         attributes: { icons: 'font', relfileprefix: mountPrefix(source.mount) },
       })
+    } else {
+      const items = readNavYaml(host, source)
+      if (items) html = renderYamlNav(items, source)
     }
     if (!String(html).trim()) {
       html = autoNavHtml(host, source)
@@ -247,8 +311,8 @@ export default function navPlugin(rawOptions = {}) {
       for (const source of host.config.sources) {
         const indexFile = findSourceFile(host.root, source.path, 'index', host.renderers)
         if (indexFile) host.registerSiteWideDep(indexFile.rel)
-        const navFile = navFileForSource(host.root, source, host.renderers)
-        if (navFile) host.registerSiteWideDep(navFile.rel)
+        host.registerSiteWideDep(`${source.path}/_nav.adoc`)
+        host.registerSiteWideDep(`${source.path}/_nav.yaml`)
       }
       host.addAttributes({ icons: 'font' })
     },
@@ -272,6 +336,7 @@ export default function navPlugin(rawOptions = {}) {
 
     async check(host) {
       const notes = []
+      let ok = host.config.sources.length > 0
       const first = host.config.sources[0]
       if (first) {
         const override = readThemeOverride(host.root, first, 'nav.css')
@@ -283,19 +348,24 @@ export default function navPlugin(rawOptions = {}) {
       }
 
       for (const source of host.config.sources) {
-        const navFile = navFileForSource(host.root, source, host.renderers)
-        if (!navFile) {
+        const adocPath = path.join(host.root, source.path, '_nav.adoc')
+        const yamlPath = path.join(host.root, source.path, '_nav.yaml')
+        if (fs.existsSync(adocPath)) {
+          notes.push(`${source.path}/_nav.adoc ok`)
+        } else if (fs.existsSync(yamlPath)) {
+          try {
+            readNavYaml(host, source)
+            notes.push(`${source.path}/_nav.yaml ok`)
+          } catch {
+            ok = false
+            notes.push(`${source.path}/_nav.yaml invalid`)
+          }
+        } else {
           notes.push(`_nav missing (auto nav)`)
-          continue
         }
-        const text = fs.readFileSync(navFile.path, 'utf8')
-        notes.push(text.trim() ? `${navFile.rel} ok` : `${navFile.rel} empty (auto nav)`)
       }
 
-      return {
-        ok: host.config.sources.length > 0,
-        message: notes.join('; ') || 'nav ok',
-      }
+      return { ok, message: notes.join('; ') || 'nav ok' }
     },
   }
 }

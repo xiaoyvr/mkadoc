@@ -49,7 +49,7 @@ export default function myRenderer(options = {}, host) {
     // html is the article body; core wraps it into the full page.
     async render({ sourceText, absPath, baseDir, attributes }) { ... },
 
-    // render a small markup fragment (used by mkadoc:nav for _nav.* files)
+    // render a small markup fragment (used by mkadoc:nav for _nav.adoc files)
     async renderFragment({ sourceText, absPath, baseDir, attributes }) { ... },
   }
 }
@@ -180,7 +180,7 @@ When files change under `serve`, core chooses a rebuild mode. These two APIs are
 
 `host.registerSiteWideDep(relPath)`::
 “If this path changed, rebuild **every** live page (incremental).”  
-Use when your chrome is baked into every page’s HTML (same idea as a virtual include for the whole site). Register in `setup`. Example: `mkadoc:nav` registers each source’s `_nav.adoc`.
+Use when your chrome is baked into every page’s HTML (same idea as a virtual include for the whole site). Register in `setup`. Example: `mkadoc:nav` registers each source’s `_nav.adoc` and `_nav.yaml`.
 
 `host.registerClassifier(fn)`::
 “If this path changed, rebuild **everything** (true full mode).”  
@@ -228,8 +228,19 @@ These are site conventions your plugin may *read*; they are not host APIs:
 * First source's `_theme/topbar.css` — optional CSS overrides for **topbar** styles (read by `mkadoc:topbar`; not your job unless you document a parallel file).
 * First source's `_theme/nav.css` — optional CSS overrides for **nav/sidebar** styles (read by `mkadoc:nav`).
 * First source's `_theme/theme.css` — optional global overrides appended after the default theme.
-* Per-source `_nav.<ext>` — used by `mkadoc:nav` for link lists (rendered by the owning renderer).
-* Files starting with `_` are partials (not pages). Article `include::` edges are tracked in the core dependency graph (`.mkadoc/deps.json`); editing an included partial rebuilds only the pages that include it. Site-wide deps (`index.*`, logo overrides, `_nav.*` via `registerSiteWideDep`) rebuild every page. `_theme/*.css` is CSS-only (assets mode). An unused partial with no known dependents is **`noop`**. Config still forces a **full** rebuild.
+* Per-source `_nav.adoc` (rich markup) or `_nav.yaml` (declarative) — used by `mkadoc:nav` for link lists. No other nav formats are supported.
++
+`_nav.yaml` entries take `label` plus exactly one of `page` (source-relative, normalized to `.html`), `href` (raw), or `children` (nested list):
++
+----
+- label: Overview
+  page: index
+- label: Reference
+  children:
+    - label: Plugins
+      page: plugins
+----
+* Files starting with `_` are partials (not pages). Article `include::` edges are tracked in the core dependency graph (`.mkadoc/deps.json`); editing an included partial rebuilds only the pages that include it. Site-wide deps (`index.*`, logo overrides, `_nav.adoc`/`_nav.yaml` via `registerSiteWideDep`) rebuild every page. `_theme/*.css` is CSS-only (assets mode). An unused partial with no known dependents is **`noop`**. Config still forces a **full** rebuild.
 
 === `contributeChrome` modes
 

@@ -179,7 +179,7 @@ to the output as before.
 | v0 | v1
 
 | `index.adoc` | `index.<ext>` — the source's primary format is the index file's renderer.
-| `_nav.adoc` | `_nav.<ext>` — rendered by the owning renderer (content fragment).
+| `_nav.adoc` / `_nav.yaml` | Declarative nav (`_nav.yaml`: `label` + `page`/`href`/`children`) or rich markup nav (`_nav.adoc`). No other nav formats.
 | `_chrome.adoc` | `_theme/topbar.css`
 | `[mkadoc-css]` blocks | plain `.css` files under `_theme/`
 |===
