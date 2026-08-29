@@ -90,10 +90,12 @@ describe('dev-server', () => {
 
         try {
           const res = await new Promise((resolve, reject) => {
-            http.get(server.url, (r) => {
-              r.resume()
-              r.on('end', () => resolve(r))
-            }).on('error', reject)
+            http
+              .get(server.url, (r) => {
+                r.resume()
+                r.on('end', () => resolve(r))
+              })
+              .on('error', reject)
           })
           assert.equal(res.statusCode, 302)
           assert.equal(res.headers.location, '/docs/index.html')

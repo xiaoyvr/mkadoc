@@ -4,7 +4,7 @@ import path from 'node:path'
 import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
-import { literateConfig, smokeFixture, withTempProject } from './helpers/project.js'
+import { smokeFixture, withTempProject, yamlConfig } from './helpers/project.js'
 
 function read(root, rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8')
@@ -21,7 +21,7 @@ function mtimeMs(root, rel) {
 describe('build smoke (no plugins)', () => {
   it('full build writes expected HTML for pages and skips partials', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
+      const cfg = await loadConfig('mkadoc.yaml', root)
       const mode = await build(cfg, { forceFull: true })
 
       assert.equal(mode, 'full')
@@ -35,7 +35,7 @@ describe('build smoke (no plugins)', () => {
 
   it('incremental page rebuild updates only that page', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
+      const cfg = await loadConfig('mkadoc.yaml', root)
       await build(cfg, { forceFull: true })
 
       const indexBefore = read(root, 'site/docs/index.html')
@@ -54,7 +54,7 @@ describe('build smoke (no plugins)', () => {
 
   it('index.adoc in a batch rebuilds all pages incrementally (site-wide)', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
+      const cfg = await loadConfig('mkadoc.yaml', root)
       await build(cfg, { forceFull: true })
 
       fs.writeFileSync(path.join(root, 'docs/index.adoc'), `= Smoke Index\n\nMARKER_INDEX_V2\n`)
@@ -72,7 +72,7 @@ describe('build smoke (no plugins)', () => {
         'docs/other.adoc': `= Smoke Other\n\nMARKER_OTHER_V1\n`,
       }),
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
 
         fs.writeFileSync(path.join(root, 'docs/guide.adoc'), `= Smoke Guide\n\nMARKER_GUIDE_V2\n`)
@@ -87,7 +87,7 @@ describe('build smoke (no plugins)', () => {
 
   it('unknown non-page path alone forces a full rebuild', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
+      const cfg = await loadConfig('mkadoc.yaml', root)
       await build(cfg, { forceFull: true })
       const mode = await build(cfg, { paths: ['README.md'] })
       assert.equal(mode, 'full')
@@ -96,16 +96,16 @@ describe('build smoke (no plugins)', () => {
 
   it('config path change forces a full rebuild', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
+      const cfg = await loadConfig('mkadoc.yaml', root)
       await build(cfg, { forceFull: true })
-      const mode = await build(cfg, { paths: ['mkadoc.adoc'] })
+      const mode = await build(cfg, { paths: ['mkadoc.yaml'] })
       assert.equal(mode, 'full')
     })
   })
 
   it('unused underscore partial is noop', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
+      const cfg = await loadConfig('mkadoc.yaml', root)
       await build(cfg, { forceFull: true })
 
       const mode = await build(cfg, { paths: ['docs/_partial.adoc'] })
@@ -124,7 +124,7 @@ describe('build smoke (no plugins)', () => {
     }
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
 `),
@@ -147,7 +147,7 @@ xref:guide.adoc[Guide]
         ...files,
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
 
         for (const [rel, content] of Object.entries(files)) {
@@ -167,7 +167,7 @@ xref:guide.adoc[Guide]
   it('copies the first source _assets folder to the mirrored output path', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
   - apps/mkadoc/docs
 output: site
@@ -178,7 +178,7 @@ output: site
         'apps/mkadoc/docs/_assets/other.png': 'IGNORE',
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
 
         // First source _assets is staged; other sources are not.
@@ -197,7 +197,7 @@ output: site
     try {
       await withTempProject(
         {
-          'mkadoc.adoc': literateConfig(`sources:
+          'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
 `),
@@ -207,7 +207,7 @@ image::images/missing.png[]
 `,
         },
         async (root) => {
-          const cfg = await loadConfig('mkadoc.adoc', root)
+          const cfg = await loadConfig('mkadoc.yaml', root)
           await build(cfg, { forceFull: true })
         },
       )

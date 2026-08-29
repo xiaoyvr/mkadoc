@@ -2,20 +2,20 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { check } from '../src/check.js'
 import { loadConfig } from '../src/config.js'
-import { literateConfig, smokeFixture, withTempProject } from './helpers/project.js'
+import { smokeFixture, withTempProject, yamlConfig } from './helpers/project.js'
 
 describe('check', () => {
   it('returns 1 when source directory is missing', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - missing-docs
 output: site
 plugins: {}
 `),
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         assert.equal(await check(cfg), 1)
       },
     )
@@ -25,7 +25,7 @@ plugins: {}
     await withTempProject(
       {
         ...smokeFixture(),
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
 plugins:
@@ -33,7 +33,7 @@ plugins:
 `),
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         assert.equal(await check(cfg), 0)
       },
     )
@@ -44,7 +44,7 @@ plugins:
       smokeFixture({
         'docs/_nav.adoc': `* xref:index.adoc[Home]
 `,
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
 plugins:
@@ -52,7 +52,7 @@ plugins:
 `),
       }),
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         assert.equal(await check(cfg), 0)
       },
     )

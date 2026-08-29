@@ -1,5 +1,4 @@
 import path from 'node:path'
-import { SyntaxHighlighter, SyntaxHighlighterBase } from '@asciidoctor/core'
 import { createHighlighter } from 'shiki'
 import { z } from 'zod'
 import { resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
@@ -28,7 +27,6 @@ const OptionsSchema = z
   .strict()
 
 const CSS_HREF = '/styles/shiki.css'
-
 const DEFAULT_THEME = 'github-light-default'
 
 const LANG_ALIASES = {
@@ -44,86 +42,12 @@ const shared = {
   key: null,
   theme: DEFAULT_THEME,
   colors: { bg: '#ffffff', fg: '#1f2328' },
-  adapterState: 'absent',
 }
 
 function langListFor(langs) {
   const langList = new Set([...langs, 'plaintext'])
   for (const alias of Object.values(LANG_ALIASES)) langList.add(alias)
   return [...langList].sort()
-}
-
-class ActiveShikiHighlighter extends SyntaxHighlighterBase {
-  constructor(name, backend, opts = {}) {
-    super(name, backend, opts)
-    this.name = 'shiki'
-    this._preClass = 'shiki'
-    const doc = opts.document
-    this.theme =
-      (doc?.hasAttribute('shiki-theme') && doc.getAttribute('shiki-theme')) || shared.theme
-  }
-
-  highlight(_node, source, lang) {
-    const h = shared.highlighter
-    if (!h) {
-      throw new Error(
-        'mkadoc:shiki: highlighter is not active (plugin disabled or disposed; restart serve if this persists)',
-      )
-    }
-    let language = LANG_ALIASES[lang] || lang || 'plaintext'
-    if (!h.getLoadedLanguages().includes(language)) {
-      language = 'plaintext'
-    }
-    const themeName = h.getLoadedThemes().includes(this.theme) ? this.theme : shared.theme
-    return h.codeToHtml(source, {
-      lang: language,
-      theme: themeName,
-      structure: 'inline',
-    })
-  }
-
-  handlesHighlighting() {
-    return true
-  }
-}
-
-class InactiveShikiHighlighter extends SyntaxHighlighterBase {
-  constructor(name, backend, opts = {}) {
-    super(name, backend, opts)
-    this.name = 'shiki'
-  }
-
-  highlight() {
-    throw new Error(
-      'mkadoc:shiki: plugin is not enabled in the current config (source-highlighter=shiki is stale)',
-    )
-  }
-
-  handlesHighlighting() {
-    return true
-  }
-}
-
-function ensureActiveAdapter() {
-  if (shared.adapterState === 'active') return
-
-  SyntaxHighlighter.register(ActiveShikiHighlighter, 'shiki')
-  shared.adapterState = 'active'
-}
-
-function disposeShikiRuntime() {
-  shared.highlighter?.dispose()
-  shared.highlighter = null
-  shared.key = null
-  if (shared.adapterState === 'absent') return
-  SyntaxHighlighter.register(InactiveShikiHighlighter, 'shiki')
-  shared.adapterState = 'inactive'
-}
-
-export function afterPluginsLoaded(locators = []) {
-  if (!locators.includes('mkadoc:shiki')) {
-    disposeShikiRuntime()
-  }
 }
 
 /** @type {import('../plugin/contract.js').MkadocPluginFactory} */
@@ -152,23 +76,38 @@ export default function shikiPlugin(rawOptions = {}) {
         }
       }
 
-      const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
-      const assetDir = path.posix.dirname(cssAsset.relPath)
-      const out = host.config.output.replace(/\\/g, '/').replace(/\/$/, '')
-      host.registerAssetPrefix(assetDir === '.' ? out : path.posix.join(out, assetDir))
-
       if (!shared.highlighter) {
         throw new Error('mkadoc:shiki: highlighter not initialized (setup failed)')
       }
 
-      ensureActiveAdapter()
-
       shared.theme = theme
 
-      host.addAttributes({
-        'source-highlighter': 'shiki',
-        'shiki-theme': theme,
+      // Capability consumed by renderers (mkadoc:asciidoc, mkadoc:markdown, …).
+      host.provideService('syntax-highlight', {
+        highlight(code, lang) {
+          const h = shared.highlighter
+          if (!h) {
+            throw new Error('mkadoc:shiki: highlighter is not active')
+          }
+          let language = LANG_ALIASES[lang] || lang || 'plaintext'
+          if (!h.getLoadedLanguages().includes(language)) {
+            language = 'plaintext'
+          }
+          const themeName = h.getLoadedThemes().includes(shared.theme)
+            ? shared.theme
+            : DEFAULT_THEME
+          return h.codeToHtml(String(code), {
+            lang: language,
+            theme: themeName,
+            structure: 'inline',
+          })
+        },
       })
+
+      const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
+      const assetDir = path.posix.dirname(cssAsset.relPath)
+      const out = host.config.output.replace(/\\/g, '/').replace(/\/$/, '')
+      host.registerAssetPrefix(assetDir === '.' ? out : path.posix.join(out, assetDir))
     },
 
     async contributeChrome(host) {

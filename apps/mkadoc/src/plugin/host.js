@@ -1,20 +1,19 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { Extensions } from '@asciidoctor/core'
 import { CACHE_DIR } from '../config.js'
-import { registerIncludeCollector } from '../deps.js'
-import { relToRoot, writeIfChanged } from '../fs-utils.js'
-import { escapeHtmlAttr } from '../html-utils.js'
+import { relToRoot } from '../fs-utils.js'
 
 /**
  * Shared mutable state behind the plugin and build hosts.
+ * Core is renderer-agnostic: the `extensionRegistry` slot is created by a
+ * renderer (mkadoc:asciidoc) and consumed by plugins that call
+ * `registerExtension` (e.g. the Asciidoctor-specific kroki plugin).
  * @param {import('../config.js').MkadocConfig} cfg
  */
 function createHostState(cfg, deps = null) {
   return {
     cfg,
     deps,
-    registry: Extensions.create(),
     attributes: {},
     headLinks: [],
     headScripts: [],
@@ -22,7 +21,14 @@ function createHostState(cfg, deps = null) {
     assetPrefixes: [],
     /** @type {string[]} */
     chromeBody: [],
-    headerProvided: false,
+    /** @type {Map<string, unknown>} */
+    services: new Map(),
+    /** @type {import('./contract.js').MkadocRenderer[]} */
+    renderers: [],
+    /** @type {unknown} */
+    extensionRegistry: null,
+    /** @type {((registry: unknown) => void)[]} */
+    pendingExtensions: [],
   }
 }
 
@@ -46,9 +52,45 @@ function createPluginHost(state) {
     get root() {
       return cfg.root
     },
+    get registry() {
+      return state.extensionRegistry
+    },
 
+    get renderers() {
+      return state.renderers
+    },
+
+    /**
+     * Register into the active renderer's extension registry. Deferred until a
+     * renderer registers one (so config order between a feature plugin and the
+     * renderer it targets does not matter).
+     * @param {(registry: unknown) => void} registerFn
+     */
     registerExtension(registerFn) {
-      registerFn(state.registry)
+      if (state.extensionRegistry) {
+        registerFn(state.extensionRegistry)
+      } else {
+        state.pendingExtensions.push(registerFn)
+      }
+    },
+
+    /** A renderer (mkadoc:asciidoc) publishes its extension registry here. */
+    registerExtensionRegistry(registry) {
+      state.extensionRegistry = registry
+      for (const fn of state.pendingExtensions.splice(0)) fn(registry)
+    },
+
+    /** @param {import('./contract.js').MkadocRenderer} renderer */
+    registerRenderer(renderer) {
+      state.renderers.push(renderer)
+    },
+
+    provideService(name, service) {
+      state.services.set(name, service)
+    },
+
+    getService(name) {
+      return state.services.get(name)
     },
 
     addAttributes(attrs) {
@@ -118,8 +160,14 @@ function createPluginHost(state) {
 function createBuildHost(state) {
   const { cfg } = state
 
-  function headerDocinfoPath() {
-    return path.join(cfg.root, cfg.docinfoDir, 'docinfo-header.html')
+  /** @param {string} p */
+  function rendererForPath(p) {
+    const ext = path.extname(String(p)).toLowerCase()
+    if (!ext) return null
+    for (const renderer of state.renderers) {
+      if (renderer.extensions?.includes(ext)) return renderer
+    }
+    return null
   }
 
   return Object.freeze({
@@ -130,63 +178,32 @@ function createBuildHost(state) {
       return cfg.root
     },
     get registry() {
-      return state.registry
+      return state.extensionRegistry
     },
     get attributes() {
       return state.attributes
     },
-    get assetPrefixes() {
-      return state.assetPrefixes
+    get headLinks() {
+      return state.headLinks
+    },
+    get headScripts() {
+      return state.headScripts
     },
     get chromeBody() {
       return state.chromeBody
     },
+    get assetPrefixes() {
+      return state.assetPrefixes
+    },
+    get renderers() {
+      return state.renderers
+    },
+
+    rendererForPath,
 
     contributeHead({ links = [], scripts = [] } = {}) {
       state.headLinks.push(...links)
       state.headScripts.push(...scripts)
-    },
-
-    headerDocinfoPath,
-
-    headerDocinfoExists() {
-      return fs.existsSync(headerDocinfoPath())
-    },
-
-    markHeaderProvided() {
-      state.headerProvided = true
-    },
-
-    async writeHeaderDocinfo(html) {
-      writeIfChanged(headerDocinfoPath(), html)
-      state.headerProvided = true
-    },
-
-    writeHeadDocinfo() {
-      const lines = []
-      for (const link of state.headLinks) {
-        const attrs = Object.entries(link)
-          .map(([k, v]) => (v === true ? k : `${k}="${escapeHtmlAttr(v)}"`))
-          .join(' ')
-        lines.push(`<link ${attrs}>`)
-      }
-      for (const script of state.headScripts) {
-        const { src, defer, async: isAsync, ...rest } = script
-        const parts = [`src="${escapeHtmlAttr(src)}"`]
-        if (defer) parts.push('defer')
-        if (isAsync) parts.push('async')
-        for (const [k, v] of Object.entries(rest)) {
-          parts.push(v === true ? k : `${k}="${escapeHtmlAttr(v)}"`)
-        }
-        lines.push(`<script ${parts.join(' ')}></script>`)
-      }
-      const out = path.join(cfg.root, cfg.docinfoDir, 'docinfo.html')
-      const body = lines.join('\n') + (lines.length ? '\n' : '')
-      return writeIfChanged(out, body)
-    },
-
-    wantsDocinfo() {
-      return state.headerProvided || state.headLinks.length > 0 || state.headScripts.length > 0
     },
 
     classifyPath(p) {
@@ -209,8 +226,6 @@ function createBuildHost(state) {
  */
 export function createHosts(cfg, { deps = null } = {}) {
   const state = createHostState(cfg, deps)
-  // Core-owned include tracker (feeds the dependency graph during page convert).
-  registerIncludeCollector(state.registry)
   return {
     plugin: createPluginHost(state),
     build: createBuildHost(state),

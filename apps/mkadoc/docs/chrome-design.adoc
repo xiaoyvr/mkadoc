@@ -6,28 +6,34 @@ This page explains **why** mkadoc lays out the topbar, plugin UI, and article th
 
 Think of the site as **many complete pages**, not one shell that swaps an article fragment.
 
-Each published URL is its own standalone HTML file: `<html>`, `<head>`, `<body>`, Asciidoctor’s article structure, and (when enabled) the same shared chrome prefix baked in at build time.
+Each published URL is its own standalone HTML file: `<html>`, `<head>`, `<body>`, the renderer’s article structure, and (when enabled) the same shared chrome prefix baked in at build time.
 Navigating to another page loads **another full document** — there is no client-side “main outlet” that receives only the article.
 
 That framing matters:
 
-* Shared chrome (topbar, sidebar, head tags) is **copied into every page** via Asciidoctor docinfo, not mounted once by a router.
+* Shared chrome (topbar, sidebar, head tags) is **copied into every page** by core assembly, not mounted once by a router.
 * The article is **not** a fragment dropped into a live layout; it is the convert result for that `.adoc` file, sitting in the body next to the injected chrome.
 * Plugins contribute markup and assets that become part of those full pages at build time — they do not own a single-page application frame.
 
 If you catch yourself designing for “shell + content slot,” pause: mkadoc’s model is **full HTML per page**, with small shared inserts repeated on each one.
 
-== Starting point: Asciidoctor owns the page
+== Starting point: core owns the wrapper, renderers own the article
 
-Each of those full pages is still an **Asciidoctor conversion**.
-mkadoc does not replace that with a custom full-page template or a client app.
+Each of those full pages is still a **renderer conversion** — AsciiDoc via
+`mkadoc:asciidoc`, Markdown via `mkadoc:markdown`, and so on. Core does **not**
+replace that with a custom client app.
 
-Instead it **injects** shared snippets into every page:
+Instead core **wraps** every article:
 
-* Head tags (stylesheets, scripts)
-* A header block at the start of `<body>` (topbar + a mount for plugin UI)
+* A renderer produces the article body (`#header` + `#content` + `#footer` for AsciiDoc; the rendered fragment for Markdown).
+* Core assembles the full page: `<html>`/`<head>` (default theme CSS, head tags) and `<body>` (a header block at the start — topbar + a mount for plugin UI — followed by the article).
 
-So the product model is: *AsciiDoc → full HTML page, plus small shared inserts* — not *one page with an embedded article fragment*.
+So the product model is: *markup → article body, plus a core-owned page wrapper
+and small shared inserts* — not *one page with an embedded article fragment*.
+
+The default page wrapper reproduces Asciidoctor's standalone structure and
+ships Asciidoctor's default stylesheet as the default theme, so AsciiDoc pages
+keep their appearance while the assembly logic lives in core.
 
 == What ends up in the page
 
@@ -40,7 +46,7 @@ Conceptually:
   <nav class="mkadoc-sources">…level-1 sources…</nav>
   <aside id="mkadoc-articles">…level-2 articles…</aside>
 
-  <!-- Asciidoctor article: unchanged convert output -->
+  <!-- renderer article: unchanged renderer output -->
 </body>
 ----
 
@@ -49,7 +55,7 @@ Conceptually:
   concatenated in **plugin load order** (config key order). `mkadoc:nav` owns the
   whole site nav: the level-1 source bar (`<nav class="mkadoc-sources">`) and the
   level-2 article sidebar (`<aside id="mkadoc-articles">`).
-* **Article** — normal Asciidoctor body; sibling of the chrome fragments, not nested inside any wrapper.
+* **Article** — normal renderer output; sibling of the chrome fragments, not nested inside any wrapper.
 
 == Why the article is not inside a chrome wrapper
 
@@ -62,21 +68,22 @@ It is tempting to wrap the article for CSS grid/flex:
 
 mkadoc deliberately **does not** do that.
 
-=== Shared inserts run before the article exists
+=== Shared inserts are assembled before the article exists
 
-The header snippet is injected as a fixed prefix on every page.
+The header snippet is injected as a fixed prefix on every page by core.
 At that moment the pipeline is not “here is a slot; drop the article in.”
-The article is produced separately as convert output and follows the header in the body.
+The article is produced separately as the renderer's output and follows the
+header in the body.
 
-Nesting the article inside a wrapper would require an extra step: **rewrite the HTML after convert** (find the article root, move it into the wrapper) or a **custom HTML template** that replaces Asciidoctor’s page structure.
+Nesting the article inside a wrapper would require an extra step: **rewrite the HTML after convert** (find the article root, move it into the wrapper) or a **custom HTML template** that replaces the renderer’s page structure.
 
 === Siblings avoid fragile rewrites
 
 Post-processing every page to wrap content is brittle:
 
-* Asciidoctor’s DOM can vary with attributes, backends, and extensions
+* A renderer’s DOM can vary with attributes, backends, and extensions
 * Incremental builds and edge cases get harder to reason about
-* Debugging “is this Asciidoctor or our rewriter?” gets noisy
+* Debugging “is this the renderer or our rewriter?” gets noisy
 
 Keeping **siblings** means: inject chrome, leave the article alone.
 
@@ -87,10 +94,10 @@ That is enough for common docs layouts without owning the article’s parent nod
 
 == Design goals this serves
 
-* **Safe** — no HTML rewriter between Asciidoctor and the published page for layout.
+* **Safe** — no HTML rewriter between the renderer and the published page for layout.
 * **Simple plugins** — append markup via `host.contributeChromeBody` and ship your own CSS; no “main slot” protocol.
-* **Clear ownership** — everything is a plugin: topbar (`mkadoc:topbar`), site nav (`mkadoc:nav`), extensions (`mkadoc:shiki`, external). Core only assembles fragments into the header docinfo. Asciidoctor: article.
-* **Shared vs per-page** — chrome is the same on every page; the article changes per file. That matches “inject once, convert many.”
+* **Clear ownership** — everything is a plugin: topbar (`mkadoc:topbar`), site nav (`mkadoc:nav`), renderers (`mkadoc:asciidoc`, `mkadoc:markdown`), services (`mkadoc:shiki`). Core only assembles the page wrapper + shared inserts.
+* **Shared vs per-page** — chrome is the same on every page; the article changes per file. That matches “inject once, render many.”
 
 == Tradeoff (accepted)
 
@@ -102,4 +109,5 @@ Until then: **siblings for safety.**
 == Related
 
 * Site author overview: xref:index.adoc[mkadoc]
+* Multi-format renderer design: xref:architecture-v1.adoc[Architecture v1]
 * Plugin APIs for contributing under the topbar: xref:plugins.adoc[Writing mkadoc plugins]

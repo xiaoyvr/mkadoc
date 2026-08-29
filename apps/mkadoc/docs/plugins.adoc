@@ -19,7 +19,9 @@ Use the builtins under `src/builtins/` as reference implementations, and
 |===
 | Extension point | How
 
-| Asciidoctor conversion | `registerExtension` + `addAttributes` in `setup` (blocks, macros, highlighters, …)
+| Rendering a markup format | A **renderer** plugin (`kind: 'renderer'`) with `extensions`, `extractMeta`, `render`, `renderFragment` (see <<Renderers>>)
+| Renderer-specific conversion | `registerExtension` + `addAttributes` in `setup` (blocks, macros, highlighters, … for the AsciiDoc renderer)
+| Cross-format capabilities | `provideService(name, service)` / `getService(name)` (see <<Services>>)
 | Generated CSS / JS on every page | Write files under `host.config.output`, then `contributeHead({ links, scripts })`
 | UI below the site topbar | `contributeChromeBody(html)` — HTML appended below the topbar, in plugin load order
 | Rebuild sensitivity | `registerSiteWideDep` (rebuild every page), `registerClassifier` (force **full**), or `registerAssetPrefix` (**assets** mode)
@@ -27,11 +29,64 @@ Use the builtins under `src/builtins/` as reference implementations, and
 | On-disk cache | `cacheDir(name)` under `.mkadoc/`
 |===
 
+[[Renderers]]
+=== Renderers
+
+A renderer is a plugin with `kind: 'renderer'`:
+
+[source,js]
+----
+export default function myRenderer(options = {}, host) {
+  return {
+    name: 'my',
+    kind: 'renderer',
+    extensions: ['.xyz'],
+
+    // → { title, description, tab } from an index file / frontmatter
+    async extractMeta(sourceText, path) { ... },
+
+    // → { html, title, lang, bodyClass, head, assets, includes }
+    // html is the article body; core wraps it into the full page.
+    async render({ sourceText, absPath, baseDir, attributes }) { ... },
+
+    // render a small markup fragment (used by mkadoc:nav for _nav.* files)
+    async renderFragment({ sourceText, absPath, baseDir, attributes }) { ... },
+  }
+}
+----
+
+Renderers are auto-loaded (`mkadoc:asciidoc`, `mkadoc:markdown`); listing one
+under `plugins:` only passes it options. Core discovers pages by asking each
+renderer's `extensions`, dispatches page → renderer, and owns page assembly
+(wrapper, theme CSS, chrome, head tags).
+
+[[Services]]
+=== Services (provider/consumer)
+
+Cross-cutting capabilities are shared through named services — no dependency
+metadata in config:
+
+[source,js]
+----
+// provider (e.g. mkadoc:shiki)
+host.provideService('syntax-highlight', {
+  highlight(code, lang) { ... },
+})
+
+// consumer (any renderer)
+const hl = host.getService('syntax-highlight')
+----
+
+* Providers register in `setup`; consumers resolve at *render time*, so load
+  order is irrelevant.
+* `mkadoc:shiki` provides `syntax-highlight`; renderers consume it for code
+  blocks/fences and degrade to plain listings when it is absent.
+
 == What you cannot extend (core-owned)
 
 * **Topbar / logo / brand** — the topbar is the built-in `mkadoc:topbar` plugin (first in config order so it renders above everything else). Everything below it comes from plugins via `host.contributeChromeBody` (the built-in `mkadoc:nav` is the reference implementation).
-* **Core chrome files** — core no longer ships chrome CSS/JS of its own; every chrome asset belongs to a plugin (`/styles/topbar.*`, `/styles/nav.css`, …). Site authors can *override topbar styles* by adding `[mkadoc-css]` in the first source’s `_chrome.adoc` (mkadoc:topbar appends that after package defaults).
-* **Page HTML body** — the article is Asciidoctor’s convert output. `contributeChromeBody` is only for shared site UI that appears on every page (for example a left sidebar), not for the article itself.
+* **Page assembly** — core wraps every renderer's article body into the full HTML document (wrapper, default theme CSS, chrome, head tags). Site authors override the *default theme* with `_theme/theme.css`, and *topbar styles* with the first source's `_theme/topbar.css` (mkadoc:topbar appends it after package defaults).
+* **Page HTML body** — the article is the owning renderer's output. `contributeChromeBody` is only for shared site UI that appears on every page (for example a left sidebar), not for the article itself.
 * **Config schema / CLI / unknown locators** — plugins are registered via known `mkadoc:*` locators or valid package specs (`npm-package-arg` grammar); factory options you validate yourself.
 * **Build orchestration** — core decides `full` / `incremental` / `assets` / `noop` and assembles the shared page chrome/head. You only influence rebuilds via `registerSiteWideDep` / `registerClassifier` / `registerAssetPrefix` (see below). You do not take over writing the topbar/header HTML or flushing head tags — use `contributeChromeBody` and `contributeHead` instead.
 
@@ -70,10 +125,10 @@ Every hook receives the same host object.
 `host.config`:: Resolved project config (`sources`, `output`, `plugins`, …).
 `host.root`:: Absolute project root. Join with relative paths from config.
 
-=== Asciidoctor
+=== Renderer extension registry
 
-`host.registerExtension(fn)`::
-Call `fn(registry)` to register Asciidoctor.js extensions. Used by diagram / syntax plugins.
+`host.registerExtension(fn)`:  
+Call `fn(registry)` to register extensions into the **AsciiDoc renderer's** registry. Used by diagram / syntax plugins. Registration is deferred until a renderer publishes its registry, so plugin load order does not matter.
 Never import `@asciidoctor/core` yourself — the registry is handed over; using a second
 instance would break registration.
 
@@ -115,7 +170,7 @@ Own your markup and CSS. Typical pattern for a fixed side column (e.g. sidebar):
 * Ship CSS that positions it (often `position: fixed`) and adjusts `body` padding with `:has(#your-id)`.
 * Do not assume another plugin’s fragment exists unless you document that dependency.
 
-The article itself stays in the normal page body from Asciidoctor.
+The article itself stays in the normal page body from the owning renderer.
 See xref:chrome-design.adoc[Site chrome design] for why.
 
 === Rebuild hints
@@ -162,17 +217,18 @@ Example: `mkadoc:shiki` registers the directory of its generated CSS so a CSS-on
 === Assets
 
 * Prefer `/styles/<plugin>.css` (and `.js` if needed) under `output/`.
-* Ship plugin assets under your own paths (e.g. `/styles/my.css`); the builtins own `/styles/topbar.*` and `/styles/nav.css`. Site-level topbar CSS tweaks go in the first source’s `_chrome.adoc` (`[mkadoc-css]`), read by `mkadoc:topbar`.
+* Ship plugin assets under your own paths (e.g. `/styles/my.css`); the builtins own `/styles/topbar.*` and `/styles/nav.css`. Site-level topbar CSS tweaks go in the first source’s `_theme/topbar.css` (read by `mkadoc:topbar`).
 * Root-absolute URLs in `contributeHead` (leading `/`).
 
 === Source-tree conventions (site authors)
 
 These are site conventions your plugin may *read*; they are not host APIs:
 
-* First source’s `_chrome.adoc` — optional `[mkadoc-css]` overrides for **topbar** styles (read by `mkadoc:topbar`; not your job unless you document a parallel file).
-* Per-source `_nav.adoc` — used by `mkadoc:nav` for link lists; first source may also carry `[mkadoc-css]` nav overrides.
-* Use `----` (listing) delimiters for `[mkadoc-css]` (`////` comment blocks are not visible to the parser).
-* Files starting with `_` are partials (not pages). Article `include::` edges are tracked in the core dependency graph (`.cache/deps.json`); editing an included partial rebuilds only the pages that include it. Site-wide deps (`index.adoc`, logo overrides, `_nav.adoc` via `registerSiteWideDep`) rebuild every page. `_chrome.adoc` is CSS-only (assets mode). An unused partial with no known dependents is **`noop`**. Config still forces a **full** rebuild. The dependency graph lives at `.mkadoc/deps.json`.
+* First source's `_theme/topbar.css` — optional CSS overrides for **topbar** styles (read by `mkadoc:topbar`; not your job unless you document a parallel file).
+* First source's `_theme/nav.css` — optional CSS overrides for **nav/sidebar** styles (read by `mkadoc:nav`).
+* First source's `_theme/theme.css` — optional global overrides appended after the default theme.
+* Per-source `_nav.<ext>` — used by `mkadoc:nav` for link lists (rendered by the owning renderer).
+* Files starting with `_` are partials (not pages). Article `include::` edges are tracked in the core dependency graph (`.mkadoc/deps.json`); editing an included partial rebuilds only the pages that include it. Site-wide deps (`index.*`, logo overrides, `_nav.*` via `registerSiteWideDep`) rebuild every page. `_theme/*.css` is CSS-only (assets mode). An unused partial with no known dependents is **`noop`**. Config still forces a **full** rebuild.
 
 === `contributeChrome` modes
 

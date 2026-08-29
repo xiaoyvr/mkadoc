@@ -4,7 +4,7 @@ import path from 'node:path'
 import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
-import { createHosts } from '../src/plugin/host.js'
+import { assemblePage } from '../src/page.js'
 import { smokeFixture, withTempProject } from './helpers/project.js'
 
 function exists(root, rel) {
@@ -14,7 +14,7 @@ function exists(root, rel) {
 describe('P0: orphan HTML prune', () => {
   it('incremental build removes HTML for a deleted page batched with an edit', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
+      const cfg = await loadConfig('mkadoc.yaml', root)
       await build(cfg, { forceFull: true })
       assert.ok(exists(root, 'site/docs/guide.html'))
       assert.ok(exists(root, 'site/docs/index.html'))
@@ -39,7 +39,7 @@ describe('P0: orphan HTML prune', () => {
 describe('P0: publish clean', () => {
   it('clean full build wipes stale output before rebuilding', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
+      const cfg = await loadConfig('mkadoc.yaml', root)
       await build(cfg, { forceFull: true })
 
       const stale = path.join(root, 'site/stale-orphan.html')
@@ -58,33 +58,28 @@ describe('P0: publish clean', () => {
   })
 })
 
-describe('P0: docinfo attribute escaping', () => {
-  it('writeHeadDocinfo escapes attribute values', async () => {
-    await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
-      const { build: host } = createHosts(cfg)
-      host.contributeHead({
-        links: [
-          {
-            rel: 'stylesheet',
-            href: '/styles/x.css" onload="alert(1)',
-          },
-        ],
-        scripts: [
-          {
-            src: '/styles/x.js"><img src=x onerror=alert(1)><',
-            defer: true,
-            'data-x': 'a&b',
-          },
-        ],
-      })
-      host.writeHeadDocinfo()
-
-      const body = fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8')
-      assert.match(body, /href="\/styles\/x\.css&quot; onload=&quot;alert\(1\)"/)
-      assert.match(body, /src="\/styles\/x\.js&quot;&gt;&lt;img src=x onerror=alert\(1\)&gt;&lt;"/)
-      assert.match(body, /data-x="a&amp;b"/)
-      assert.doesNotMatch(body, /onload="alert/)
+describe('P0: page assembly attribute escaping', () => {
+  it('escapes head link/script attribute values', () => {
+    const html = assemblePage({
+      title: 'T',
+      body: '',
+      headLinks: [
+        {
+          rel: 'stylesheet',
+          href: '/styles/x.css" onload="alert(1)',
+        },
+      ],
+      headScripts: [
+        {
+          src: '/styles/x.js"><img src=x onerror=alert(1)><',
+          defer: true,
+          'data-x': 'a&b',
+        },
+      ],
     })
+    assert.match(html, /href="\/styles\/x\.css&quot; onload=&quot;alert\(1\)"/)
+    assert.match(html, /src="\/styles\/x\.js&quot;&gt;&lt;img src=x onerror=alert\(1\)&gt;&lt;"/)
+    assert.match(html, /data-x="a&amp;b"/)
+    assert.doesNotMatch(html, /onload="alert/)
   })
 })

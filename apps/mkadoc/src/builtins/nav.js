@@ -1,13 +1,18 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { load } from '@asciidoctor/core'
 import { z } from 'zod'
-import { extractMkadocCss } from '../chrome.js'
 import { resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
-import { escapeHtmlAttr } from '../html-utils.js'
+import { escapeHtml, escapeHtmlAttr } from '../html-utils.js'
 import { parsePluginOptions } from '../plugin/options.js'
-import { listSourcePages, mountPrefix, navPathForSource, pageToHref } from '../sources.js'
+import {
+  findSourceFile,
+  listSourcePages,
+  mountPrefix,
+  navFileForSource,
+  pageToHref,
+} from '../sources.js'
+import { readThemeOverride, themeDirForSource } from '../theme.js'
 
 const OptionsSchema = z.object({}).strict()
 const CSS_HREF = '/styles/nav.css'
@@ -15,8 +20,8 @@ const JS_HREF = '/styles/nav.js'
 
 /**
  * Level-1 source bar: one link per top-level source (`data-mount`), rendered
- * as a bar under the topbar. Core chrome.css loads after this asset in the
- * head, so `_chrome.adoc` overrides still win the cascade.
+ * as a bar under the topbar. Core theme.css loads after this asset in the
+ * head, so `_theme/theme.css` overrides still win the cascade.
  */
 const SOURCES_CSS = `/* mkadoc:nav — level-1 source bar */
 :root {
@@ -24,7 +29,6 @@ const SOURCES_CSS = `/* mkadoc:nav — level-1 source bar */
 }
 
 .mkadoc-sources {
-  /* Sources are above the sidebar in hierarchy, so span the full width. */
   margin-left: calc(-1 * var(--mkadoc-articles-width, 0px));
   display: flex;
   align-items: stretch;
@@ -99,15 +103,11 @@ const NAV_JS = `(function () {
     return -1;
   }
 
-  // Mark the current article in the sidebar.
   document.querySelectorAll("#mkadoc-articles a").forEach(function (a) {
     if (a.classList.contains("mkadoc-source")) return;
     if (a.getAttribute("href") === path) a.classList.add("current");
   });
 
-  // The fixed article sidebar rides up with the scrolling source bar until it
-  // sits flush below the floating title (or the viewport top when mkadoc:topbar
-  // is disabled).
   var root = document.documentElement;
   var topbar = document.getElementById("mkadoc-topbar");
   var topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : 0;
@@ -138,7 +138,6 @@ const NAV_JS = `(function () {
     }
   }
 
-  // Activate the active source (level 1) and its article list (level 2).
   var sources = Array.prototype.slice.call(document.querySelectorAll(".mkadoc-source"));
   var best = null;
   var bestLen = -1;
@@ -160,14 +159,6 @@ const NAV_JS = `(function () {
 })();
 `
 
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 function sourceHref(source) {
   return `${source.mount}/index.html`
 }
@@ -182,27 +173,17 @@ function sourcesBarHtml(sources) {
     .join('\n')
 }
 
-async function renderNavMarkup(sourceText, { relfileprefix = '/' } = {}) {
-  const doc = await load(sourceText, {
-    safe: 'unsafe',
-    standalone: false,
-    attributes: {
-      icons: 'font',
-      relfileprefix,
-    },
-  })
-  return String(await doc.convert())
-}
-
 function autoNavHtml(host, source) {
-  const pages = listSourcePages(host.root, [source])
+  const rendererForPath = (p) =>
+    host.renderers.find((r) => r.extensions?.includes(path.extname(p).toLowerCase())) || null
+  const pages = listSourcePages(host.root, [source], { rendererForPath })
   if (pages.length === 0) {
     return '<div class="paragraph"><p><em>No pages</em></p></div>\n'
   }
   const items = pages
     .map(({ page }) => {
       const href = pageToHref(source, page)
-      const label = path.basename(page, '.adoc')
+      const label = path.basename(page, path.extname(page))
       return `<li><p><a href="${escapeHtmlAttr(href)}">${escapeHtml(label)}</a></p></li>`
     })
     .join('\n')
@@ -213,10 +194,9 @@ async function readNavCssBundle(host) {
   const cssParts = [SOURCES_CSS, DEFAULT_NAV_CSS]
   const first = host.config.sources[0]
   if (first) {
-    const navAbs = path.join(host.root, navPathForSource(first))
-    if (fs.existsSync(navAbs)) {
-      const { css } = await extractMkadocCss(fs.readFileSync(navAbs, 'utf8'))
-      if (css) cssParts.push(`/* Overrides from first source _nav.adoc */\n${css}`)
+    const override = readThemeOverride(host.root, first, 'nav.css')
+    if (override) {
+      cssParts.push(`/* Overrides from ${themeDirForSource(first)}/nav.css */\n${override}`)
     }
   }
   return `${cssParts.join('\n\n').trim()}\n`
@@ -230,17 +210,16 @@ async function readNavCssBundle(host) {
 async function buildArticlesHtml(host) {
   const lists = []
   for (const source of host.config.sources) {
-    const navRel = navPathForSource(source)
-    const navAbs = path.join(host.root, navRel)
     let html = ''
-    if (fs.existsSync(navAbs)) {
-      const sourceText = fs.readFileSync(navAbs, 'utf8')
-      const { markupSource } = await extractMkadocCss(sourceText)
-      if (markupSource) {
-        html = await renderNavMarkup(markupSource, {
-          relfileprefix: mountPrefix(source.mount),
-        })
-      }
+    const navFile = navFileForSource(host.root, source, host.renderers)
+    if (navFile) {
+      const sourceText = fs.readFileSync(navFile.path, 'utf8')
+      html = await navFile.renderer.renderFragment({
+        sourceText,
+        absPath: navFile.path,
+        baseDir: path.join(host.root, source.path),
+        attributes: { icons: 'font', relfileprefix: mountPrefix(source.mount) },
+      })
     }
     if (!String(html).trim()) {
       html = autoNavHtml(host, source)
@@ -266,10 +245,10 @@ export default function navPlugin(rawOptions = {}) {
 
     async setup(host) {
       for (const source of host.config.sources) {
-        // Level 1 titles come from each source's index.adoc.
-        host.registerSiteWideDep(`${source.path}/index.adoc`)
-        // Level 2 lists come from each source's _nav.adoc.
-        host.registerSiteWideDep(navPathForSource(source))
+        const indexFile = findSourceFile(host.root, source.path, 'index', host.renderers)
+        if (indexFile) host.registerSiteWideDep(indexFile.rel)
+        const navFile = navFileForSource(host.root, source, host.renderers)
+        if (navFile) host.registerSiteWideDep(navFile.rel)
       }
       host.addAttributes({ icons: 'font' })
     },
@@ -279,7 +258,6 @@ export default function navPlugin(rawOptions = {}) {
 
       const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
       const jsAsset = resolveSiteAsset(host.root, host.config.output, JS_HREF)
-      // Site-wide _nav edits rebuild every page, so CSS may change with markup.
       writeIfChanged(cssAsset.absPath, await readNavCssBundle(host))
       writeIfChanged(jsAsset.absPath, `${NAV_JS}\n`)
       host.contributeHead({
@@ -296,29 +274,22 @@ export default function navPlugin(rawOptions = {}) {
       const notes = []
       const first = host.config.sources[0]
       if (first) {
-        const navRel = navPathForSource(first)
-        const abs = path.join(host.root, navRel)
-        if (fs.existsSync(abs)) {
-          const { css } = await extractMkadocCss(fs.readFileSync(abs, 'utf8'))
-          notes.push(css ? `${navRel} style overrides ok` : `${navRel} using plugin CSS defaults`)
-        } else {
-          notes.push(`${navRel} missing (auto nav; plugin CSS defaults)`)
-        }
+        const override = readThemeOverride(host.root, first, 'nav.css')
+        notes.push(
+          override
+            ? `${themeDirForSource(first)}/nav.css style overrides ok`
+            : 'nav using plugin CSS defaults',
+        )
       }
 
       for (const source of host.config.sources) {
-        const navRel = navPathForSource(source)
-        const abs = path.join(host.root, navRel)
-        if (!fs.existsSync(abs)) {
-          notes.push(`${navRel} missing (auto nav)`)
+        const navFile = navFileForSource(host.root, source, host.renderers)
+        if (!navFile) {
+          notes.push(`_nav missing (auto nav)`)
           continue
         }
-        const { markupSource } = await extractMkadocCss(fs.readFileSync(abs, 'utf8'))
-        if (!markupSource) {
-          notes.push(`${navRel} empty (auto nav)`)
-        } else {
-          notes.push(`${navRel} ok`)
-        }
+        const text = fs.readFileSync(navFile.path, 'utf8')
+        notes.push(text.trim() ? `${navFile.rel} ok` : `${navFile.rel} empty (auto nav)`)
       }
 
       return {

@@ -12,6 +12,10 @@
  * @typedef {import('@mkadoc/plugin-host').MkadocBuildHost} MkadocBuildHost
  * @typedef {import('@mkadoc/plugin-host').MkadocPlugin} MkadocPlugin
  * @typedef {import('@mkadoc/plugin-host').MkadocPluginFactory} MkadocPluginFactory
+ * @typedef {import('@mkadoc/plugin-host').MkadocRenderer} MkadocRenderer
+ * @typedef {import('@mkadoc/plugin-host').RenderInput} RenderInput
+ * @typedef {import('@mkadoc/plugin-host').RenderOutput} RenderOutput
+ * @typedef {import('@mkadoc/plugin-host').SourceMeta} SourceMeta
  */
 
 export {}

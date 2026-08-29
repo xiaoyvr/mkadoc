@@ -1,0 +1,21 @@
+# mkadoc documentation site — plain YAML config (v1).
+# Built-in renderers (mkadoc:asciidoc, mkadoc:markdown) are auto-loaded.
+
+sources:
+  - apps/mkadoc/docs
+  - apps/mkadoc-plugin-host/docs
+  - apps/mkadoc-plugin-kroki/docs
+
+output: site
+
+plugins:
+  mkadoc:topbar: {}
+  file:./apps/mkadoc-plugin-kroki:
+    server_url: http://127.0.0.1:8080
+  mkadoc:nav: {}
+  mkadoc:shiki:
+    theme: andromeeda # material-theme
+
+serve:
+  remote: true
+  port: 8001

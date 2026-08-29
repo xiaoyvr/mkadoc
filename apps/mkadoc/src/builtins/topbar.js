@@ -2,11 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
-import { extractMkadocCss } from '../chrome.js'
 import { resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
 import { escapeHtmlAttr } from '../html-utils.js'
 import { parsePluginOptions } from '../plugin/options.js'
-import { chromePathForSource } from '../sources.js'
+import { readThemeOverride, themeDirForSource } from '../theme.js'
 
 const OptionsSchema = z.object({}).strict()
 const CSS_HREF = '/styles/topbar.css'
@@ -50,8 +49,6 @@ const TOPBAR_JS = `(function () {
   function updateBrand() {
     ticking = false;
     var y = window.scrollY || document.documentElement.scrollTop || 0;
-    // Once the source bar has fully scrolled under the floating title, it
-    // needs its own bottom line (only when a source bar exists).
     if (sourcesNav) root.classList.toggle("mkadoc-scrolled", y >= sourcesHeight);
     if (!topbar || !h1) {
       setBrand(siteTitle);
@@ -97,26 +94,20 @@ function resolveLogoHref(cfg) {
   return DEFAULT_LOGO_HREF
 }
 
-/** True when `relPath` is the first source's logo override file. */
-function isLogoPath(cfg, relPath) {
+/** Is `relPath` the first source's `_theme/topbar.css` override? */
+function isTopbarCssPath(cfg, relPath) {
   const first = cfg.sources[0]
   if (!first) return false
-  return LOGO_OVERRIDE_NAMES.some((name) => relPath === `${first.path}/_assets/${name}`)
-}
-
-/** Is `relPath` any source's `_chrome.adoc` (the site topbar CSS override file)? */
-function isChromeCssPath(cfg, relPath) {
-  return cfg.sources.some((source) => chromePathForSource(source) === relPath)
+  return relPath === `${themeDirForSource(first)}/topbar.css`
 }
 
 async function readTopbarCssBundle(host) {
   const cssParts = [TOPBAR_CSS]
   const first = host.config.sources[0]
   if (first) {
-    const chromeAbs = path.join(host.root, chromePathForSource(first))
-    if (fs.existsSync(chromeAbs)) {
-      const { css } = await extractMkadocCss(fs.readFileSync(chromeAbs, 'utf8'))
-      if (css) cssParts.push(`/* Overrides from first source _chrome.adoc */\n${css}`)
+    const override = readThemeOverride(host.root, first, 'topbar.css')
+    if (override) {
+      cssParts.push(`/* Overrides from ${themeDirForSource(first)}/topbar.css */\n${override}`)
     }
   }
   return `${cssParts.join('\n\n').trim()}\n`
@@ -153,12 +144,12 @@ export default function topbarPlugin(rawOptions = {}) {
       const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
       const jsAsset = resolveSiteAsset(host.root, host.config.output, JS_HREF)
       const relPaths = paths.map((p) => host.relToRoot(p))
-      const chromeCssTouched = relPaths.some((p) => isChromeCssPath(host.config, p))
+      const topbarCssTouched = relPaths.some((p) => isTopbarCssPath(host.config, p))
 
-      // `_chrome.adoc` only changes the linked stylesheet — rewrite CSS without
-      // a full header/page rebuild when this is an assets-only pass.
+      // `_theme/topbar.css` only changes the linked stylesheet — rewrite CSS
+      // without a full header/page rebuild when this is an assets-only pass.
       if (mode === 'assets') {
-        if (chromeCssTouched) {
+        if (topbarCssTouched) {
           writeIfChanged(cssAsset.absPath, await readTopbarCssBundle(host))
         }
         return
@@ -168,7 +159,7 @@ export default function topbarPlugin(rawOptions = {}) {
       const defaultLogoAsset = resolveSiteAsset(host.root, host.config.output, DEFAULT_LOGO_HREF)
       const needChrome =
         mode === 'full' ||
-        chromeCssTouched ||
+        topbarCssTouched ||
         !fs.existsSync(cssAsset.absPath) ||
         !fs.existsSync(jsAsset.absPath) ||
         (logoSrc === DEFAULT_LOGO_HREF && !fs.existsSync(defaultLogoAsset.absPath))

@@ -56,21 +56,15 @@ export function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-/** Wrap YAML mapping text in a minimal literate `mkadoc.adoc` document. */
-export function literateConfig(yamlBody) {
-  return `= mkadoc
-
-[mkadoc-config]
-----
-${yamlBody.trim()}
-----
-`
+/** Plain YAML config body (mkadoc v1 config format). */
+export function yamlConfig(yamlBody) {
+  return yamlBody.trim()
 }
 
 /** Minimal no-plugin fixture used by smoke tests. */
 export function smokeFixture(overrides = {}) {
   return {
-    'mkadoc.adoc': literateConfig(`sources:
+    'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
 plugins: {}

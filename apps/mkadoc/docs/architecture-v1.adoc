@@ -1,0 +1,202 @@
+= Architecture v1: multi-format rendering
+
+This document records the target architecture for mkadoc v1 (major version).
+It supersedes the v0 model where AsciiDoc was baked into the core.
+
+== Goals
+
+* **Renderers are plugins.** AsciiDoc, Markdown, Org, RST, djot, HTML, LaTeX,
+  Typst — each is a renderer plugin. Core is format-agnostic.
+* **Core owns page assembly.** Renderers produce the *article body*; core wraps
+  it into a full HTML document and injects shared chrome (head tags + body
+  prefix).
+* **Asciidoctor's default look is the default theme.** A snapshot of
+  Asciidoctor's default stylesheet ships in core, so existing AsciiDoc sites
+  keep their appearance without any renderer knowledge in core.
+* **Feature plugins are renderer-agnostic** via a provider/consumer service
+  registry (no dependency metadata in config).
+* **Less config.** Plain YAML config; customization by *convention files*
+  (`_theme/` directory), not config keys.
+
+== Why a major version
+
+v0 assumes exactly one renderer (Asciidoctor) in: config parsing, page
+discovery, metadata extraction, dependency tracking, asset cataloging,
+chrome/docinfo injection, and syntax highlighting. v1 removes all of those
+assumptions. This is a breaking change to config format, source conventions,
+customization, and the plugin contract, hence 1.0.
+
+The v0 code line is preserved as the `v0.x` branch and `v0.1.0` tag for
+bugfixes of the old behavior. There is no automated migration: consumers
+migrate by hand.
+
+== The renderer contract
+
+A renderer is a plugin with `kind: 'renderer'` and these additions:
+
+[source,js]
+----
+{
+  name: 'asciidoc',
+  kind: 'renderer',
+  extensions: ['.adoc', '.asciidoc'],
+
+  // Parse a source's index file (or any page) into { title, description, tab }.
+  // Used for tab labels and the site brand.
+  async extractMeta(sourceText, path) { ... },
+
+  // Render one full page's article body.
+  // input: { sourceText, absPath, baseDir, attributes }
+  // returns: { html, title, lang, bodyClass, head, assets, includes }
+  async render(input) { ... },
+
+  // Render a small markup fragment (used by mkadoc:nav for _nav files).
+  // input: { sourceText, baseDir, attributes }
+  async renderFragment(input) { ... },
+
+  // Optional per-plugin health check.
+  async check(host) { ... },
+}
+----
+
+=== Render output fields
+
+[cols="1,3"]
+|===
+| Field | Meaning
+
+| `html` | Article body — everything that belongs inside `<body>` after the chrome prefix. For AsciiDoc this is the `#header` + `#content` + `#footer` produced by Asciidoctor.
+| `title` | Used for `<head><title>`.
+| `lang` | `<html lang>`; default `en`.
+| `bodyClass` | `<body class>`; AsciiDoc uses `article`.
+| `head` | Extra `<head>` content the renderer owns (e.g. author/description meta).
+| `assets` | Repo-relative local files the page references (copied to output).
+| `includes` | Repo-relative files the page depends on (for incremental rebuilds).
+|===
+
+== Core owns assembly
+
+Core assembles every page with a single template:
+
+[source,html]
+----
+<!DOCTYPE html>
+<html lang="{lang}">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+  <link rel="stylesheet" href="/styles/theme.css">
+  {plugin head links/scripts}
+  {renderer head}
+</head>
+<body class="{bodyClass}">
+  {chrome body prefix}
+  {renderer html}
+</body>
+</html>
+----
+
+The AsciiDoc renderer converts with Asciidoctor `standalone: true` and extracts
+the inner body (header + content + footer), so its `html` is exactly what
+Asciidoctor would have put between `<body>` and `</body>`. Core drops
+Asciidoctor's own wrapper/embedded CSS and applies the default theme instead.
+
+=== Default theme
+
+Core ships `src/theme-default.css` — a snapshot of Asciidoctor's default
+stylesheet (MIT, attributed in `src/assets/NOTICE`). It is written to
+`/styles/theme.css` and is the *default* look for every renderer. AsciiDoc
+pages therefore keep Asciidoctor's appearance; other renderers inherit the
+generic typography (headings, paragraphs, code, tables).
+
+== Provider/consumer service registry
+
+Cross-cutting features are shared through named services. No dependency
+metadata in config.
+
+[source,js]
+----
+// feature plugin (mkadoc:shiki)
+host.provideService('syntax-highlight', {
+  highlight(code, lang) { ... },
+})
+
+// renderer (mkadoc:asciidoc, mkadoc:markdown)
+const hl = host.getService('syntax-highlight')
+----
+
+* Providers register services in `setup` (or lazily).
+* Consumers resolve services at *render time*, so load order is irrelevant.
+* `mkadoc:shiki` provides `syntax-highlight`; renderers consume it for code
+  fences / source blocks and degrade to plain listings when absent.
+* This replaces the v0 `afterPluginsLoaded` global and the Asciidoctor-only
+  `SyntaxHighlighter` registration.
+
+== Configuration
+
+Config is plain YAML (`mkadoc.yaml`, default `mkadoc.yml` fallback). The
+schema shape is unchanged from v0 (`sources`, `output`, `plugins`, `serve`) —
+the only change is the file format, not the data model.
+
+Built-in renderers `mkadoc:asciidoc` and `mkadoc:markdown` are loaded
+automatically; listing them under `plugins:` only configures their options.
+Feature plugins (`mkadoc:topbar`, `mkadoc:nav`, `mkadoc:shiki`, external)
+are enabled under `plugins:` as before.
+
+== Customization by convention (`_theme/`)
+
+Customization is plain CSS, not config keys and not `[mkadoc-css]` blocks.
+
+The first source may contain a `_theme/` directory:
+
+[cols="1,3"]
+|===
+| File | Replaces (v0)
+
+| `_theme/theme.css` | Global overrides appended after the default theme (`/styles/theme.css`).
+| `_theme/topbar.css` | CSS overrides appended after `mkadoc:topbar` defaults (was `_chrome.adoc` `[mkadoc-css]`).
+| `_theme/nav.css` | CSS overrides appended after `mkadoc:nav` defaults (was `_nav.adoc` `[mkadoc-css]`).
+|===
+
+`_assets/` still holds raw static assets (logo override, favicon) and is copied
+to the output as before.
+
+== Source conventions
+
+[cols="1,2"]
+|===
+| v0 | v1
+
+| `index.adoc` | `index.<ext>` — the source's primary format is the index file's renderer.
+| `_nav.adoc` | `_nav.<ext>` — rendered by the owning renderer (content fragment).
+| `_chrome.adoc` | `_theme/topbar.css`
+| `[mkadoc-css]` blocks | plain `.css` files under `_theme/`
+|===
+
+A source is still *one* mount/tab; its primary format is derived from its
+index file. Individual pages may use any renderer extension; page dispatch is
+per file.
+
+== Dependency & asset tracking
+
+* Core owns the dependency graph (`DependencyGraph`) as before, but it is fed
+  by the renderer's `includes` return value instead of an Asciidoctor
+  include processor.
+* Core owns asset copying, fed by the renderer's `assets` return value.
+* The Asciidoctor include processor and asset catalog live in the
+  `mkadoc:asciidoc` renderer now.
+
+== Milestones
+
+. Extract `mkadoc:asciidoc` renderer (zero behavior change) + core assembly + default theme.
+. Add `mkadoc:markdown` renderer (markdown-it, frontmatter, syntax-highlight service).
+. Rework feature plugins (`topbar`, `nav`, `shiki`) onto services + `_theme`.
+. Cut config over to YAML.
+. Add subprocess-capable renderers (Typst, LaTeX) as a later milestone.
+
+== Related
+
+* xref:plugins.adoc[Writing mkadoc plugins] — the plugin/feature host API.
+* xref:chrome-design.adoc[Site chrome design] — why shared chrome is injected per page.

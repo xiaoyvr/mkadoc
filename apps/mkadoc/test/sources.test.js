@@ -11,7 +11,7 @@ import {
   sourceForPathname,
 } from '../src/sources.js'
 import { parseHtml } from './helpers/html.js'
-import { literateConfig, withTempProject } from './helpers/project.js'
+import { withTempProject, yamlConfig } from './helpers/project.js'
 
 describe('mountFromSourcePath', () => {
   it('maps source paths to mounts verbatim', () => {
@@ -46,7 +46,7 @@ describe('multi-source build', () => {
   it('writes pages under convention mounts and builds tab chrome', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
   - apps/mkadoc/docs
 output: site
@@ -60,11 +60,6 @@ plugins:
 Root body.
 `,
         'docs/_nav.adoc': `* xref:index.adoc[Home]
-
-[mkadoc-css]
-----
-.mkadoc-articles a { color: #111; }
-----
 `,
         'apps/mkadoc/docs/index.adoc': `= mkadoc
 
@@ -76,20 +71,19 @@ Guide body.
 `,
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
-        assert.equal(cfg.sources[0].title, 'Site')
-        assert.equal(cfg.sources[1].title, 'mkadoc')
+        const cfg = await loadConfig('mkadoc.yaml', root)
         assert.equal(cfg.sources[1].mount, '/apps/mkadoc/docs')
 
         await build(cfg, { forceFull: true })
+
+        assert.equal(cfg.sources[0].title, 'Site')
+        assert.equal(cfg.sources[1].title, 'mkadoc')
 
         assert.ok(fs.existsSync(path.join(root, 'site/docs/index.html')))
         assert.ok(fs.existsSync(path.join(root, 'site/apps/mkadoc/docs/index.html')))
         assert.ok(fs.existsSync(path.join(root, 'site/apps/mkadoc/docs/guide.html')))
 
-        const header = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-        )
+        const header = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         assert.ok(header.querySelector('#mkadoc-topbar'))
         assert.ok(header.querySelector('#mkadoc-articles'))
         assert.deepEqual(
@@ -116,7 +110,7 @@ Guide body.
   it('auto-nav when _nav.adoc is missing', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
 plugins:
@@ -127,11 +121,9 @@ plugins:
         'docs/other.adoc': '= Other\n\nThere.\n',
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
-        const header = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-        )
+        const header = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         const hrefs = header
           .querySelectorAll('#mkadoc-articles a')
           .map((el) => el.getAttribute('href'))
@@ -144,7 +136,7 @@ plugins:
   it('uses first source :description: as the topbar brand', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
 plugins:
@@ -157,11 +149,9 @@ Body.
 `,
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
-        const header = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-        )
+        const header = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         const brand = header.querySelector('.mkadoc-brand')
         assert.ok(brand)
         assert.equal(
@@ -179,7 +169,7 @@ Body.
   it('index.adoc :tab: change refreshes tab chrome', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
   - apps/mkadoc/docs
 output: site
@@ -198,10 +188,10 @@ App.
 `,
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
         const headerBefore = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
+          fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'),
         )
         assert.ok(
           headerBefore
@@ -223,7 +213,7 @@ App.
         assert.equal(cfg.sources[1].title, 'Mkadocx')
 
         const headerAfter = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
+          fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'),
         )
         assert.ok(
           headerAfter

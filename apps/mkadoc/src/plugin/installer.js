@@ -2,8 +2,8 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import Arborist from '@npmcli/arborist'
-import npa from 'npm-package-arg'
 import libnpmpack from 'libnpmpack'
+import npa from 'npm-package-arg'
 import pacote from 'pacote'
 import { CACHE_DIR } from '../config.js'
 
@@ -27,7 +27,9 @@ export function parseLocator(locator, root) {
   try {
     spec = npa(locator)
   } catch (err) {
-    throw new Error(`mkadoc: invalid plugin locator ${JSON.stringify(locator)}: ${err?.message || err}`)
+    throw new Error(
+      `mkadoc: invalid plugin locator ${JSON.stringify(locator)}: ${err?.message || err}`,
+    )
   }
 
   const out = { type: spec.type, name: spec.name, raw: locator }
@@ -140,7 +142,9 @@ export async function installLocalPlugin(root, locator) {
   }
   const source = spec.path
   if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
-    throw new Error(`mkadoc: plugin folder not found: ${source} (from locator ${JSON.stringify(locator)})`)
+    throw new Error(
+      `mkadoc: plugin folder not found: ${source} (from locator ${JSON.stringify(locator)})`,
+    )
   }
 
   const pkgPath = path.join(source, 'package.json')
@@ -251,5 +255,7 @@ export function resolveEntry(pluginDir) {
   }
   const indexJs = path.join(pluginDir, 'index.js')
   if (fs.existsSync(indexJs)) return indexJs
-  throw new Error(`mkadoc: plugin at ${pluginDir} has no resolvable entry (package.json main, exports, or index.js)`)
+  throw new Error(
+    `mkadoc: plugin at ${pluginDir} has no resolvable entry (package.json main, exports, or index.js)`,
+  )
 }

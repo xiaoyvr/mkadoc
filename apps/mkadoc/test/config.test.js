@@ -1,221 +1,62 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import asciidoc from '../src/builtins/asciidoc.js'
+import markdown from '../src/builtins/markdown.js'
 import { loadConfig, resolveServeListen } from '../src/config.js'
 import { parseProjectConfig, parseServeConfig } from '../src/config-schema.js'
-import { literateConfig, withTempProject } from './helpers/project.js'
+import { extractSourcesMeta } from '../src/sources.js'
+import { withTempProject } from './helpers/project.js'
 
-describe('loadConfig (literate AsciiDoc)', () => {
-  it('merges multiple [mkadoc-config] YAML blocks', async () => {
+/** Renderer doubles just for metadata extraction (extractMeta needs no host). */
+function metaRenderers() {
+  return [asciidoc({}, null), markdown({}, null)]
+}
+
+describe('loadConfig (plain YAML)', () => {
+  it('loads a plain YAML config', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': `= Site
-
-[mkadoc-config]
-----
-sources:
+        'mkadoc.yaml': `sources:
   - docs
-serve:
-  port: 8000
-----
-
-More prose.
-
-[mkadoc-config]
-----
+output: site
 plugins:
   mkadoc:nav: {}
 serve:
   remote: true
-----
+  port: 8000
 `,
         'docs/index.adoc': '= Dotfiles\n',
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         assert.equal(cfg.sources.length, 1)
         assert.equal(cfg.sources[0].path, 'docs')
         assert.equal(cfg.sources[0].mount, '/docs')
-        assert.equal(cfg.sources[0].title, 'Dotfiles')
+        assert.equal(cfg.output, 'site')
+        assert.deepEqual(cfg.plugins['mkadoc:nav'], {})
         assert.equal(cfg.serve.port, 8000)
         assert.equal(cfg.serve.remote, true)
-        assert.deepEqual(cfg.plugins['mkadoc:nav'], {})
       },
     )
   })
 
-  it('skips empty config blocks', async () => {
+  it('derives tab title from :tab: on index.adoc via the renderer', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': `= Site
-
-[mkadoc-config]
-----
-----
-
-[mkadoc-config]
-----
-sources:
-  - docs
-output: site
-----
-`,
-        'docs/.keep': '',
-      },
-      async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
-        assert.equal(cfg.output, 'site')
-      },
-    )
-  })
-
-  it('rejects non-mapping YAML in a config block', async () => {
-    await withTempProject(
-      {
-        'mkadoc.adoc': `= Site
-
-[mkadoc-config]
-----
-- just
-- a
-- list
-----
-`,
-        'docs/.keep': '',
-      },
-      async (root) => {
-        await assert.rejects(() => loadConfig('mkadoc.adoc', root), /must be a YAML mapping/)
-      },
-    )
-  })
-
-  it('replaces arrays from later config blocks instead of concatenating', async () => {
-    await withTempProject(
-      {
-        'mkadoc.adoc': `= Site
-
-[mkadoc-config]
-----
-sources:
-  - docs
-----
-
-[mkadoc-config]
-----
-sources:
-  - apps/mkadoc/docs
-----
-`,
-        'docs/.keep': '',
-        'apps/mkadoc/docs/.keep': '',
-      },
-      async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
-        assert.deepEqual(
-          cfg.sources.map((s) => s.path),
-          ['apps/mkadoc/docs'],
-        )
-      },
-    )
-  })
-
-  it('rejects configs without a [mkadoc-config] block', async () => {
-    await withTempProject(
-      {
-        'mkadoc.adoc': `= Site
-
-Narrative only.
-`,
-        'docs/.keep': '',
-      },
-      async (root) => {
-        await assert.rejects(
-          () => loadConfig('mkadoc.adoc', root),
-          /at least one \[mkadoc-config\] block/,
-        )
-      },
-    )
-  })
-
-  it('rejects invalid YAML inside a [mkadoc-config] block', async () => {
-    await withTempProject(
-      {
-        'mkadoc.adoc': `= Site
-
-[mkadoc-config]
-----
-sources:
-  - docs
-  bad: indent
-----
-`,
-        'docs/.keep': '',
-      },
-      async (root) => {
-        await assert.rejects(
-          () => loadConfig('mkadoc.adoc', root),
-          /invalid YAML in \[mkadoc-config\] block/,
-        )
-      },
-    )
-  })
-
-  it('rejects .yml / .yaml config paths', async () => {
-    await withTempProject(
-      {
-        'mkadoc.yml': `sources:
+        'mkadoc.yaml': `sources:
   - docs
 `,
-        'docs/.keep': '',
-      },
-      async (root) => {
-        await assert.rejects(
-          () => loadConfig('mkadoc.yml', root),
-          /unsupported config type "\.yml"/,
-        )
-      },
-    )
-  })
-
-  it('accepts .asciidoc config extension', async () => {
-    await withTempProject(
-      {
-        'mkadoc.asciidoc': literateConfig(`sources:
-  - docs
-output: site
-`),
-        'docs/index.adoc': '= Smoke\n',
-      },
-      async (root) => {
-        const cfg = await loadConfig('mkadoc.asciidoc', root)
-        assert.equal(cfg.sources[0].path, 'docs')
-        assert.equal(cfg.output, 'site')
-      },
-    )
-  })
-
-  it('derives tab title from :tab: on index.adoc', async () => {
-    await withTempProject(
-      {
-        'mkadoc.adoc': literateConfig(`sources:
-  - docs
-  - apps/mkadoc/docs
-`),
         'docs/index.adoc': `= Long Root Title
 :tab: Site
 
 Body.
 `,
-        'apps/mkadoc/docs/index.adoc': `= mkadoc tool
-
-Body.
-`,
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await extractSourcesMeta(cfg, metaRenderers())
         assert.equal(cfg.sources[0].title, 'Site')
         assert.equal(cfg.sources[0].mount, '/docs')
-        assert.equal(cfg.sources[1].title, 'mkadoc tool')
-        assert.equal(cfg.sources[1].mount, '/apps/mkadoc/docs')
       },
     )
   })
@@ -223,21 +64,113 @@ Body.
   it('derives source description from :description: on index.adoc', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': `sources:
   - docs
-`),
+`,
         'docs/index.adoc': `= Dotfiles
-:description: Nix-managed system and user configurations
+:description: Nix-managed system
 
 Body.
 `,
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
-        assert.equal(cfg.sources[0].description, 'Nix-managed system and user configurations')
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await extractSourcesMeta(cfg, metaRenderers())
+        assert.equal(cfg.sources[0].description, 'Nix-managed system')
         assert.equal(cfg.sources[0].title, 'Dotfiles')
       },
     )
+  })
+
+  it('derives tab title from Markdown frontmatter via the renderer', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': `sources:
+  - docs
+`,
+        'docs/index.md': `---
+title: Markdown Docs
+description: Rendered from md
+---
+
+# Hi
+`,
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await extractSourcesMeta(cfg, metaRenderers())
+        assert.equal(cfg.sources[0].title, 'Markdown Docs')
+        assert.equal(cfg.sources[0].description, 'Rendered from md')
+      },
+    )
+  })
+
+  it('rejects non-mapping YAML', async () => {
+    await withTempProject(
+      { 'mkadoc.yaml': '- just\n- a\n- list\n', 'docs/.keep': '' },
+      async (root) => {
+        await assert.rejects(() => loadConfig('mkadoc.yaml', root), /config must be a YAML mapping/)
+      },
+    )
+  })
+
+  it('rejects empty config', async () => {
+    await withTempProject({ 'mkadoc.yaml': '', 'docs/.keep': '' }, async (root) => {
+      await assert.rejects(() => loadConfig('mkadoc.yaml', root), /config must be a YAML mapping/)
+    })
+  })
+
+  it('rejects invalid YAML', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': `sources:
+  - docs
+  bad: indent
+`,
+        'docs/.keep': '',
+      },
+      async (root) => {
+        await assert.rejects(() => loadConfig('mkadoc.yaml', root), /invalid YAML in config/)
+      },
+    )
+  })
+
+  it('accepts .yml config extension', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yml': `sources:
+  - docs
+output: site
+`,
+        'docs/index.adoc': '= Smoke\n',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yml', root)
+        assert.equal(cfg.sources[0].path, 'docs')
+        assert.equal(cfg.output, 'site')
+      },
+    )
+  })
+
+  it('rejects unsupported config extensions', async () => {
+    await withTempProject(
+      {
+        'mkadoc.toml': `sources = ["docs"]\n`,
+        'docs/.keep': '',
+      },
+      async (root) => {
+        await assert.rejects(
+          () => loadConfig('mkadoc.toml', root),
+          /unsupported config type "\.toml"/,
+        )
+      },
+    )
+  })
+
+  it('rejects missing config file', async () => {
+    await withTempProject({}, async (root) => {
+      await assert.rejects(() => loadConfig('mkadoc.yaml', root), /config not found/)
+    })
   })
 })
 
@@ -305,34 +238,35 @@ describe('parseProjectConfig (zod schema)', () => {
     )
   })
 
-  it('accepts known plugin option objects without validating fields', () => {
+  it('accepts known builtin renderer/feature locators and file specs', () => {
     const cfg = parseProjectConfig({
       sources: ['docs'],
       plugins: {
+        'mkadoc:asciidoc': {},
+        'mkadoc:markdown': { html: true },
         'mkadoc:nav': {},
-        'mkadoc:shiki': { theme: 'nord', thme: 'typo' },
         'file:./plugins/x': { server_url: 'http://127.0.0.1:8080' },
       },
     })
+    assert.deepEqual(cfg.plugins['mkadoc:asciidoc'], {})
+    assert.equal(cfg.plugins['mkadoc:markdown'].html, true)
     assert.deepEqual(cfg.plugins['mkadoc:nav'], {})
-    assert.equal(cfg.plugins['mkadoc:shiki'].theme, 'nord')
-    assert.equal(cfg.plugins['mkadoc:shiki'].thme, 'typo')
     assert.deepEqual(cfg.plugins['file:./plugins/x'], { server_url: 'http://127.0.0.1:8080' })
   })
 
-  it('loadConfig surfaces schema errors from literate configs', async () => {
+  it('loadConfig surfaces schema errors from YAML configs', async () => {
     await withTempProject(
       {
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': `sources:
   - docs
 serve:
   bogus: true
   port: 8000
-`),
+`,
         'docs/.keep': '',
       },
       async (root) => {
-        await assert.rejects(() => loadConfig('mkadoc.adoc', root), /invalid config/)
+        await assert.rejects(() => loadConfig('mkadoc.yaml', root), /invalid config/)
       },
     )
   })

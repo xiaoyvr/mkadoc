@@ -6,7 +6,7 @@ import { build } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
 import { resolveSiteAsset } from '../src/fs-utils.js'
 import { parseHtml } from './helpers/html.js'
-import { literateConfig, smokeFixture, withTempProject } from './helpers/project.js'
+import { smokeFixture, withTempProject, yamlConfig } from './helpers/project.js'
 
 describe('resolveSiteAsset', () => {
   it('maps root-absolute hrefs under output/', async () => {
@@ -30,7 +30,7 @@ describe('topbar site logo', () => {
   it('uses package default logo linked to first-source home', async () => {
     await withTempProject(
       smokeFixture({
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
 plugins:
@@ -38,12 +38,10 @@ plugins:
 `),
       }),
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
 
-        const header = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-        )
+        const header = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         const logo = header.querySelector('a.mkadoc-logo')
         assert.ok(logo)
         assert.equal(logo.getAttribute('href'), '/docs/index.html')
@@ -62,16 +60,14 @@ plugins:
 `
     await withTempProject(
       smokeFixture({
-        'mkadoc.adoc': literateConfig(topbarConfig),
+        'mkadoc.yaml': yamlConfig(topbarConfig),
         'docs/_assets/logo.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>',
         'docs/_assets/logo.png': 'PNG',
       }),
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
-        const header = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-        )
+        const header = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         assert.equal(
           header.querySelector('a.mkadoc-logo img')?.getAttribute('src'),
           '/docs/_assets/logo.svg',
@@ -81,15 +77,13 @@ plugins:
 
     await withTempProject(
       smokeFixture({
-        'mkadoc.adoc': literateConfig(topbarConfig),
+        'mkadoc.yaml': yamlConfig(topbarConfig),
         'docs/_assets/logo.png': 'PNG',
       }),
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
-        const header = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-        )
+        const header = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         assert.equal(
           header.querySelector('a.mkadoc-logo img')?.getAttribute('src'),
           '/docs/_assets/logo.png',
@@ -100,45 +94,34 @@ plugins:
 })
 
 describe('core chrome href write alignment', () => {
-  it('mkadoc:topbar writes /styles/topbar.* and propagates _chrome.adoc overrides', async () => {
+  it('mkadoc:topbar writes /styles/topbar.* and propagates _theme/topbar.css overrides', async () => {
     await withTempProject(
       smokeFixture({
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
 plugins:
   mkadoc:topbar: {}
 `),
-        'docs/_chrome.adoc': `
-[mkadoc-css]
-----
-.mkadoc-topbar { height: 2rem; }
-----
-`,
+        'docs/_theme/topbar.css': '.mkadoc-topbar { height: 2rem; }\n',
       }),
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
 
         const topbarCss = fs.readFileSync(path.join(root, 'site/styles/topbar.css'), 'utf8')
-        // the _chrome.adoc override must propagate into the generated stylesheet
+        // the _theme/topbar.css override must propagate into the generated stylesheet
         assert.match(topbarCss, /height: 2rem/)
 
-        const header = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-        )
+        const header = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         assert.ok(header.querySelector('#mkadoc-topbar'))
         assert.ok(header.querySelector('a.mkadoc-logo'))
         // no nav plugin → no source bar, no article sidebar
         assert.equal(header.querySelector('a.mkadoc-source'), null)
         assert.equal(header.querySelector('#mkadoc-articles'), null)
-        assert.equal(header.querySelector('.listingblock'), null)
 
-        const docinfo = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo.html'), 'utf8'),
-        )
-        assert.ok(docinfo.querySelector('link[href="/styles/topbar.css"]'))
-        assert.ok(docinfo.querySelector('script[src="/styles/topbar.js"]'))
+        assert.ok(header.querySelector('link[href="/styles/topbar.css"]'))
+        assert.ok(header.querySelector('script[src="/styles/topbar.js"]'))
         // core no longer ships its own chrome assets
         assert.equal(fs.existsSync(path.join(root, 'site/styles/chrome.css')), false)
         assert.ok(fs.existsSync(path.join(root, 'site/styles/default-logo.svg')))
@@ -149,7 +132,7 @@ plugins:
   it('mkadoc:nav renders the source bar and article sidebar', async () => {
     await withTempProject(
       smokeFixture({
-        'mkadoc.adoc': literateConfig(`sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
   - apps/mkadoc/docs
 output: site
@@ -168,12 +151,10 @@ App.
 `,
       }),
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
 
-        const header = parseHtml(
-          fs.readFileSync(path.join(root, cfg.docinfoDir, 'docinfo-header.html'), 'utf8'),
-        )
+        const header = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         assert.ok(header.querySelector('#mkadoc-topbar'))
         assert.deepEqual(
           header.querySelectorAll('a.mkadoc-source').map((el) => el.text.trim()),

@@ -1,3 +1,8 @@
 Material Symbols "menu_book" icon (default-logo.svg) from Google Material Design Icons.
 License: Apache License 2.0 — https://github.com/google/material-design-icons/blob/master/LICENSE
 Attribution appreciated but not required per Google Material Icons guidance.
+
+Asciidoctor default stylesheet (theme-default.css) from Asciidoctor / Asciidoctor.js.
+License: MIT — https://github.com/asciidoctor/asciidoctor/blob/main/LICENSE
+Snapshot used as mkadoc's default site theme; core wraps renderer output with this
+stylesheet so AsciiDoc pages keep Asciidoctor's default look.

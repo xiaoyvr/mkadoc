@@ -1,21 +1,21 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { load } from '@asciidoctor/core'
-import { writeSiteChrome } from './chrome.js'
 import { CACHE_DIR } from './config.js'
 import { decideMode } from './decide-mode.js'
-import { loadDependencyGraph, withIncludeCollector } from './deps.js'
+import { loadDependencyGraph } from './deps.js'
 import { copyFileIfChanged, relToRoot, walkDir, writeIfChanged } from './fs-utils.js'
 import { defaultPoolConcurrency, mapPool } from './map-pool.js'
+import { assemblePage } from './page.js'
 import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
 import {
-  isSourceIndexPath,
+  extractSourcesMeta,
   listSourcePages,
   pageToOutRel,
-  refreshSourceTitles,
   sourceForRepoPath,
+  sourceIndexRels,
 } from './sources.js'
+import { writeThemeCss } from './theme.js'
 
 export async function build(cfg, opts = {}) {
   if (opts.clean) {
@@ -24,17 +24,17 @@ export async function build(cfg, opts = {}) {
   }
 
   const touched = (opts.paths || []).map((p) => relToRoot(p, cfg.root))
-  if (
-    opts.forceFull ||
-    touched.length === 0 ||
-    touched.some((p) => isSourceIndexPath(cfg.sources, p))
-  ) {
-    await refreshSourceTitles(cfg)
-  }
 
   const deps = loadDependencyGraph(cfg.root)
   const { plugin: pluginHost, build: buildHost } = createHosts(cfg, { deps })
   const plugins = await loadPlugins(cfg.plugins, pluginHost)
+  const renderers = buildHost.renderers
+
+  const indexRels = sourceIndexRels(cfg, renderers)
+  if (opts.forceFull || touched.length === 0 || touched.some((p) => indexRels.has(p))) {
+    await extractSourcesMeta(cfg, renderers)
+  }
+
   const { mode, pages } = decideMode(cfg, buildHost, { ...opts, deps })
 
   if (mode === 'noop') {
@@ -43,11 +43,8 @@ export async function build(cfg, opts = {}) {
   }
 
   fs.mkdirSync(path.join(cfg.root, cfg.output), { recursive: true })
-  fs.mkdirSync(path.join(cfg.root, cfg.docinfoDir), { recursive: true })
   await plugins.contributeChrome({ mode, pages, paths: touched })
-  await writeSiteChrome(buildHost, { mode, paths: touched, deps })
-
-  if (mode !== 'assets') buildHost.writeHeadDocinfo()
+  writeThemeCss(cfg.root, cfg.output, cfg.sources)
   copyFirstSourceAssets(cfg)
 
   switch (mode) {
@@ -59,39 +56,51 @@ export async function build(cfg, opts = {}) {
       await buildPages(
         cfg,
         buildHost,
-        listSourcePages(cfg.root, cfg.sources).map((p) => p.page),
+        listSourcePages(cfg.root, cfg.sources, { rendererForPath: buildHost.rendererForPath }).map(
+          (p) => p.page,
+        ),
         { concurrency: opts.concurrency, deps },
       )
-      pruneStaleHtml(cfg)
+      pruneStaleHtml(cfg, buildHost.rendererForPath)
       cleanupArtifacts(cfg)
       break
     case 'incremental':
       console.log(`mkadoc: incremental ${pages.join(' ')}`)
       await buildPages(cfg, buildHost, pages, { concurrency: opts.concurrency, deps })
-      pruneStaleHtml(cfg)
+      pruneStaleHtml(cfg, buildHost.rendererForPath)
       break
   }
 
   if (mode !== 'assets') {
-    deps.retainPages(listSourcePages(cfg.root, cfg.sources).map((p) => p.page))
+    deps.retainPages(
+      listSourcePages(cfg.root, cfg.sources, { rendererForPath: buildHost.rendererForPath }).map(
+        (p) => p.page,
+      ),
+    )
     deps.save()
   }
 
   return mode
 }
 
+/**
+ * @param {import('./config.js').MkadocConfig} cfg
+ * @param {import('./plugin/contract.js').MkadocBuildHost} host
+ * @param {string[]} pages
+ * @param {{ concurrency?: number, deps?: import('./deps.js').DependencyGraph | null }} [opts]
+ */
 async function buildPages(cfg, host, pages, { concurrency, deps } = {}) {
-  const attrs = { ...host.attributes }
-  if (host.wantsDocinfo()) {
-    attrs.docinfodir = path.join(cfg.root, cfg.docinfoDir)
-    attrs.docinfo = 'shared'
-  }
-
-  const registry = host.registry
   const limit = concurrency ?? defaultPoolConcurrency(4)
   const outRoot = path.join(cfg.root, cfg.output)
+  const chromeBody = host.chromeBody.filter(Boolean).join('\n').trim()
+  const headLinks = [...host.headLinks]
+  const headScripts = [...host.headScripts]
 
   await mapPool(pages, limit, async (page) => {
+    const renderer = host.rendererForPath(page)
+    if (!renderer) {
+      throw new Error(`mkadoc: no renderer for ${page}`)
+    }
     const source = sourceForRepoPath(cfg.sources, page)
     if (!source) {
       throw new Error(`mkadoc: page not under any source: ${page}`)
@@ -103,29 +112,47 @@ async function buildPages(cfg, host, pages, { concurrency, deps } = {}) {
     fs.mkdirSync(path.dirname(toFile), { recursive: true })
     try {
       const text = fs.readFileSync(absPath, 'utf8')
-      const { result: html, includes } = await withIncludeCollector(
-        { root: cfg.root, baseDir },
-        async () => {
-          const doc = await load(text, {
-            safe: 'unsafe',
-            base_dir: baseDir,
-            standalone: true,
-            extension_registry: registry,
-            attributes: attrs,
-            catalog_assets: true,
-          })
-          const converted = String(await doc.convert())
-          copyReferencedAssets(cfg, absPath, doc)
-          return converted
-        },
-      )
-      deps?.setPageIncludes(page, includes)
+      const output = await renderer.render({
+        sourceText: text,
+        absPath,
+        baseDir,
+        attributes: host.attributes,
+      })
+      const html = assemblePage({
+        title: output.title || '',
+        lang: output.lang,
+        bodyClass: output.bodyClass,
+        body: output.html,
+        head: output.head,
+        headLinks,
+        headScripts,
+        chromeBody,
+      })
+      deps?.setPageIncludes(page, output.includes || [])
       writeIfChanged(toFile, html)
+      copyAssets(cfg, output.assets || [])
     } catch (err) {
       const detail = err?.message || String(err)
       throw new Error(`mkadoc: failed to convert ${page}: ${detail}`, { cause: err })
     }
   })
+}
+
+/**
+ * Copy renderer-reported local assets into the output at mirrored paths.
+ * @param {import('./config.js').MkadocConfig} cfg
+ * @param {string[]} assets repo-relative file paths
+ */
+function copyAssets(cfg, assets) {
+  const outRoot = path.join(cfg.root, cfg.output)
+  for (const rel of assets) {
+    const srcAbs = path.join(cfg.root, rel)
+    if (!fs.existsSync(srcAbs) || !fs.statSync(srcAbs).isFile()) {
+      console.warn(`mkadoc: referenced asset not found: ${rel}`)
+      continue
+    }
+    copyFileIfChanged(srcAbs, path.join(outRoot, rel))
+  }
 }
 
 /**
@@ -148,68 +175,12 @@ function copyFirstSourceAssets(cfg) {
   })
 }
 
-/** Targets that are not local relative files (URLs, root-absolute, anchors). */
-function isExternalOrAbsoluteTarget(target) {
-  if (target.startsWith('#') || target.startsWith('/')) return true
-  return /^[a-z][a-z0-9+.-]*:/i.test(target)
-}
-
-/** Converted pages and AsciiDoc sources are not assets. */
-const ASSET_SKIP_RE = /\.(?:html?|adoc|asciidoc)$/i
-
-/**
- * Collect file targets referenced by a converted document: images (block +
- * inline, honoring `:imagesdir:`), `link:` targets, and video/audio blocks.
- * @param {import('@asciidoctor/core').Document} doc
- */
-function collectReferencedAssets(doc) {
-  const targets = []
-  for (const img of doc.getImages?.() || []) {
-    const target = String(img.target ?? '').trim()
-    const dir = String(img.imagesdir ?? '').trim()
-    const relativeDir = dir && !dir.startsWith('/') && !/^[a-z][a-z0-9+.-]*:/i.test(dir)
-    targets.push(relativeDir ? `${dir}/${target}` : target)
-  }
-  for (const link of doc.getLinks?.() || []) {
-    targets.push(String(link ?? '').trim())
-  }
-  for (const block of doc.findBy((b) => b.getContext() === 'video' || b.getContext() === 'audio')) {
-    targets.push(String(block.getAttribute?.('target') ?? '').trim())
-  }
-  return targets.filter(Boolean)
-}
-
-/**
- * Copy each local relative asset referenced by the page into the output at
- * the mirrored path (output mirrors the source tree, so the emitted relative
- * URL resolves). Absolute/external targets and page/source links are skipped;
- * missing files warn and continue.
- */
-function copyReferencedAssets(cfg, pageAbs, doc) {
-  const pageDir = path.dirname(pageAbs)
-  const outRoot = path.join(cfg.root, cfg.output)
-  const seen = new Set()
-
-  for (const target of collectReferencedAssets(doc)) {
-    if (isExternalOrAbsoluteTarget(target) || ASSET_SKIP_RE.test(target)) continue
-    const srcAbs = path.resolve(pageDir, target)
-    const rel = relToRoot(srcAbs, cfg.root)
-    if (seen.has(rel)) continue
-    seen.add(rel)
-    if (!fs.existsSync(srcAbs) || !fs.statSync(srcAbs).isFile()) {
-      console.warn(`mkadoc: referenced asset not found: ${rel}`)
-      continue
-    }
-    copyFileIfChanged(srcAbs, path.join(outRoot, rel))
-  }
-}
-
-function pruneStaleHtml(cfg) {
+function pruneStaleHtml(cfg, rendererForPath) {
   const outRoot = path.join(cfg.root, cfg.output)
   const stylesPrefix = path.join(cfg.output, 'styles').split(path.sep).join('/')
   const live = new Set()
 
-  for (const { page, source } of listSourcePages(cfg.root, cfg.sources)) {
+  for (const { page, source } of listSourcePages(cfg.root, cfg.sources, { rendererForPath })) {
     live.add(pageToOutRel(source, page))
   }
 

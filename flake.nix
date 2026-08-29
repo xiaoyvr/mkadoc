@@ -1,5 +1,5 @@
 {
-  description = "mkadoc monorepo — build and serve AsciiDoc as a static site";
+  description = "mkadoc monorepo — build and serve documentation as a static site";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";

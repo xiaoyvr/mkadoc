@@ -5,7 +5,17 @@ import { defaultConfigPath, loadConfig, resolveServeListen } from './config.js'
 import { createDevServer } from './dev-server.js'
 import { rootRedirectHref, sourceForRepoPath } from './sources.js'
 
-const WATCH_EXTS = new Set(['.adoc', '.asciidoc', '.css', '.js', '.html'])
+const WATCH_EXTS = new Set([
+  '.adoc',
+  '.asciidoc',
+  '.md',
+  '.markdown',
+  '.css',
+  '.js',
+  '.html',
+  '.yaml',
+  '.yml',
+])
 
 export async function serve(cfg, opts = {}) {
   let current = cfg

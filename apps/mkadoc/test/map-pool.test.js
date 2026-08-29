@@ -9,7 +9,7 @@ import { smokeFixture, withTempProject } from './helpers/project.js'
 describe('build concurrency', () => {
   it('full build with concurrency still writes all pages', async () => {
     await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.adoc', root)
+      const cfg = await loadConfig('mkadoc.yaml', root)
       const mode = await build(cfg, { forceFull: true, concurrency: 2 })
       assert.equal(mode, 'full')
       assert.match(

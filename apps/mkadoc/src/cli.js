@@ -6,7 +6,7 @@ import { parseServeConfig } from './config-schema.js'
 import { formatCliError } from './errors.js'
 import { serve } from './serve.js'
 
-const HELP = `mkadoc — build and serve AsciiDoc as a static site
+const HELP = `mkadoc — build and serve documentation as a static site (multi-format)
 
 Usage:
   mkadoc build [--config PATH]
@@ -16,8 +16,8 @@ Usage:
   mkadoc help
 
 Config:
-  default mkadoc.adoc (literate AsciiDoc; [mkadoc-config] YAML blocks merged in memory)
-  --config PATH must be .adoc or .asciidoc
+  default mkadoc.yaml (plain YAML)
+  --config PATH must be .yaml or .yml
 
 Commands:
   build     Full rebuild of sources

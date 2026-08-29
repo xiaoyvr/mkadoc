@@ -1,24 +1,25 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { relToRoot } from './fs-utils.js'
-import { chromePathForSource, listSourcePages, sourceForRepoPath } from './sources.js'
+import { listSourcePages, sourceForRepoPath } from './sources.js'
 
-function isPage(p, cfg) {
-  if (!p.endsWith('.adoc') && !p.endsWith('.asciidoc')) return false
+function isPage(p, cfg, host) {
   if (path.basename(p).startsWith('_')) return false
+  if (!host.rendererForPath(p)) return false
   const source = sourceForRepoPath(cfg.sources, p)
   if (!source) return false
   return fs.existsSync(path.join(cfg.root, p))
 }
 
-function isSourceAdoc(p, cfg) {
-  if (!p.endsWith('.adoc') && !p.endsWith('.asciidoc')) return false
+/** A renderer-owned file under a source (page or partial). */
+function isSourceFile(p, cfg, host) {
+  if (!host.rendererForPath(p)) return false
   return Boolean(sourceForRepoPath(cfg.sources, p))
 }
 
-/** `_chrome.adoc` feeds `/styles/chrome.css` (linked, not baked into page HTML). */
-function isChromeCssPath(sources, p) {
-  return sources.some((source) => chromePathForSource(source) === p)
+/** `_theme/*.css` feeds the linked stylesheets (not baked into page HTML). */
+function isThemeCssPath(cfg, p) {
+  return cfg.sources.some((source) => p.startsWith(`${source.path}/_theme/`) && p.endsWith('.css'))
 }
 
 function needsFullRebuild(p, cfg, host) {
@@ -37,7 +38,9 @@ export function decideMode(cfg, host, { forceFull = false, paths = [], deps = nu
     return { mode: 'full', pages: [] }
   }
 
-  const livePages = listSourcePages(cfg.root, cfg.sources).map((p) => p.page)
+  const livePages = listSourcePages(cfg.root, cfg.sources, {
+    rendererForPath: host.rendererForPath,
+  }).map((p) => p.page)
 
   /** @type {Set<string>} */
   const pages = new Set()
@@ -54,8 +57,8 @@ export function decideMode(cfg, host, { forceFull = false, paths = [], deps = nu
     if (needsFullRebuild(p, cfg, host)) {
       return { mode: 'full', pages: [] }
     }
-    // CSS-only chrome override — rewrite stylesheet, do not reconvert pages.
-    if (isChromeCssPath(cfg.sources, p)) {
+    // CSS-only theme override — rewrite stylesheet, do not reconvert pages.
+    if (isThemeCssPath(cfg, p)) {
       assetsOnly = true
       continue
     }
@@ -64,12 +67,12 @@ export function decideMode(cfg, host, { forceFull = false, paths = [], deps = nu
     const dependents = deps?.pagesDependingOn(p, { livePages }) || []
     if (dependents.length > 0) {
       for (const page of dependents) {
-        if (isPage(page, cfg)) pages.add(page)
+        if (isPage(page, cfg, host)) pages.add(page)
       }
       continue
     }
 
-    if (isPage(p, cfg)) {
+    if (isPage(p, cfg, host)) {
       pages.add(p)
       continue
     }
@@ -79,13 +82,13 @@ export function decideMode(cfg, host, { forceFull = false, paths = [], deps = nu
       continue
     }
 
-    if (isSourceAdoc(p, cfg)) {
+    if (isSourceFile(p, cfg, host)) {
       // No known dependents (unused partial, or cache empty — restart serve to refresh).
       orphanPartial = true
       continue
     }
 
-    // Unknown non-page path (e.g. README.md) — keep previous safe behavior.
+    // Unknown non-page path (e.g. README.txt) — keep previous safe behavior.
     return { mode: 'full', pages: [] }
   }
 

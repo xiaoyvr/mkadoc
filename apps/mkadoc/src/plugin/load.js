@@ -1,16 +1,23 @@
 import { pathToFileURL } from 'node:url'
+import asciidoc from '../builtins/asciidoc.js'
+import markdown from '../builtins/markdown.js'
 import nav from '../builtins/nav.js'
-import shiki, { afterPluginsLoaded } from '../builtins/shiki.js'
+import shiki from '../builtins/shiki.js'
 import topbar from '../builtins/topbar.js'
 import { installLocalPlugin, parseLocator, resolveEntry } from './installer.js'
 import { BUILTIN_LOCATORS } from './locators.js'
 
 /** @type {Record<string, import('./contract.js').MkadocPluginFactory>} */
 const BUILTINS = {
+  'mkadoc:asciidoc': asciidoc,
+  'mkadoc:markdown': markdown,
   'mkadoc:nav': nav,
   'mkadoc:shiki': shiki,
   'mkadoc:topbar': topbar,
 }
+
+/** Built-in renderers are enabled unless explicitly configured. */
+const AUTO_RENDERERS = ['mkadoc:asciidoc', 'mkadoc:markdown']
 
 for (const locator of BUILTIN_LOCATORS) {
   if (!BUILTINS[locator]) {
@@ -90,18 +97,37 @@ function createPluginRunner(loaded, host) {
  */
 export async function loadPlugins(pluginsConfig, host) {
   const entries = Object.entries(pluginsConfig || {})
+  const configured = new Set(entries.map(([locator]) => locator))
+  // Config order first (chrome order), then any unlisted built-in renderers.
+  const ordered = [
+    ...entries.map(([locator]) => locator),
+    ...AUTO_RENDERERS.filter((locator) => !configured.has(locator)),
+  ]
+
+  const optionsFor = (locator) => entries.find(([k]) => k === locator)?.[1] ?? {}
+
   /** @type {{ locator: string, plugin: import('./contract.js').MkadocPlugin }[]} */
   const loaded = []
 
-  for (const [locator, options] of entries) {
+  // Construct all plugins in config order first (chrome order is preserved).
+  for (const locator of ordered) {
     const factory = await resolveFactory(locator, host)
-    const plugin = await factory(options || {}, host)
+    const plugin = await factory(optionsFor(locator), host)
     plugin.locator = locator
-    if (plugin.setup) await plugin.setup(host)
     loaded.push({ locator, plugin })
   }
 
-  afterPluginsLoaded(loaded.map(({ locator }) => locator))
+  // Renderers register + setup before feature plugins so feature plugins can
+  // discover them (e.g. mkadoc:nav finds `_nav.<ext>` via the renderer list).
+  for (const { plugin } of loaded) {
+    if (plugin.kind === 'renderer') {
+      host.registerRenderer(plugin)
+      if (plugin.setup) await plugin.setup(host)
+    }
+  }
+  for (const { plugin } of loaded) {
+    if (plugin.kind !== 'renderer' && plugin.setup) await plugin.setup(host)
+  }
 
   return createPluginRunner(loaded, host)
 }

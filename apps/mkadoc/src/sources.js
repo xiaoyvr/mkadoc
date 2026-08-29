@@ -1,6 +1,5 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { load } from '@asciidoctor/core'
 import { relToRoot, walkDir } from './fs-utils.js'
 
 /**
@@ -8,7 +7,7 @@ import { relToRoot, walkDir } from './fs-utils.js'
  * @property {string} path        repo-relative source dir (posix)
  * @property {string} mount       site mount, e.g. `/` or `/apps/mkadoc`
  * @property {string} title       tab / section label
- * @property {string} description `:description:` from index.adoc (brand for first source)
+ * @property {string} description `:description:` / frontmatter description (brand for first source)
  */
 
 /**
@@ -30,37 +29,52 @@ function titleFallback(mount) {
 }
 
 /**
- * Read `{source}/index.adoc` metadata used for tabs and the site brand.
- * Tab title: `:tab:`, else doctitle, else last mount segment / Docs.
- * Description: `:description:` (empty when absent); the first source uses it as brand.
+ * Find `<sourcePath>/<basename><ext>` among the loaded renderers' extensions.
+ * Registration order decides precedence when multiple renderers match.
+ * @param {string} root
+ * @param {string} sourcePath
+ * @param {string} basename e.g. `index` or `_nav`
+ * @param {import('./plugin/contract.js').MkadocRenderer[]} renderers
+ * @returns {{ path: string, rel: string, renderer: import('./plugin/contract.js').MkadocRenderer, ext: string } | null}
+ */
+export function findSourceFile(root, sourcePath, basename, renderers) {
+  const dir = path.join(root, sourcePath)
+  for (const renderer of renderers) {
+    for (const ext of renderer.extensions || []) {
+      const abs = path.join(dir, `${basename}${ext}`)
+      if (fs.existsSync(abs)) {
+        return { path: abs, rel: `${sourcePath}/${basename}${ext}`, renderer, ext }
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Read `{source}/index.<ext>` metadata used for tabs and the site brand.
+ * Tab title: `:tab:` / frontmatter `tab`, else doctitle, else mount fallback.
  * @param {string} root
  * @param {string} sourcePath
  * @param {string} mount
+ * @param {import('./plugin/contract.js').MkadocRenderer[]} renderers
  * @returns {Promise<{ title: string, description: string }>}
  */
-export async function sourceMetaForIndex(root, sourcePath, mount) {
-  const indexAbs = path.join(root, sourcePath, 'index.adoc')
-  if (!fs.existsSync(indexAbs)) {
-    return { title: titleFallback(mount), description: '' }
-  }
+export async function sourceMetaForIndex(root, sourcePath, mount, renderers) {
+  const found = findSourceFile(root, sourcePath, 'index', renderers)
+  if (!found) return { title: titleFallback(mount), description: '' }
 
-  const text = fs.readFileSync(indexAbs, 'utf8')
-  const doc = await load(text, { safe: 'unsafe', standalone: false })
-  const tab = String(doc.getAttribute?.('tab') || '').trim()
-  const title =
-    tab ||
-    String(doc.getDoctitle?.() || doc.getAttribute?.('doctitle') || '').trim() ||
-    titleFallback(mount)
-  const description = String(doc.getAttribute?.('description') || '').trim()
+  const text = fs.readFileSync(found.path, 'utf8')
+  const meta = await found.renderer.extractMeta(text, found.rel)
+  const title = String(meta.tab || meta.title || '').trim() || titleFallback(mount)
+  const description = String(meta.description || '').trim()
   return { title, description }
 }
 
 /**
  * @param {string[]} sourcePaths
- * @param {string} root
- * @returns {Promise<MkadocSource[]>}
+ * @returns {MkadocSource[]}
  */
-export async function normalizeSources(sourcePaths, root) {
+export function normalizeSources(sourcePaths) {
   if (!Array.isArray(sourcePaths) || sourcePaths.length === 0) {
     throw new Error('mkadoc: sources must be a non-empty array of paths')
   }
@@ -82,11 +96,24 @@ export async function normalizeSources(sourcePaths, root) {
       throw new Error(`mkadoc: duplicate source mount ${mount} (from ${sourcePath})`)
     }
     mounts.add(mount)
-    const { title, description } = await sourceMetaForIndex(root, sourcePath, mount)
-    sources.push({ path: sourcePath, mount, title, description })
+    // Metadata is filled later by extractSourcesMeta (needs renderers loaded).
+    sources.push({ path: sourcePath, mount, title: titleFallback(mount), description: '' })
   }
 
   return sources
+}
+
+/**
+ * Fill tab titles/descriptions from each source's index file via its renderer.
+ * @param {import('./config.js').MkadocConfig} cfg
+ * @param {import('./plugin/contract.js').MkadocRenderer[]} renderers
+ */
+export async function extractSourcesMeta(cfg, renderers) {
+  for (const source of cfg.sources) {
+    const meta = await sourceMetaForIndex(cfg.root, source.path, source.mount, renderers)
+    source.title = meta.title
+    source.description = meta.description
+  }
 }
 
 /** @param {string} mount */
@@ -150,9 +177,10 @@ export function sourceForRepoPath(sources, relPath) {
 
 /**
  * Repo-relative page path → output href path (no leading site/, with .html).
+ * Any renderer extension is normalized to `.html`.
  * `apps/mkadoc/docs/guide.adoc` + mount `/apps/mkadoc` → `apps/mkadoc/guide.html`
- * @param {import('./sources.js').MkadocSource} source
- * @param {string} pageRel repo-relative .adoc path
+ * @param {MkadocSource} source
+ * @param {string} pageRel repo-relative source path
  */
 export function pageToOutRel(source, pageRel) {
   const norm = pageRel.replace(/\\/g, '/')
@@ -161,60 +189,57 @@ export function pageToOutRel(source, pageRel) {
     throw new Error(`mkadoc: page ${pageRel} is not under source ${source.path}`)
   }
   const under = norm === source.path ? '' : norm.slice(prefix.length)
-  const htmlUnder = under.replace(/\.adoc$/, '.html')
+  const parsed = path.posix.parse(under)
+  const htmlUnder = path.posix.join(parsed.dir, `${parsed.name}.html`)
   const mountRel = source.mount.replace(/^\//, '')
   return htmlUnder ? `${mountRel}/${htmlUnder}` : `${mountRel}/index.html`
 }
 
-/** @param {import('./sources.js').MkadocSource} source @param {string} pageRel */
+/** @param {MkadocSource} source @param {string} pageRel */
 export function pageToHref(source, pageRel) {
   return `/${pageToOutRel(source, pageRel)}`
 }
 
 /**
  * @param {string} root
- * @param {import('./sources.js').MkadocSource[]} sources
- * @returns {{ page: string, source: import('./sources.js').MkadocSource }[]}
+ * @param {MkadocSource[]} sources
+ * @param {{ rendererForPath: (p: string) => import('./plugin/contract.js').MkadocRenderer | null }} opts
+ * @returns {{ page: string, source: MkadocSource }[]}
  */
-export function listSourcePages(root, sources) {
+export function listSourcePages(root, sources, { rendererForPath } = {}) {
   const pages = []
   for (const source of sources) {
     walkDir(path.join(root, source.path), {
-      shouldEnterDir: (_full, name) => name !== 'node_modules' && name !== '.git',
+      shouldEnterDir: (_full, name) =>
+        name !== 'node_modules' && name !== '.git' && !name.startsWith('_'),
       onFile: (full, name) => {
-        if (name.endsWith('.adoc') && !name.startsWith('_')) {
-          pages.push({ page: relToRoot(full, root), source })
-        }
+        if (name.startsWith('_')) return
+        const rel = relToRoot(full, root)
+        const ok = rendererForPath
+          ? Boolean(rendererForPath(rel))
+          : /\.(?:adoc|asciidoc)$/.test(name)
+        if (ok) pages.push({ page: rel, source })
       },
     })
   }
   return pages
 }
 
-/** Convention: `{source}/index.adoc` owns the tab title. */
-export function isSourceIndexPath(sources, relPath) {
-  const norm = relPath.replace(/\\/g, '/')
-  return sources.some((source) => norm === `${source.path}/index.adoc`)
-}
-
 /**
- * Re-read tab titles from each source's index.adoc into `cfg.sources` (in place).
+ * Repo-relative paths of every source's index file (any renderer extension).
  * @param {import('./config.js').MkadocConfig} cfg
+ * @param {import('./plugin/contract.js').MkadocRenderer[]} renderers
  */
-export async function refreshSourceTitles(cfg) {
+export function sourceIndexRels(cfg, renderers) {
+  const rels = new Set()
   for (const source of cfg.sources) {
-    const meta = await sourceMetaForIndex(cfg.root, source.path, source.mount)
-    source.title = meta.title
-    source.description = meta.description
+    const found = findSourceFile(cfg.root, source.path, 'index', renderers)
+    if (found) rels.add(found.rel)
   }
+  return rels
 }
 
-/** Convention: `{source}/_nav.adoc` */
-export function navPathForSource(source) {
-  return `${source.path}/_nav.adoc`
-}
-
-/** Convention: `{source}/_chrome.adoc` (first source may override site chrome CSS) */
-export function chromePathForSource(source) {
-  return `${source.path}/_chrome.adoc`
+/** Convention: `{source}/_nav.<ext>` rendered by the owning renderer. */
+export function navFileForSource(root, source, renderers) {
+  return findSourceFile(root, source.path, '_nav', renderers)
 }

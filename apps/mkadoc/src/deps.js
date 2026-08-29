@@ -1,18 +1,16 @@
-import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs'
 import path from 'node:path'
 import { CACHE_DIR } from './config.js'
-import { relToRoot, writeIfChanged } from './fs-utils.js'
+import { writeIfChanged } from './fs-utils.js'
 
 const DEPS_VERSION = 1
 const DEPS_REL = `${CACHE_DIR}/deps.json`
 
-/** @type {AsyncLocalStorage<{ files: string[], root: string, baseDir: string }>} */
-const includeCollect = new AsyncLocalStorage()
-
 /**
  * Page → included files (repo-relative). Core-owned rebuild dependency graph.
  * Reverse edges are derived for "what pages to rebuild when P changes".
+ * Includes are reported by renderers (the Asciidoctor include:: processor lives
+ * in the mkadoc:asciidoc renderer now).
  */
 export class DependencyGraph {
   /** @param {string} root */
@@ -150,76 +148,6 @@ function normalizeRel(p) {
   return String(p || '')
     .replace(/\\/g, '/')
     .replace(/^\.\//, '')
-}
-
-/**
- * Directory used to resolve an include target for the current reader cursor.
- * @param {{ path?: string, _dir?: string }} reader
- * @param {string} fallbackBaseDir absolute
- */
-export function includeResolveDir(reader, fallbackBaseDir) {
-  const filePath = reader.path
-  if (filePath && filePath !== '<stdin>' && path.isAbsolute(filePath)) {
-    return path.dirname(filePath)
-  }
-  if (reader._dir && path.isAbsolute(reader._dir)) return reader._dir
-  if (reader._dir) return path.resolve(fallbackBaseDir, reader._dir)
-  return fallbackBaseDir
-}
-
-function isUriTarget(target) {
-  return /^[a-z][a-z0-9+.-]*:/i.test(String(target))
-}
-
-/**
- * Register a core IncludeProcessor that records resolved local includes into
- * the active AsyncLocalStorage bag (see {@link withIncludeCollector}).
- * @param {import('@asciidoctor/core').Extensions.Registry} registry
- */
-export function registerIncludeCollector(registry) {
-  registry.includeProcessor(function () {
-    this.handles((target) => !isUriTarget(target))
-    this.process((doc, reader, target, attrs) => {
-      const store = includeCollect.getStore()
-      const fallback =
-        store?.baseDir ||
-        doc?.getBaseDir?.() ||
-        doc?.base_dir ||
-        (reader._dir && path.isAbsolute(reader._dir) ? reader._dir : null)
-
-      if (!fallback) return
-
-      const base = includeResolveDir(reader, fallback)
-      const resolved = path.resolve(base, String(target))
-      if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
-        if (store) console.warn(`mkadoc: unresolved include: ${target}`)
-        return
-      }
-
-      if (store) {
-        const rel = relToRoot(resolved, store.root)
-        if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
-          store.files.push(rel)
-        }
-      }
-
-      reader.pushInclude(fs.readFileSync(resolved, 'utf8'), target, resolved, 1, attrs)
-    })
-  })
-}
-
-/**
- * Run `fn` while collecting include paths into a bag.
- * @template T
- * @param {{ root: string, baseDir: string }} ctx
- * @param {() => Promise<T> | T} fn
- * @returns {Promise<{ result: T, includes: string[] }>}
- */
-export async function withIncludeCollector(ctx, fn) {
-  const bag = { files: /** @type {string[]} */ ([]), root: ctx.root, baseDir: ctx.baseDir }
-  const result = await includeCollect.run(bag, fn)
-  const includes = [...new Set(bag.files.map(normalizeRel))].sort()
-  return { result, includes }
 }
 
 /**

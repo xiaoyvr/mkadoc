@@ -1,5 +1,5 @@
 {
-  description = "mkadoc — build and serve AsciiDoc as a static site";
+  description = "mkadoc — build and serve documentation as a static site";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
@@ -51,7 +51,7 @@
           npmFlags = [ "--omit=dev" ];
 
           meta = {
-            description = "Build and serve AsciiDoc as a static site";
+            description = "Build and serve documentation as a static site";
             mainProgram = "mkadoc";
             platforms = systems;
           };

@@ -3,9 +3,15 @@ import path from 'node:path'
 import { loadDependencyGraph } from './deps.js'
 import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
+import { extractSourcesMeta } from './sources.js'
 
 export async function check(cfg) {
   let failed = false
+
+  const deps = loadDependencyGraph(cfg.root)
+  const { plugin: pluginHost, build: buildHost } = createHosts(cfg, { deps })
+  const plugins = await loadPlugins(cfg.plugins, pluginHost)
+  await extractSourcesMeta(cfg, buildHost.renderers)
 
   for (const source of cfg.sources) {
     const abs = path.join(cfg.root, source.path)
@@ -17,9 +23,6 @@ export async function check(cfg) {
     }
   }
 
-  const deps = loadDependencyGraph(cfg.root)
-  const { plugin: pluginHost } = createHosts(cfg, { deps })
-  const plugins = await loadPlugins(cfg.plugins, pluginHost)
   const results = await plugins.check()
 
   for (const result of results) {

@@ -1,6 +1,6 @@
 = mkadoc monorepo
 
-Build and serve AsciiDoc as a static site.
+Build and serve documentation (AsciiDoc, Markdown, …) as a static site.
 
 This repository is a monorepo with three packages under `apps/`:
 
@@ -31,11 +31,13 @@ workspaces at the root if you prefer a single lockfile).
 
 == Site
 
-The repo is itself a mkadoc site: the root `mkadoc.adoc` configures a build of
+The repo is itself a mkadoc site: the root `mkadoc.yaml` configures a build of
 the three package doc trees (`apps/mkadoc/docs`, `apps/mkadoc-plugin-host/docs`,
-`apps/mkadoc-plugin-kroki/docs`) into `site/`. The `mkadoc` command runs from
-source via npm (`npm link` in `apps/mkadoc`, or `node apps/mkadoc/bin/mkadoc.js`);
-`npm install` in `apps/mkadoc` is required first:
+`apps/mkadoc-plugin-kroki/docs`) into `site/`. Built-in renderers
+(`mkadoc:asciidoc`, `mkadoc:markdown`) are auto-loaded. The `mkadoc` command
+runs from source via npm (`npm link` in `apps/mkadoc`, or
+`node apps/mkadoc/bin/mkadoc.js`); `npm install` in `apps/mkadoc` is required
+first:
 
 [source,console]
 ----
@@ -49,7 +51,7 @@ Or, with the devShell's `just` (see `justfile`): `just deps` once, then
 `just serve --port 9000`).
 
 The `[plantuml]` diagram in the docs needs a running Kroki server
-(`server_url: http://127.0.0.1:8080` in `mkadoc.adoc`) — e.g. the dotfiles
+(`server_url: http://127.0.0.1:8080` in `mkadoc.yaml`) — e.g. the dotfiles
 repo's `scripts/kroki.sh`, or any Kroki instance. Without one, `mkadoc check`
 fails and diagram blocks fall back to their source listing.
 

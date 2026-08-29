@@ -19,6 +19,9 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
     siteWideDeps: [],
     assetPrefixes: [],
     extensions: [],
+    services: new Map(),
+    renderers: [],
+    registry: null,
   }
 
   function ensureDir(relOrAbs) {
@@ -32,7 +35,6 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
       root,
       sources: [],
       output: 'site',
-      docinfoDir: path.join('.mkadoc', 'docinfo'),
       plugins: {},
       serve: { remote: false, port: 8000 },
       ...config,
@@ -48,6 +50,24 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
 
     registerExtension(fn) {
       state.extensions.push(fn)
+      if (state.registry) fn(state.registry)
+    },
+
+    registerExtensionRegistry(registry) {
+      state.registry = registry
+      for (const fn of state.extensions) fn(registry)
+    },
+
+    registerRenderer(renderer) {
+      state.renderers.push(renderer)
+    },
+
+    provideService(name, service) {
+      state.services.set(name, service)
+    },
+
+    getService(name) {
+      return state.services.get(name)
     },
 
     addAttributes(attrs) {

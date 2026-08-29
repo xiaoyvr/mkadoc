@@ -56,8 +56,8 @@ describe('external plugins (local folder protocol)', () => {
       const { plugin: host, build } = createHosts(cfg)
       const runner = await loadPlugins(cfg.plugins, host)
 
-      assert.equal(runner.list.length, 1)
-      const [entry] = runner.list
+      const entry = runner.list.find((e) => e.locator === 'file:./plugins/my-plugin')
+      assert.ok(entry)
       assert.equal(entry.plugin.name, 'my')
       assert.equal(entry.locator, 'file:./plugins/my-plugin')
       // setup ran
@@ -83,7 +83,8 @@ describe('external plugins (local folder protocol)', () => {
       const cfg = baseCfg(root, { './plugins/my-plugin': {} })
       const { plugin: host } = createHosts(cfg)
       const runner = await loadPlugins(cfg.plugins, host)
-      assert.equal(runner.list[0].plugin.name, 'my')
+      const entry = runner.list.find((e) => e.locator === './plugins/my-plugin')
+      assert.equal(entry.plugin.name, 'my')
     })
   })
 
@@ -113,12 +114,15 @@ describe('external plugins (local folder protocol)', () => {
   })
 
   it('errors for a manifest-less plugin folder (package.json required)', async () => {
-    await withTempProject({ 'plugins/bare/index.js': 'export default () => ({ name: "bare" })' }, async (root) => {
-      await assert.rejects(
-        () => installLocalPlugin(root, 'file:./plugins/bare'),
-        /has no package.json/,
-      )
-    })
+    await withTempProject(
+      { 'plugins/bare/index.js': 'export default () => ({ name: "bare" })' },
+      async (root) => {
+        await assert.rejects(
+          () => installLocalPlugin(root, 'file:./plugins/bare'),
+          /has no package.json/,
+        )
+      },
+    )
   })
 
   it('respects package.json files selection when packing', async () => {
@@ -178,23 +182,19 @@ describe('external plugins (local folder protocol)', () => {
     await withTempProject(
       {
         ...FIXTURE_PLUGIN,
-        'mkadoc.adoc': `= t
-
-[mkadoc-config]
-----
-sources:
+        'mkadoc.yaml': `sources:
   - docs
 plugins:
   file:./plugins/my-plugin: {}
-----
 `,
         'docs/index.adoc': '= Index\n\nhello',
       },
       async (root) => {
-        const cfg = await loadConfig('mkadoc.adoc', root)
+        const cfg = await loadConfig('mkadoc.yaml', root)
         const { plugin: host } = createHosts(cfg)
         const runner = await loadPlugins(cfg.plugins, host)
-        assert.equal(runner.list[0].plugin.name, 'my')
+        const entry = runner.list.find((e) => e.locator === 'file:./plugins/my-plugin')
+        assert.equal(entry.plugin.name, 'my')
       },
     )
   })
