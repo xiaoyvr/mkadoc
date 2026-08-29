@@ -8,6 +8,9 @@ sources:
 
 output: site
 
+site:
+  brand: mkadoc
+
 plugins:
   mkadoc:topbar: {}
   file:./apps/mkadoc-plugin-kroki:

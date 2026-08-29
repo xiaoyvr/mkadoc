@@ -116,7 +116,7 @@ async function readTopbarCssBundle(host) {
 function topbarHtml(host) {
   const first = host.config.sources[0]
   const homeHref = first ? `${first.mount}/index.html` : '/'
-  const brandRaw = first?.description || first?.title || 'Docs'
+  const brandRaw = host.config.site.brand
   const logoSrc = resolveLogoHref(host.config)
 
   return `<header id="mkadoc-topbar" class="mkadoc-topbar">

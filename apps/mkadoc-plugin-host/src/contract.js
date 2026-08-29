@@ -11,13 +11,13 @@
  * @property {string} path        repo-relative source dir (posix)
  * @property {string} mount       site mount, e.g. `/` or `/apps/mkadoc`
  * @property {string} title       source bar / section label
- * @property {string} description `:description:` / frontmatter description (brand for first source)
  *
  * @typedef {object} MkadocConfig
  * @property {string} root
  * @property {string} configPath
  * @property {MkadocSource[]} sources
  * @property {string} output
+ * @property {{ brand: string }} site
  * @property {Record<string, Record<string, unknown>>} plugins
  * @property {{ remote: boolean, port: number }} serve
  *
@@ -68,7 +68,7 @@
  * @property {string[]} [assets]     repo-relative referenced files to copy
  * @property {string[]} [includes]   repo-relative files this page depends on
  *
- * @typedef {{ title: string, description: string, navLabel?: string }} SourceMeta
+ * @typedef {{ title: string, navLabel?: string }} SourceMeta
  *
  * @typedef {object} MkadocRenderer
  * @property {string} name

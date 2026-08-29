@@ -52,6 +52,8 @@ sources:
   - docs
   - apps/mkadoc/docs
 output: site
+site:
+  brand: My Docs
 plugins: {}
 serve:
   remote: false
@@ -103,7 +105,7 @@ renderer).
 |===
 | Locator | Role
 
-| `mkadoc:topbar` | Sticky topbar: site logo + brand from `sources` (first in config order).
+| `mkadoc:topbar` | Sticky topbar: site logo + brand from `site.brand` (first in config order).
 | `mkadoc:nav` | Site navigation: level-1 **source bar** under the topbar (one link per source) + level-2 **article sidebar** (per-source lists from each `_nav.adoc` or `_nav.yaml`).
 | `mkadoc:shiki` | Build-time syntax highlighting for code blocks (all renderers).
 | `mkadoc:asciidoc` | Built-in renderer for `.adoc` / `.asciidoc` (auto-loaded).

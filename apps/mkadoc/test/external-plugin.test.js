@@ -7,7 +7,7 @@ import { parseProjectConfig } from '../src/config-schema.js'
 import { createHosts } from '../src/plugin/host.js'
 import { installLocalPlugin } from '../src/plugin/installer.js'
 import { loadPlugins } from '../src/plugin/load.js'
-import { withTempProject } from './helpers/project.js'
+import { withTempProject, yamlConfig } from './helpers/project.js'
 
 const FIXTURE_PLUGIN = {
   'plugins/my-plugin/package.json': JSON.stringify(
@@ -158,6 +158,7 @@ describe('external plugins (local folder protocol)', () => {
   it('schema accepts mkadoc builtins and file specs, rejects unknown builtins and bad locators', () => {
     const ok = parseProjectConfig({
       sources: ['docs'],
+      site: { brand: 'Docs' },
       plugins: {
         'mkadoc:nav': {},
         'file:./plugins/x': {},
@@ -168,11 +169,21 @@ describe('external plugins (local folder protocol)', () => {
     assert.ok(ok.plugins['file:./plugins/x'])
 
     assert.throws(
-      () => parseProjectConfig({ sources: ['docs'], plugins: { 'mkadoc:nope': {} } }),
+      () =>
+        parseProjectConfig({
+          sources: ['docs'],
+          site: { brand: 'Docs' },
+          plugins: { 'mkadoc:nope': {} },
+        }),
       /Unknown builtin plugin/,
     )
     assert.throws(
-      () => parseProjectConfig({ sources: ['docs'], plugins: { 'not a locator!!': {} } }),
+      () =>
+        parseProjectConfig({
+          sources: ['docs'],
+          site: { brand: 'Docs' },
+          plugins: { 'not a locator!!': {} },
+        }),
       /Invalid plugin locator/,
     )
   })
@@ -181,11 +192,11 @@ describe('external plugins (local folder protocol)', () => {
     await withTempProject(
       {
         ...FIXTURE_PLUGIN,
-        'mkadoc.yaml': `sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
 plugins:
   file:./plugins/my-plugin: {}
-`,
+`),
         'docs/index.adoc': '= Index\n\nhello',
       },
       async (root) => {

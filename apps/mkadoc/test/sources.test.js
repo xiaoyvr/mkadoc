@@ -133,17 +133,18 @@ plugins:
     )
   })
 
-  it('uses first source :description: as the topbar brand', async () => {
+  it('uses site.brand as the topbar brand', async () => {
     await withTempProject(
       {
         'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
+site:
+  brand: Nix-managed system
 plugins:
   mkadoc:topbar: {}
 `),
         'docs/index.adoc': `= Dotfiles
-:description: Nix-managed system and user configurations
 
 Body.
 `,
@@ -154,14 +155,8 @@ Body.
         const header = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         const brand = header.querySelector('.mkadoc-brand')
         assert.ok(brand)
-        assert.equal(
-          brand.getAttribute('data-site-title'),
-          'Nix-managed system and user configurations',
-        )
-        assert.equal(
-          brand.querySelector('p')?.text.trim(),
-          'Nix-managed system and user configurations',
-        )
+        assert.equal(brand.getAttribute('data-site-title'), 'Nix-managed system')
+        assert.equal(brand.querySelector('p')?.text.trim(), 'Nix-managed system')
       },
     )
   })

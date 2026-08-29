@@ -56,9 +56,14 @@ export function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-/** Plain YAML config body (mkadoc v1 config format). */
+/** Plain YAML config body (mkadoc v1 config format). Injects the mandatory
+ * `site.brand` unless the body already sets it. */
 export function yamlConfig(yamlBody) {
-  return yamlBody.trim()
+  const body = yamlBody.trim()
+  if (/^site:/m.test(body)) return body
+  return `site:
+  brand: Docs
+${body}`
 }
 
 /** Minimal no-plugin fixture used by smoke tests. */

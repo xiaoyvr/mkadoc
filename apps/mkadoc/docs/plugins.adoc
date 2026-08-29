@@ -42,7 +42,7 @@ export default function myRenderer(options = {}, host) {
     kind: 'renderer',
     extensions: ['.xyz'],
 
-    // → { title, description, navLabel } from an index file / frontmatter
+    // → { title, navLabel } from an index file / frontmatter
     async extractMeta(sourceText, path) { ... },
 
     // → { html, title, lang, bodyClass, head, assets, includes }
@@ -86,7 +86,7 @@ const hl = host.getService('syntax-highlight')
 
 == What you cannot extend (core-owned)
 
-* **Topbar / logo / brand** — the topbar is the built-in `mkadoc:topbar` plugin (first in config order so it renders above everything else). Everything below it comes from plugins via `host.contributeChromeBody` (the built-in `mkadoc:nav` is the reference implementation).
+* **Topbar / logo / brand** — the topbar is the built-in `mkadoc:topbar` plugin (first in config order so it renders above everything else). The brand comes from `site.brand`. Everything below the topbar comes from plugins via `host.contributeChromeBody` (the built-in `mkadoc:nav` is the reference implementation).
 * **Page assembly** — core wraps every renderer's article body into the full HTML document (wrapper, default theme CSS, chrome, head tags). Site authors override the *default theme* with `_theme/theme.css`, and *topbar styles* with the first source's `_theme/topbar.css` (mkadoc:topbar appends it after package defaults).
 * **Page HTML body** — the article is the owning renderer's output. `contributeChromeBody` is only for shared site UI that appears on every page (for example a left sidebar), not for the article itself.
 * **Config schema / CLI / unknown locators** — plugins are registered via known `mkadoc:*` locators or valid package specs (`npm-package-arg` grammar); factory options you validate yourself.

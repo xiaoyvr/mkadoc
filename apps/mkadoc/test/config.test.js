@@ -6,7 +6,7 @@ import markdown from '../src/builtins/markdown.js'
 import { loadConfig, resolveServeListen } from '../src/config.js'
 import { parseProjectConfig, parseServeConfig } from '../src/config-schema.js'
 import { extractSourcesMeta } from '../src/sources.js'
-import { withTempProject } from './helpers/project.js'
+import { withTempProject, yamlConfig } from './helpers/project.js'
 
 /** Renderer doubles just for metadata extraction (extractMeta needs no host). */
 function metaRenderers() {
@@ -17,7 +17,7 @@ describe('loadConfig (plain YAML)', () => {
   it('loads a plain YAML config', async () => {
     await withTempProject(
       {
-        'mkadoc.yaml': `sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
 output: site
 plugins:
@@ -25,7 +25,7 @@ plugins:
 serve:
   remote: true
   port: 8000
-`,
+`),
         'docs/index.adoc': '= Dotfiles\n',
       },
       async (root) => {
@@ -34,6 +34,7 @@ serve:
         assert.equal(cfg.sources[0].path, 'docs')
         assert.equal(cfg.sources[0].mount, '/docs')
         assert.equal(cfg.output, 'site')
+        assert.equal(cfg.site.brand, 'Docs')
         assert.deepEqual(cfg.plugins['mkadoc:nav'], {})
         assert.equal(cfg.serve.port, 8000)
         assert.equal(cfg.serve.remote, true)
@@ -44,9 +45,9 @@ serve:
   it('derives source-bar label from :nav_label: on index.adoc via the renderer', async () => {
     await withTempProject(
       {
-        'mkadoc.yaml': `sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
-`,
+`),
         'docs/index.adoc': `= Long Root Title
 :nav_label: Site
 
@@ -62,33 +63,12 @@ Body.
     )
   })
 
-  it('derives source description from :description: on index.adoc', async () => {
-    await withTempProject(
-      {
-        'mkadoc.yaml': `sources:
-  - docs
-`,
-        'docs/index.adoc': `= Dotfiles
-:description: Nix-managed system
-
-Body.
-`,
-      },
-      async (root) => {
-        const cfg = await loadConfig('mkadoc.yaml', root)
-        await extractSourcesMeta(cfg, metaRenderers())
-        assert.equal(cfg.sources[0].description, 'Nix-managed system')
-        assert.equal(cfg.sources[0].title, 'Dotfiles')
-      },
-    )
-  })
-
   it('passes the absolute index path to extractMeta (base dir for includes)', async () => {
     await withTempProject(
       {
-        'mkadoc.yaml': `sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
-`,
+`),
         'docs/index.md': '---\ntitle: X\n---\n',
       },
       async (root) => {
@@ -99,7 +79,7 @@ Body.
           extensions: ['.md'],
           async extractMeta(_text, absPath) {
             receivedPath = absPath
-            return { title: 'X', description: '' }
+            return { title: 'X' }
           },
         }
         await extractSourcesMeta(cfg, [spy])
@@ -113,12 +93,11 @@ Body.
   it('derives source-bar label from Markdown frontmatter via the renderer', async () => {
     await withTempProject(
       {
-        'mkadoc.yaml': `sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
-`,
+`),
         'docs/index.md': `---
 title: Markdown Docs
-description: Rendered from md
 ---
 
 # Hi
@@ -128,7 +107,6 @@ description: Rendered from md
         const cfg = await loadConfig('mkadoc.yaml', root)
         await extractSourcesMeta(cfg, metaRenderers())
         assert.equal(cfg.sources[0].title, 'Markdown Docs')
-        assert.equal(cfg.sources[0].description, 'Rendered from md')
       },
     )
   })
@@ -163,13 +141,28 @@ description: Rendered from md
     )
   })
 
-  it('accepts .yml config extension', async () => {
+  it('rejects a config missing the mandatory brand', async () => {
     await withTempProject(
       {
-        'mkadoc.yml': `sources:
+        'mkadoc.yaml': `sources:
   - docs
 output: site
 `,
+        'docs/.keep': '',
+      },
+      async (root) => {
+        await assert.rejects(() => loadConfig('mkadoc.yaml', root), /invalid config/)
+      },
+    )
+  })
+
+  it('accepts .yml config extension', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yml': yamlConfig(`sources:
+  - docs
+output: site
+`),
         'docs/index.adoc': '= Smoke\n',
       },
       async (root) => {
@@ -232,36 +225,48 @@ describe('resolveServeListen', () => {
 })
 
 describe('parseProjectConfig (zod schema)', () => {
-  it('requires sources and applies defaults', () => {
+  it('requires sources + site.brand and applies defaults', () => {
     assert.throws(() => parseProjectConfig({}), /invalid config/)
-    assert.deepEqual(parseProjectConfig({ sources: ['docs'] }), {
+    assert.throws(() => parseProjectConfig({ sources: ['docs'] }), /invalid config/)
+    assert.deepEqual(parseProjectConfig({ sources: ['docs'], site: { brand: 'Docs' } }), {
       sources: ['docs'],
       output: 'site',
+      site: { brand: 'Docs' },
       plugins: {},
       serve: { remote: false, port: 8000 },
     })
   })
 
   it('coerces string ports from YAML-like input', () => {
-    const cfg = parseProjectConfig({ sources: ['docs'], serve: { port: '9001', remote: true } })
+    const cfg = parseProjectConfig({
+      sources: ['docs'],
+      site: { brand: 'Docs' },
+      serve: { port: '9001', remote: true },
+    })
     assert.equal(cfg.serve.port, 9001)
     assert.equal(cfg.serve.remote, true)
   })
 
   it('rejects unknown keys (strict schema)', () => {
     assert.throws(
-      () => parseProjectConfig({ sources: ['docs'], fancy: true }),
+      () => parseProjectConfig({ sources: ['docs'], site: { brand: 'Docs' }, fancy: true }),
       /invalid config:.*fancy/,
     )
     assert.throws(
-      () => parseProjectConfig({ sources: ['docs'], serve: { bogus: true } }),
+      () =>
+        parseProjectConfig({ sources: ['docs'], site: { brand: 'Docs' }, serve: { bogus: true } }),
       /invalid config:.*serve/,
     )
   })
 
   it('rejects unknown plugin locators', () => {
     assert.throws(
-      () => parseProjectConfig({ sources: ['docs'], plugins: { 'mkadoc:nope': {} } }),
+      () =>
+        parseProjectConfig({
+          sources: ['docs'],
+          site: { brand: 'Docs' },
+          plugins: { 'mkadoc:nope': {} },
+        }),
       /invalid config:.*plugins/,
     )
   })
@@ -269,6 +274,7 @@ describe('parseProjectConfig (zod schema)', () => {
   it('accepts known builtin renderer/feature locators and file specs', () => {
     const cfg = parseProjectConfig({
       sources: ['docs'],
+      site: { brand: 'Docs' },
       plugins: {
         'mkadoc:asciidoc': {},
         'mkadoc:markdown': { html: true },
@@ -285,12 +291,12 @@ describe('parseProjectConfig (zod schema)', () => {
   it('loadConfig surfaces schema errors from YAML configs', async () => {
     await withTempProject(
       {
-        'mkadoc.yaml': `sources:
+        'mkadoc.yaml': yamlConfig(`sources:
   - docs
 serve:
   bogus: true
   port: 8000
-`,
+`),
         'docs/.keep': '',
       },
       async (root) => {

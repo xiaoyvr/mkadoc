@@ -14,6 +14,12 @@ export const ServeSchema = z
   })
   .strict()
 
+const SiteSchema = z
+  .object({
+    brand: z.string().min(1),
+  })
+  .strict()
+
 const PluginsSchema = z.preprocess(
   (v) => (v == null ? {} : v),
   z.record(z.string(), z.record(z.string(), z.unknown())).superRefine((plugins, ctx) => {
@@ -45,6 +51,7 @@ const ConfigSchema = z
   .object({
     sources: z.array(z.string().min(1)).min(1),
     output: z.string().min(1).default('site'),
+    site: SiteSchema,
     plugins: PluginsSchema,
     serve: z.preprocess((v) => (v == null ? {} : v), ServeSchema),
   })

@@ -93,8 +93,7 @@ export default function markdownRenderer(rawOptions = {}, host) {
       const { frontmatter, body } = splitFrontmatter(sourceText)
       const navLabel = String(frontmatter.nav_label ?? '').trim()
       const title = String(frontmatter.title ?? '').trim() || firstHeading(body)
-      const description = String(frontmatter.description ?? '').trim()
-      return { title, description, navLabel: navLabel || undefined }
+      return { title, navLabel: navLabel || undefined }
     },
 
     /**

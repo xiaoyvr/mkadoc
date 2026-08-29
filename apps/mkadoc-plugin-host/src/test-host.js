@@ -33,6 +33,7 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
       root,
       sources: [],
       output: 'site',
+      site: { brand: 'Docs' },
       plugins: {},
       serve: { remote: false, port: 8000 },
       ...config,

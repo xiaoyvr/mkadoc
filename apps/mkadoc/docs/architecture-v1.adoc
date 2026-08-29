@@ -41,8 +41,8 @@ A renderer is a plugin with `kind: 'renderer'` and these additions:
   kind: 'renderer',
   extensions: ['.adoc', '.asciidoc'],
 
-  // Parse a source's index file (or any page) into { title, description, navLabel }.
-  // Used for source-bar labels and the site brand.
+  // Parse a source's index file (or any page) into { title, navLabel }.
+  // Used for source-bar labels.
   async extractMeta(sourceText, path) { ... },
 
   // Render one full page's article body.
@@ -146,8 +146,8 @@ host.provideService('diagram', {
 == Configuration
 
 Config is plain YAML (default `mkadoc.yaml`; `.yml` also accepted). The
-schema shape is unchanged from v0 (`sources`, `output`, `plugins`, `serve`) —
-the only change is the file format, not the data model.
+schema adds a mandatory `site.brand` (the topbar brand) alongside v0's
+`sources`, `output`, `plugins`, `serve`.
 
 Built-in renderers `mkadoc:asciidoc` and `mkadoc:markdown` are loaded
 automatically; listing them under `plugins:` only configures their options.

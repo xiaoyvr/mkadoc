@@ -204,8 +204,7 @@ export default function asciidocRenderer(rawOptions = {}, host) {
       })
       const navLabel = String(doc.getAttribute?.('nav_label') || '').trim()
       const title = String(doc.getDoctitle?.() || doc.getAttribute?.('doctitle') || '').trim()
-      const description = String(doc.getAttribute?.('description') || '').trim()
-      return { title, description, navLabel }
+      return { title, navLabel }
     },
 
     /**

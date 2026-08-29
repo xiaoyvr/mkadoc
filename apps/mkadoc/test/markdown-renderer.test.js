@@ -20,7 +20,6 @@ plugins:
 `),
         'docs/index.md': `---
 title: Markdown Home
-description: A markdown source
 ---
 
 # Hello Markdown

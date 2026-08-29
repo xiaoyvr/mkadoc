@@ -15,6 +15,7 @@ export const CACHE_DIR = '.mkadoc'
  * @property {string} configPath
  * @property {import('./sources.js').MkadocSource[]} sources
  * @property {string} output
+ * @property {{ brand: string }} site
  * @property {Record<string, Record<string, unknown>>} plugins
  * @property {{ remote: boolean, port: number }} serve
  */
