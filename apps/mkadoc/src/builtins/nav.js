@@ -7,7 +7,7 @@ import { formatConfigZodError } from '../config-schema.js'
 import { relToRoot, resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
 import { escapeHtml, escapeHtmlAttr } from '../html-utils.js'
 import { parsePluginOptions } from '../plugin/options.js'
-import { listSourcePages, mountPrefix, pageToHref } from '../sources.js'
+import { mountPrefix, pageToHref } from '../sources.js'
 import { readThemeOverride, themeDirForSource } from '../theme.js'
 
 const OptionsSchema = z.object({}).strict()
@@ -64,6 +64,8 @@ const NavFileSchema = z.array(NavItemSchema).min(1)
 const navReferenced = new Set()
 /** @type {Map<string, string>} repo-relative page → last resolved label */
 const labelCache = new Map()
+/** @type {Map<string, object>} source.path → auto-nav root, valid for one build */
+const autoNavCache = new Map()
 const CSS_HREF = '/styles/nav.css'
 const JS_HREF = '/styles/nav.js'
 
@@ -221,21 +223,114 @@ function sourcesBarHtml(entries) {
     .join('\n')
 }
 
-function autoNavHtml(host, source) {
-  const rendererForPath = (p) =>
-    host.renderers.find((r) => r.extensions?.includes(path.extname(p).toLowerCase())) || null
-  const pages = listSourcePages(host.root, [source], { rendererForPath })
-  if (pages.length === 0) {
+function naturalCompare(a, b) {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+}
+
+function isPageFile(host, name) {
+  const ext = path.extname(name).toLowerCase()
+  return host.renderers.some((r) => r.extensions?.includes(ext))
+}
+
+/** Find a directory's own page (`index.<ext>`, any renderer extension). */
+function findIndexInDir(host, dirAbs) {
+  for (const renderer of host.renderers) {
+    for (const ext of renderer.extensions || []) {
+      const abs = path.join(dirAbs, `index${ext}`)
+      if (fs.existsSync(abs)) return { abs, renderer }
+    }
+  }
+  return null
+}
+
+/**
+ * Build the convention-based auto-nav node for a directory.
+ * node = `{ label, href, rel, children }`; `href`/`rel` are null when the
+ * folder has no index page (a non-clickable section).
+ * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('../sources.js').MkadocSource} source
+ * @param {string} dirRel repo-relative directory
+ */
+async function buildFolder(host, source, dirRel) {
+  const dirAbs = path.join(host.root, dirRel)
+  const dirName = path.basename(dirRel)
+
+  const index = findIndexInDir(host, dirAbs)
+  let label = dirName
+  let href = null
+  let rel = null
+  if (index) {
+    rel = relToRoot(index.abs, host.root)
+    label = (await metaLabelFor(index.abs, index.renderer)) || dirName
+    href = pageToHref(source, rel)
+  }
+
+  const children = []
+  const entries = fs
+    .readdirSync(dirAbs, { withFileTypes: true })
+    .filter((e) => !e.name.startsWith('_') && !e.name.startsWith('.'))
+    .sort((a, b) => naturalCompare(a.name, b.name))
+  for (const e of entries) {
+    if (e.isDirectory()) {
+      const node = await buildFolder(host, source, path.posix.join(dirRel, e.name))
+      if (node.href || node.children.length) children.push(node)
+    } else if (e.isFile()) {
+      if (path.parse(e.name).name === 'index') continue
+      if (!isPageFile(host, e.name)) continue
+      const abs = path.join(dirAbs, e.name)
+      const pageRel = relToRoot(abs, host.root)
+      const renderer = host.renderers.find((r) =>
+        r.extensions?.includes(path.extname(e.name).toLowerCase()),
+      )
+      const pageLabel =
+        (await metaLabelFor(abs, renderer)) || path.basename(e.name, path.extname(e.name))
+      children.push({
+        label: pageLabel,
+        href: pageToHref(source, pageRel),
+        rel: pageRel,
+        children: [],
+      })
+    }
+  }
+
+  return { label, href, rel, children }
+}
+
+/** Build (or fetch the cached) auto-nav root for a source. */
+async function getAutoNavRoot(host, source) {
+  let root = autoNavCache.get(source.path)
+  if (!root) {
+    root = await buildFolder(host, source, source.path)
+    autoNavCache.set(source.path, root)
+  }
+  return root
+}
+
+function renderAutoNavNode(node) {
+  const linkHtml = node.href
+    ? `<a href="${escapeHtmlAttr(node.href)}">${escapeHtml(node.label)}</a>`
+    : escapeHtml(node.label)
+  const headHtml = `<p>${linkHtml}</p>`
+  if (node.children.length) {
+    return `<li>${headHtml}\n<ul>\n${node.children.map(renderAutoNavNode).join('\n')}\n</ul></li>`
+  }
+  return `<li>${headHtml}</li>`
+}
+
+/** Convention-based sidebar: the source's own page first, then its tree. */
+async function autoNavHtml(host, source) {
+  const root = await getAutoNavRoot(host, source)
+  const items = []
+  if (root.href) {
+    items.push(
+      `<li><p><a href="${escapeHtmlAttr(root.href)}">${escapeHtml(root.label)}</a></p></li>`,
+    )
+  }
+  items.push(...root.children.map(renderAutoNavNode))
+  if (items.length === 0) {
     return '<div class="paragraph"><p><em>No pages</em></p></div>\n'
   }
-  const items = pages
-    .map(({ page }) => {
-      const href = pageToHref(source, page)
-      const label = path.basename(page, path.extname(page))
-      return `<li><p><a href="${escapeHtmlAttr(href)}">${escapeHtml(label)}</a></p></li>`
-    })
-    .join('\n')
-  return `<div class="ulist"><ul>\n${items}\n</ul></div>\n`
+  return `<div class="ulist"><ul>\n${items.join('\n')}\n</ul></div>\n`
 }
 
 /** Resolve a `page:` entry to the mounted `.html` href (extension stripped). */
@@ -362,7 +457,6 @@ async function resolveYamlItemEntry(item, host, source) {
  * @param {import('../sources.js').MkadocSource} source
  */
 async function resolveSourceEntry(host, source) {
-  const mountLabel = path.basename(source.mount.replace(/\/$/, '')) || 'Docs'
   const adocRenderer = host.renderers.find((r) => r.extensions?.includes('.adoc'))
 
   const adocPath = path.join(host.root, source.path, '_nav.adoc')
@@ -382,18 +476,8 @@ async function resolveSourceEntry(host, source) {
     return resolveYamlItemEntry(items[0], host, source)
   }
 
-  const rendererForPath = (p) =>
-    host.renderers.find((r) => r.extensions?.includes(path.extname(p).toLowerCase())) || null
-  const pages = listSourcePages(host.root, [source], { rendererForPath })
-    .map(({ page }) => page)
-    .sort()
-  if (pages.length) {
-    const first = pages[0]
-    const label = (await pageLabelForRel(host, first)) || path.basename(first, path.extname(first))
-    return { title: label, href: pageToHref(source, first) }
-  }
-
-  return { title: mountLabel, href: null }
+  const root = await getAutoNavRoot(host, source)
+  return { title: root.label, href: root.href }
 }
 
 /**
@@ -418,15 +502,23 @@ async function collectNavReferenced(host, source) {
     return
   }
 
-  // Auto-nav: the source-bar title uses the first page's label.
-  const rendererForPath = (p) =>
-    host.renderers.find((r) => r.extensions?.includes(path.extname(p).toLowerCase())) || null
-  const first = listSourcePages(host.root, [source], { rendererForPath })
-    .map(({ page }) => page)
-    .sort()[0]
-  if (first) {
-    navReferenced.add(first)
-    labelCache.set(first, await pageLabelForRel(host, first))
+  // Auto-nav: every page in the convention tree feeds a label.
+  const root = await getAutoNavRoot(host, source)
+  await collectAutoNavRefs(host, root)
+}
+
+/**
+ * Walk an auto-nav tree and record each page's repo path + resolved label.
+ * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {{ rel: string | null, children: object[] }} node
+ */
+async function collectAutoNavRefs(host, node) {
+  if (node.rel) {
+    navReferenced.add(node.rel)
+    labelCache.set(node.rel, await pageLabelForRel(host, node.rel))
+  }
+  for (const child of node.children) {
+    await collectAutoNavRefs(host, child)
   }
 }
 
@@ -522,7 +614,7 @@ async function buildArticlesHtml(host) {
       if (items) html = await renderYamlNav(items, host, source)
     }
     if (!String(html).trim()) {
-      html = autoNavHtml(host, source)
+      html = await autoNavHtml(host, source)
     }
     lists.push(
       `<div class="mkadoc-article-list" data-mount="${escapeHtmlAttr(source.mount)}">\n${html}\n</div>`,
@@ -561,6 +653,8 @@ export default function navPlugin(rawOptions = {}) {
 
     async contributeChrome(host, { mode }) {
       if (mode === 'assets') return
+
+      autoNavCache.clear()
 
       const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
       const jsAsset = resolveSiteAsset(host.root, host.config.output, JS_HREF)

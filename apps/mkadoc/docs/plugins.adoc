@@ -234,7 +234,11 @@ These are site conventions your plugin may *read*; they are not host APIs:
 * First source's `_theme/topbar.css` — optional CSS overrides for **topbar** styles (read by `mkadoc:topbar`; not your job unless you document a parallel file).
 * First source's `_theme/nav.css` — optional CSS overrides for **nav/sidebar** styles (read by `mkadoc:nav`).
 * First source's `_theme/theme.css` — optional global overrides appended after the default theme.
-* Per-source `_nav.adoc` (rich markup) or `_nav.yaml` (declarative) — used by `mkadoc:nav` for link lists. No other nav formats are supported.
+* Per-source `_nav.adoc` (rich markup) or `_nav.yaml` (declarative) — used by `mkadoc:nav` for link lists. No other nav formats are supported. With **no** `_nav` file, `mkadoc:nav` falls back to a convention-based **auto-nav**:
++
+* folders build the parent/child hierarchy, ordered by file name (natural sort);
+* a folder's own page is its `index.<ext>` (clickable); a folder without one is a non-clickable section labelled with its basename;
+* a leaf page's label is `:nav_label:` → title → basename.
 +
 `_nav.yaml` entries are one of:
 +
