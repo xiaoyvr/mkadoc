@@ -29,7 +29,9 @@ architecture. It is a living list — items are checked off as they are fixed.
   "config order, then `mkadoc:asciidoc`, then `mkadoc:markdown`". Document and pin with a test.
 - [x] *`sourceForPathname` is unused in production* — removed with the nav model.
 - [ ] *`listSourcePages` has an AsciiDoc fallback regex* (`/\.(?:adoc|asciidoc)$/`)
-  used only when `rendererForPath` is omitted; every caller passes it.
+  used only when `rendererForPath` is omitted; every caller (build, decide-mode,
+  sitemap) passes it, and nav no longer uses it at all (auto-nav walks via
+  `fs.readdirSync`). The fallback is dead — could be removed.
 
 == P3 — minor / dead code
 
@@ -49,10 +51,22 @@ architecture. It is a living list — items are checked off as they are fixed.
   `#header`, so the brand never swaps to the page title on scroll for Markdown.
   Fix by targeting the first `<h1>` (or having renderers emit a consistent
   header element).
+- [ ] *`extractFirstLink` (asciidoc) regexes over rendered inline HTML.*
+  `doc.findBy(...)` + `getText()` yields `<a href="...">label</a>`, which nav
+  parses with a regex — the same brittle string-surgery family as
+  `extractBody`/`extractHeadMeta`.
+- [ ] *Auto-nav + site map resolve every page's title via `extractMeta` each
+  build.* The auto-nav tree is cached per source within a build, but the site
+  map is not; both read every page's metadata. Fine for small sites; worth a
+  cache/`writeIfChanged` pass for large ones.
+- [ ] *Nav label-staleness state is module-level, in-memory* (`navReferenced` /
+  `labelCache` / `autoNavCache`). It only persists across rebuilds inside one
+  `serve` process; a fresh process has no history (acceptable today because the
+  CLI `build` is always `forceFull`, but worth documenting).
 
 == Docs drift
 
 - [x] `docs/plugins.adoc` documents `host.registerExtension`; update after P1
   removal. (Removed in P1.)
-- [ ] The `diagram` service's `attributes` adapter being AsciiDoc-specific is
-  not called out.
+- [x] The `diagram` service's `attributes` adapter being AsciiDoc-specific is
+  not called out. (Added the note in plugins.adoc.)

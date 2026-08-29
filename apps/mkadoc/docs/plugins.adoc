@@ -86,7 +86,8 @@ const hl = host.getService('syntax-highlight')
 * `mkadoc:shiki` provides `syntax-highlight`; renderers consume it for code
   blocks/fences and degrade to plain listings when it is absent.
 * `mkadoc-plugin-kroki` provides `diagram`; the `mkadoc:asciidoc` renderer
-  consumes its `register` + `attributes` adapter.
+  consumes its `register` + `attributes` adapter (both are AsciiDoc-specific;
+  future renderers would add their own adapter).
 * `mkadoc:nav` provides `site-root` (`{ href }`) — the nav-owned home. Core's
   dev server redirects `/` to it; with no nav there is no redirect.
 
