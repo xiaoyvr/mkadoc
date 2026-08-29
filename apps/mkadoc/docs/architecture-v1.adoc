@@ -114,6 +114,13 @@ stylesheet (MIT, attributed in `src/assets/NOTICE`). It is written to
 pages therefore keep Asciidoctor's appearance; other renderers inherit the
 generic typography (headings, paragraphs, code, tables).
 
+=== Default home (site map)
+
+Core always generates `<output>/index.html` as a **site map** — every page
+grouped by source, with page titles. It is the site's default home (`/` serves
+it via the dev server). When `mkadoc:nav` is enabled, it provides the
+`site-root` service to redirect `/` to the first nav item instead.
+
 == Provider/consumer service registry
 
 Cross-cutting features are shared through named services. No dependency

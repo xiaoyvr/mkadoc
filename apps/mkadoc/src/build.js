@@ -8,6 +8,7 @@ import { defaultPoolConcurrency, mapPool } from './map-pool.js'
 import { assemblePage } from './page.js'
 import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
+import { writeSiteIndex } from './sitemap.js'
 import { listSourcePages, pageToOutRel, sourceForRepoPath } from './sources.js'
 import { writeThemeCss } from './theme.js'
 
@@ -51,12 +52,14 @@ export async function build(cfg, opts = {}) {
         ),
         { concurrency: opts.concurrency, deps },
       )
+      await writeSiteIndex(cfg, buildHost)
       pruneStaleHtml(cfg, buildHost.rendererForPath)
       cleanupArtifacts(cfg)
       break
     case 'incremental':
       console.log(`mkadoc: incremental ${pages.join(' ')}`)
       await buildPages(cfg, buildHost, pages, { concurrency: opts.concurrency, deps })
+      await writeSiteIndex(cfg, buildHost)
       pruneStaleHtml(cfg, buildHost.rendererForPath)
       break
   }
@@ -173,6 +176,8 @@ function pruneStaleHtml(cfg, rendererForPath) {
   for (const { page, source } of listSourcePages(cfg.root, cfg.sources, { rendererForPath })) {
     live.add(pageToOutRel(source, page))
   }
+  // Core-generated site map at the output root.
+  live.add('index.html')
 
   walkDir(outRoot, {
     shouldEnterDir: (full) => {

@@ -24,7 +24,7 @@ Configuration is plain YAML in `mkadoc.yaml` (see xref:architecture-v1.adoc[Arch
 Some conventions:
 
 * **Config file**: `mkadoc.yaml` under repository root
-* **Site root**: `serve` redirects `/` to the **first nav item** (nav-owned); with no nav there is no redirect.
+* **Site root**: core generates a **site map** (`index.html` listing every page by source) at `/`. When nav is enabled, it redirects `/` to the first nav item instead.
 * **Source-bar label**: the first nav item's label (`:nav_label:` → title → `_nav.yaml` `label` → basename).
 * **Pages**: files owned by a renderer; names starting with `_` are ignored
 * **Cache**: `.mkadoc/` under repository root (not configurable — add it to `.gitignore`). Includes the include-dependency graph (`.mkadoc/deps.json`) used for incremental rebuilds when an included partial changes.
