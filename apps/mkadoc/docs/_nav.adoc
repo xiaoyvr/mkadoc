@@ -9,3 +9,4 @@ source's _theme/nav.css. Topbar overrides: first source's _theme/topbar.css.
 * xref:chrome-design.adoc[Site chrome design]
 * xref:architecture-v1.adoc[Architecture v1]
 * xref:plugins.adoc[Writing plugins]
+* xref:code-review-v1.adoc[Code review]

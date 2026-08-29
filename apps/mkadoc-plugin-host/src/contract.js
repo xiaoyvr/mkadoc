@@ -28,7 +28,6 @@
  * @typedef {object} MkadocPluginHost
  * @property {MkadocConfig} config
  * @property {string} root
- * @property {(registerFn: (registry: unknown) => void) => void} registerExtension
  * @property {(attrs: Record<string, unknown>) => void} addAttributes
  * @property {(contrib?: { links?: object[], scripts?: object[] }) => void} contributeHead
  * @property {(html: string) => void} contributeChromeBody append below-topbar chrome HTML
@@ -46,7 +45,6 @@
  * @typedef {object} MkadocBuildHost
  * @property {MkadocConfig} config
  * @property {string} root
- * @property {unknown} registry
  * @property {Record<string, unknown>} attributes
  * @property {string[]} assetPrefixes
  * @property {string[]} chromeBody

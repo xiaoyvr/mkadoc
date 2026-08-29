@@ -18,10 +18,8 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
     classifiers: [],
     siteWideDeps: [],
     assetPrefixes: [],
-    extensions: [],
     services: new Map(),
     renderers: [],
-    registry: null,
   }
 
   function ensureDir(relOrAbs) {
@@ -46,16 +44,6 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
       throw new Error(
         `mkadoc test host: no module registered for ${JSON.stringify(specifier)} (register via createTestHost({ imports }))`,
       )
-    },
-
-    registerExtension(fn) {
-      state.extensions.push(fn)
-      if (state.registry) fn(state.registry)
-    },
-
-    registerExtensionRegistry(registry) {
-      state.registry = registry
-      for (const fn of state.extensions) fn(registry)
     },
 
     registerRenderer(renderer) {

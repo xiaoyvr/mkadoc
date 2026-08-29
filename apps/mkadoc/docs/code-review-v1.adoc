@@ -1,0 +1,53 @@
+= Code review: v1 architecture
+
+This page records the findings of a code review of the v1 multi-format
+architecture. It is a living list — items are checked off as they are fixed.
+
+== P1 — must fix
+
+- [x] *Extension-registry plumbing in `src/plugin/host.js` is dead and leaks
+  AsciiDoc into core.* `registerExtension`, `registerExtensionRegistry`,
+  `state.extensionRegistry`, `state.pendingExtensions`, and the `registry`
+  getters are unused in production (`mkadoc:asciidoc` keeps its registry in a
+  closure; kroki moved to the `diagram` service). Removed.
+
+== P2 — design smells
+
+- [ ] *`addAttributes` / `attributes` is a leaky, AsciiDoc-shaped abstraction
+  in core.* Only the AsciiDoc renderer interprets it; Markdown ignores it.
+  `mkadoc:nav` sets `icons: font` (an AsciiDoc attribute) globally. Re-examine
+  when the next renderer lands.
+- [ ] *Module-level `hostRef` singleton in `src/builtins/asciidoc.js`.* Set in
+  the factory, read by `render()` and the module-level
+  `ServiceSyntaxHighlighter`. Register the highlighter per-instance with a
+  closure over `host` instead.
+- [ ] *No plugin teardown/dispose lifecycle.* Removing `afterPluginsLoaded`
+  also removed the only teardown path; shiki's highlighter lingers when removed
+  from config. Add an optional `dispose(host)` hook.
+- [ ] *Renderer precedence is implicit and order-dependent.* `findSourceFile`
+  returns the first renderer whose extension matches; order is "config order,
+  then `mkadoc:asciidoc`, then `mkadoc:markdown`". Document and pin with a test.
+- [ ] *`sourceForPathname` is unused in production* (only a test references it).
+- [ ] *`listSourcePages` has an AsciiDoc fallback regex* (`/\.(?:adoc|asciidoc)$/`)
+  used only when `rendererForPath` is omitted; every caller passes it.
+
+== P3 — minor / dead code
+
+- [ ] *`extractBody` / `extractHeadMeta` use `indexOf('<body')` + a `<meta>`
+  regex* over the full standalone HTML. Brittle string surgery; a parser or a
+  well-tested splitter would be more robust.
+- [ ] *`assemblePage` emits plugin-supplied attribute names unsanitized* (values
+  are escaped, names are not). Trusted-plugin context, low risk.
+- [ ] *`copyAssets` trusts renderer-returned relative paths*; core does not
+  re-validate before `path.join(cfg.root, rel)`. Defense-in-depth would re-check.
+- [ ] *Markdown `extractMeta` title fallback reads only ATX headings* (`# T`),
+  not setext (`T\n===`).
+- [ ] *Markdown `renderFragment` ignores `attributes` and `baseDir`* — fine for
+  nav today, but inconsistent with the contract and the AsciiDoc renderer.
+
+== Docs drift
+
+- [ ] `docs/plugins.adoc` documents `host.registerExtension`; update after P1
+  removal.
+- [ ] The `diagram` service's `attributes` adapter being AsciiDoc-specific is
+  not called out.

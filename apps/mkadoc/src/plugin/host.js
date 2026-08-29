@@ -5,9 +5,8 @@ import { relToRoot } from '../fs-utils.js'
 
 /**
  * Shared mutable state behind the plugin and build hosts.
- * Core is renderer-agnostic: the `extensionRegistry` slot is created by a
- * renderer (mkadoc:asciidoc) and consumed by plugins that call
- * `registerExtension` (e.g. the Asciidoctor-specific kroki plugin).
+ * Core is renderer-agnostic: it holds no markup-specific concepts — renderers
+ * own their conversion state; feature plugins share capabilities via services.
  * @param {import('../config.js').MkadocConfig} cfg
  */
 function createHostState(cfg, deps = null) {
@@ -25,10 +24,6 @@ function createHostState(cfg, deps = null) {
     services: new Map(),
     /** @type {import('./contract.js').MkadocRenderer[]} */
     renderers: [],
-    /** @type {unknown} */
-    extensionRegistry: null,
-    /** @type {((registry: unknown) => void)[]} */
-    pendingExtensions: [],
   }
 }
 
@@ -52,32 +47,9 @@ function createPluginHost(state) {
     get root() {
       return cfg.root
     },
-    get registry() {
-      return state.extensionRegistry
-    },
 
     get renderers() {
       return state.renderers
-    },
-
-    /**
-     * Register into the active renderer's extension registry. Deferred until a
-     * renderer registers one (so config order between a feature plugin and the
-     * renderer it targets does not matter).
-     * @param {(registry: unknown) => void} registerFn
-     */
-    registerExtension(registerFn) {
-      if (state.extensionRegistry) {
-        registerFn(state.extensionRegistry)
-      } else {
-        state.pendingExtensions.push(registerFn)
-      }
-    },
-
-    /** A renderer (mkadoc:asciidoc) publishes its extension registry here. */
-    registerExtensionRegistry(registry) {
-      state.extensionRegistry = registry
-      for (const fn of state.pendingExtensions.splice(0)) fn(registry)
     },
 
     /** @param {import('./contract.js').MkadocRenderer} renderer */
@@ -176,9 +148,6 @@ function createBuildHost(state) {
     },
     get root() {
       return cfg.root
-    },
-    get registry() {
-      return state.extensionRegistry
     },
     get attributes() {
       return state.attributes

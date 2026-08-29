@@ -20,7 +20,7 @@ Use the builtins under `src/builtins/` as reference implementations, and
 | Extension point | How
 
 | Rendering a markup format | A **renderer** plugin (`kind: 'renderer'`) with `extensions`, `extractMeta`, `render`, `renderFragment` (see <<Renderers>>)
-| Renderer-specific conversion | `registerExtension` + `addAttributes` in `setup` (blocks, macros, highlighters, … for the AsciiDoc renderer)
+| Renderer-specific document attributes | `addAttributes` in `setup` (e.g. `icons`, `source-highlighter` — consumed by the AsciiDoc renderer; other renderers ignore them)
 | Cross-format capabilities | `provideService(name, service)` / `getService(name)` (see <<Services>>)
 | Generated CSS / JS on every page | Write files under `host.config.output`, then `contributeHead({ links, scripts })`
 | UI below the site topbar | `contributeChromeBody(html)` — HTML appended below the topbar, in plugin load order
@@ -116,7 +116,7 @@ Lifecycle order that matters to you:
 . `setup(host)` — classifiers / prefixes must be registered here to affect this build’s mode.
 . Core decides `full` / `incremental` / `assets` / `noop`.
 . `contributeChrome(host, ctx)` — skipped entirely for `noop`; skip heavy work when `ctx.mode === 'assets'` if you only care about HTML chrome.
-. Pages convert with the registry/attributes you registered.
+. Pages convert with the attributes you registered.
 
 == Plugin host API
 
@@ -127,12 +127,7 @@ Every hook receives the same host object.
 `host.config`:: Resolved project config (`sources`, `output`, `plugins`, …).
 `host.root`:: Absolute project root. Join with relative paths from config.
 
-=== Renderer extension registry
-
-`host.registerExtension(fn)`:  
-Call `fn(registry)` to register extensions into the **AsciiDoc renderer's** registry. Used by diagram / syntax plugins. Registration is deferred until a renderer publishes its registry, so plugin load order does not matter.
-Never import `@asciidoctor/core` yourself — the registry is handed over; using a second
-instance would break registration.
+=== Shared dependencies
 
 `host.import(specifier)`::
 Resolve + import a module from **mkadoc's own dependencies** (single shared instance).
@@ -141,8 +136,12 @@ Use this for shared libraries instead of declaring them as plugin deps:
 duplicate copies of shared stateful/stateless libs. Only imports that mkadoc itself
 depends on are resolvable.
 
+=== Document attributes
+
 `host.addAttributes(attrs)`::
-Merge document attributes applied on every convert (e.g. `source-highlighter`, `kroki-server-url`, `icons`).
+Merge document attributes applied on every convert (e.g. `source-highlighter`,
+`kroki-server-url`, `icons`). These are consumed by the AsciiDoc renderer;
+non-AsciiDoc renderers ignore them.
 
 === Head assets
 

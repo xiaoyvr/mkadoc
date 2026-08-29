@@ -191,10 +191,6 @@ export default function asciidocRenderer(rawOptions = {}, host) {
     kind: 'renderer',
     extensions: ['.adoc', '.asciidoc'],
 
-    async setup(host) {
-      host.registerExtensionRegistry(registry)
-    },
-
     /**
      * @param {string} sourceText
      * @returns {Promise<import('../plugin/contract.js').SourceMeta>}

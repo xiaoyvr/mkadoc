@@ -22,14 +22,12 @@ describe('createTestHost', () => {
     host.registerAssetPrefix('site/styles/')
     host.contributeChromeBody('<aside>hi</aside>')
     host.contributeHead({ links: [{ rel: 'stylesheet', href: '/x.css' }] })
-    host.registerExtension(() => {})
 
     assert.deepEqual(host._test.attributes, { icons: 'font' })
     assert.deepEqual(host._test.siteWideDeps, ['docs/_nav.adoc'])
     assert.deepEqual(host._test.assetPrefixes, ['site/styles/'])
     assert.deepEqual(host._test.chromeBody, ['<aside>hi</aside>'])
     assert.equal(host._test.headLinks.length, 1)
-    assert.equal(host._test.extensions.length, 1)
   })
 
   it('ensureDir / cacheDir create directories under root', () => {
