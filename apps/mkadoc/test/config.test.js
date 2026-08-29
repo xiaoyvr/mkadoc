@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import path from 'node:path'
 import { describe, it } from 'node:test'
 import asciidoc from '../src/builtins/asciidoc.js'
 import markdown from '../src/builtins/markdown.js'
@@ -78,6 +79,33 @@ Body.
         await extractSourcesMeta(cfg, metaRenderers())
         assert.equal(cfg.sources[0].description, 'Nix-managed system')
         assert.equal(cfg.sources[0].title, 'Dotfiles')
+      },
+    )
+  })
+
+  it('passes the absolute index path to extractMeta (base dir for includes)', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': `sources:
+  - docs
+`,
+        'docs/index.md': '---\ntitle: X\n---\n',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        let receivedPath = null
+        const spy = {
+          kind: 'renderer',
+          extensions: ['.md'],
+          async extractMeta(_text, absPath) {
+            receivedPath = absPath
+            return { title: 'X', description: '' }
+          },
+        }
+        await extractSourcesMeta(cfg, [spy])
+        assert.ok(receivedPath)
+        assert.ok(path.isAbsolute(receivedPath))
+        assert.equal(receivedPath, path.join(root, 'docs/index.md'))
       },
     )
   })

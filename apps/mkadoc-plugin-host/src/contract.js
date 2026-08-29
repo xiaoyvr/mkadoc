@@ -74,7 +74,7 @@
  * @property {string} name
  * @property {'renderer'} kind
  * @property {string[]} extensions
- * @property {(sourceText: string, path: string) => SourceMeta | Promise<SourceMeta>} extractMeta
+ * @property {(sourceText: string, absPath: string) => SourceMeta | Promise<SourceMeta>} extractMeta
  * @property {(input: RenderInput) => RenderOutput | Promise<RenderOutput>} render
  * @property {(input: RenderInput) => string | Promise<string>} renderFragment
  * @property {(host: MkadocPluginHost) => CheckResult | Promise<CheckResult>} [check]

@@ -64,7 +64,7 @@ export async function sourceMetaForIndex(root, sourcePath, mount, renderers) {
   if (!found) return { title: titleFallback(mount), description: '' }
 
   const text = fs.readFileSync(found.path, 'utf8')
-  const meta = await found.renderer.extractMeta(text, found.rel)
+  const meta = await found.renderer.extractMeta(text, found.path)
   const title = String(meta.tab || meta.title || '').trim() || titleFallback(mount)
   const description = String(meta.description || '').trim()
   return { title, description }

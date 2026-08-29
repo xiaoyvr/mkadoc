@@ -193,10 +193,15 @@ export default function asciidocRenderer(rawOptions = {}, host) {
 
     /**
      * @param {string} sourceText
+     * @param {string} absPath absolute source file path (base dir for includes)
      * @returns {Promise<import('../plugin/contract.js').SourceMeta>}
      */
-    async extractMeta(sourceText) {
-      const doc = await load(sourceText, { safe: 'unsafe', standalone: false })
+    async extractMeta(sourceText, absPath) {
+      const doc = await load(sourceText, {
+        safe: 'unsafe',
+        standalone: false,
+        base_dir: absPath ? path.dirname(absPath) : undefined,
+      })
       const tab = String(doc.getAttribute?.('tab') || '').trim()
       const title =
         tab || String(doc.getDoctitle?.() || doc.getAttribute?.('doctitle') || '').trim()
