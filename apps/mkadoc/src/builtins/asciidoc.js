@@ -32,7 +32,7 @@ function includeResolveDir(reader, fallbackBaseDir) {
   return fallbackBaseDir
 }
 
-export function registerIncludeCollector(registry) {
+function registerIncludeCollector(registry) {
   registry.includeProcessor(function () {
     this.handles((target) => !isUriTarget(target))
     this.process((doc, reader, target, attrs) => {
@@ -64,7 +64,7 @@ export function registerIncludeCollector(registry) {
   })
 }
 
-export async function withIncludeCollector(ctx, fn) {
+async function withIncludeCollector(ctx, fn) {
   const bag = { files: /** @type {string[]} */ ([]), root: ctx.root, baseDir: ctx.baseDir }
   const result = await includeCollect.run(bag, fn)
   const norm = (p) => String(p).replace(/\\/g, '/')

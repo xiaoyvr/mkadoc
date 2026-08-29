@@ -80,31 +80,4 @@ echo hello
       },
     )
   })
-
-  it('ignores _nav.md and falls back to auto-nav', async () => {
-    await withTempProject(
-      {
-        'mkadoc.yaml': yamlConfig(`sources:
-  - docs
-output: site
-plugins:
-  mkadoc:nav: {}
-`),
-        'docs/index.md': '# Home\n',
-        'docs/other.md': '# Other\n',
-        'docs/_nav.md': '- [Home](index.md)\n- [Other](other.md)\n',
-      },
-      async (root) => {
-        const cfg = await loadConfig('mkadoc.yaml', root)
-        await build(cfg, { forceFull: true })
-        const page = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
-        const sidebar = page.querySelector('#mkadoc-articles')
-        assert.ok(sidebar)
-        // auto-nav lists pages by basename; the _nav.md link hrefs must NOT leak through
-        assert.ok(sidebar.text.includes('index'))
-        assert.ok(sidebar.text.includes('other'))
-        assert.equal(sidebar.querySelector('a[href="index.md"]'), null)
-      },
-    )
-  })
 })

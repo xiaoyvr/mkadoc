@@ -44,7 +44,6 @@ function baseCfg(root, plugins) {
     root,
     sources: [{ path: 'docs', mount: '/docs', title: 'Docs' }],
     output: 'site',
-    docinfoDir: path.join('.mkadoc', 'docinfo'),
     plugins,
   }
 }

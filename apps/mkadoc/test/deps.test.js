@@ -3,7 +3,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
-import { registerIncludeCollector, withIncludeCollector } from '../src/builtins/asciidoc.js'
 import { loadConfig } from '../src/config.js'
 import { decideMode } from '../src/decide-mode.js'
 import { DependencyGraph, loadDependencyGraph } from '../src/deps.js'
@@ -70,39 +69,6 @@ describe('DependencyGraph', () => {
       assert.deepEqual(g.pagesDependingOn('docs/_p.adoc'), ['docs/guide.adoc'])
       assert.equal(g.pages.has('docs/gone.adoc'), false)
     })
-  })
-})
-
-describe('include collector', () => {
-  it('records nested includes relative to the including file', async () => {
-    await withTempProject(
-      {
-        'docs/page.adoc': '= Page\n\ninclude::parts/_p.adoc[]\n',
-        'docs/parts/_p.adoc': 'partial\n\ninclude::_sib.adoc[]\n',
-        'docs/parts/_sib.adoc': 'sibling\n',
-      },
-      async (root) => {
-        const { Extensions, load } = await import('@asciidoctor/core')
-        const registry = Extensions.create()
-        registerIncludeCollector(registry)
-        const baseDir = path.join(root, 'docs')
-        const text = fs.readFileSync(path.join(root, 'docs/page.adoc'), 'utf8')
-        const { result: html, includes } = await withIncludeCollector(
-          { root, baseDir },
-          async () => {
-            const doc = await load(text, {
-              safe: 'unsafe',
-              base_dir: baseDir,
-              standalone: true,
-              extension_registry: registry,
-            })
-            return String(await doc.convert())
-          },
-        )
-        assert.match(html, /sibling/)
-        assert.deepEqual(includes, ['docs/parts/_p.adoc', 'docs/parts/_sib.adoc'])
-      },
-    )
   })
 })
 

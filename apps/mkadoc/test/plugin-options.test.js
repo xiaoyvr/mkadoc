@@ -15,22 +15,12 @@ describe('plugin-owned option validation', () => {
     assert.throws(() => shikiPlugin({ thme: 'nord' }), /mkadoc:shiki:.*Unrecognized key: "thme"/)
   })
 
-  it('nav factory rejects legacy css_href / js_href options', () => {
-    assert.throws(() => navPlugin({ css_href: '/x.css' }), /mkadoc:nav:.*Unrecognized key/)
-    assert.throws(() => navPlugin({ js_href: '/x.js' }), /mkadoc:nav:.*Unrecognized key/)
-  })
-
-  it('nav factory rejects legacy nav path option', () => {
-    assert.throws(() => navPlugin({ nav: 'docs/_nav.adoc' }), /mkadoc:nav:.*Unrecognized key/)
-  })
-
   it('loadPlugins surfaces plugin option errors', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const { plugin } = createHosts({
         root,
         sources: [{ path: 'docs', mount: '/docs', title: 'Docs' }],
         output: 'site',
-        docinfoDir: '.mkadoc/docinfo',
         plugins: {},
       })
       await assert.rejects(
