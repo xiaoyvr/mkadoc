@@ -44,10 +44,15 @@ architecture. It is a living list — items are checked off as they are fixed.
   not setext (`T\n===`).
 - [ ] *Markdown `renderFragment` ignores `attributes` and `baseDir`* — fine for
   nav today, but inconsistent with the contract and the AsciiDoc renderer.
+- [ ] *Topbar scroll-swap only works for AsciiDoc pages.* `TOPBAR_JS` reads
+  `#header h1` for the document title; Markdown pages emit a bare `<h1>` with no
+  `#header`, so the brand never swaps to the page title on scroll for Markdown.
+  Fix by targeting the first `<h1>` (or having renderers emit a consistent
+  header element).
 
 == Docs drift
 
-- [ ] `docs/plugins.adoc` documents `host.registerExtension`; update after P1
-  removal.
+- [x] `docs/plugins.adoc` documents `host.registerExtension`; update after P1
+  removal. (Removed in P1.)
 - [ ] The `diagram` service's `attributes` adapter being AsciiDoc-specific is
   not called out.
