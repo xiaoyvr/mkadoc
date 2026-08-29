@@ -232,7 +232,7 @@ These are site conventions your plugin may *read*; they are not host APIs:
 +
 `_nav.yaml` entries are one of:
 +
-* `page` — link to a page (source-relative, normalized to `.html`); the label comes from the page's `tab`/title, with an optional `label` as fallback when the page has no title.
+* `page` — link to a page (source-relative, normalized to `.html`); the label comes from the page's title, with an optional `label` as fallback when the page has no title.
 * `page` + `children` — a clickable parent (label from its page) with a nested list.
 * `label` + `children` — a non-clickable section header.
 * `label` + `href` — a raw/external link.

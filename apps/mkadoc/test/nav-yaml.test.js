@@ -56,6 +56,23 @@ describe('_nav.yaml (declarative nav)', () => {
     )
   })
 
+  it('page label uses the title, not the :tab: attribute', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: site\nplugins:\n  mkadoc:nav: {}\n`),
+        'docs/index.adoc': '= Index\n',
+        'docs/guide.adoc': '= Long Guide Title\n:tab: Short\n',
+        'docs/_nav.yaml': '- page: guide\n',
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await build(cfg, { forceFull: true })
+        // `:tab:` is a source-level label; a page's sidebar label is its title.
+        assert.deepEqual(sidebarLinks(root), [['Long Guide Title', '/docs/guide.html']])
+      },
+    )
+  })
+
   it('uses the optional label when the page has no title', async () => {
     await withTempProject(
       {

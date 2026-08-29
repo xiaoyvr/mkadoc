@@ -92,7 +92,7 @@ export default function markdownRenderer(rawOptions = {}, host) {
     extractMeta(sourceText) {
       const { frontmatter, body } = splitFrontmatter(sourceText)
       const tab = String(frontmatter.tab ?? '').trim()
-      const title = tab || String(frontmatter.title ?? '').trim() || firstHeading(body)
+      const title = String(frontmatter.title ?? '').trim() || firstHeading(body)
       const description = String(frontmatter.description ?? '').trim()
       return { title, description, tab: tab || undefined }
     },

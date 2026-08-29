@@ -267,7 +267,7 @@ function findPageFile(host, source, page) {
 }
 
 /**
- * Derive a `page:` entry's label from the page itself: `tab` → title.
+ * Derive a `page:` entry's label from the page's own title.
  * Returns '' when the page has no title (caller falls back to `label`/basename).
  * @param {import('../plugin/contract.js').MkadocPluginHost} host
  * @param {import('../sources.js').MkadocSource} source
@@ -278,7 +278,7 @@ async function derivePageLabel(host, source, page) {
   if (!found) return ''
   const text = fs.readFileSync(found.abs, 'utf8')
   const meta = await found.renderer.extractMeta(text, found.abs)
-  return String(meta.tab || meta.title || '').trim()
+  return String(meta.title || '').trim()
 }
 
 /** Render a validated `_nav.yaml` item tree to sidebar HTML. */
