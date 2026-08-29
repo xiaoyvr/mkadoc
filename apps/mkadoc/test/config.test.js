@@ -1,17 +1,8 @@
 import assert from 'node:assert/strict'
-import path from 'node:path'
 import { describe, it } from 'node:test'
-import asciidoc from '../src/builtins/asciidoc.js'
-import markdown from '../src/builtins/markdown.js'
 import { loadConfig, resolveServeListen } from '../src/config.js'
 import { parseProjectConfig, parseServeConfig } from '../src/config-schema.js'
-import { extractSourcesMeta } from '../src/sources.js'
 import { withTempProject, yamlConfig } from './helpers/project.js'
-
-/** Renderer doubles just for metadata extraction (extractMeta needs no host). */
-function metaRenderers() {
-  return [asciidoc({}, null), markdown({}, null)]
-}
 
 describe('loadConfig (plain YAML)', () => {
   it('loads a plain YAML config', async () => {
@@ -38,75 +29,6 @@ serve:
         assert.deepEqual(cfg.plugins['mkadoc:nav'], {})
         assert.equal(cfg.serve.port, 8000)
         assert.equal(cfg.serve.remote, true)
-      },
-    )
-  })
-
-  it('derives source-bar label from :nav_label: on index.adoc via the renderer', async () => {
-    await withTempProject(
-      {
-        'mkadoc.yaml': yamlConfig(`sources:
-  - docs
-`),
-        'docs/index.adoc': `= Long Root Title
-:nav_label: Site
-
-Body.
-`,
-      },
-      async (root) => {
-        const cfg = await loadConfig('mkadoc.yaml', root)
-        await extractSourcesMeta(cfg, metaRenderers())
-        assert.equal(cfg.sources[0].title, 'Site')
-        assert.equal(cfg.sources[0].mount, '/docs')
-      },
-    )
-  })
-
-  it('passes the absolute index path to extractMeta (base dir for includes)', async () => {
-    await withTempProject(
-      {
-        'mkadoc.yaml': yamlConfig(`sources:
-  - docs
-`),
-        'docs/index.md': '---\ntitle: X\n---\n',
-      },
-      async (root) => {
-        const cfg = await loadConfig('mkadoc.yaml', root)
-        let receivedPath = null
-        const spy = {
-          kind: 'renderer',
-          extensions: ['.md'],
-          async extractMeta(_text, absPath) {
-            receivedPath = absPath
-            return { title: 'X' }
-          },
-        }
-        await extractSourcesMeta(cfg, [spy])
-        assert.ok(receivedPath)
-        assert.ok(path.isAbsolute(receivedPath))
-        assert.equal(receivedPath, path.join(root, 'docs/index.md'))
-      },
-    )
-  })
-
-  it('derives source-bar label from Markdown frontmatter via the renderer', async () => {
-    await withTempProject(
-      {
-        'mkadoc.yaml': yamlConfig(`sources:
-  - docs
-`),
-        'docs/index.md': `---
-title: Markdown Docs
----
-
-# Hi
-`,
-      },
-      async (root) => {
-        const cfg = await loadConfig('mkadoc.yaml', root)
-        await extractSourcesMeta(cfg, metaRenderers())
-        assert.equal(cfg.sources[0].title, 'Markdown Docs')
       },
     )
   })

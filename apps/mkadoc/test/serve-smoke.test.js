@@ -5,7 +5,7 @@ import { describe, it } from 'node:test'
 import { build } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
 import { serve } from '../src/serve.js'
-import { sleep, smokeFixture, waitFor, withTempProject } from './helpers/project.js'
+import { sleep, smokeFixture, waitFor, withTempProject, yamlConfig } from './helpers/project.js'
 
 function read(root, rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8')
@@ -75,13 +75,36 @@ describe('serve smoke (watch → build wiring)', () => {
     })
   })
 
-  it('passes a root redirect to the first source index page', async () => {
+  it('passes the nav-owned root redirect (first nav item)', async () => {
+    await withTempProject(
+      smokeFixture({
+        'mkadoc.yaml': yamlConfig(`sources:
+  - docs
+output: site
+plugins:
+  mkadoc:nav: {}
+`),
+        'docs/_nav.yaml': '- page: index\n- page: guide\n',
+      }),
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        const { close, serverOpts } = await startServe(cfg)
+        try {
+          assert.equal(typeof serverOpts.rootRedirect, 'function')
+          assert.equal(serverOpts.rootRedirect(), '/docs/index.html')
+        } finally {
+          await close()
+        }
+      },
+    )
+  })
+
+  it('has no root redirect when nav is disabled', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.yaml', root)
       const { close, serverOpts } = await startServe(cfg)
       try {
-        assert.equal(typeof serverOpts.rootRedirect, 'function')
-        assert.equal(serverOpts.rootRedirect(), '/docs/index.html')
+        assert.equal(serverOpts.rootRedirect(), null)
       } finally {
         await close()
       }

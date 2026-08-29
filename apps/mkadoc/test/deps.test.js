@@ -82,7 +82,7 @@ describe('decideMode + dependency graph', () => {
       const { plugin, build: host } = createHosts(cfg, { deps })
       await loadPlugins({}, plugin)
 
-      const decided = decideMode(cfg, host, {
+      const decided = await decideMode(cfg, host, {
         paths: ['docs/_partial.adoc'],
         deps,
       })
@@ -100,7 +100,7 @@ describe('decideMode + dependency graph', () => {
       const { plugin, build: host } = createHosts(cfg, { deps })
       await loadPlugins({}, plugin)
 
-      const decided = decideMode(cfg, host, {
+      const decided = await decideMode(cfg, host, {
         paths: ['docs/_partial.adoc'],
         deps,
       })
@@ -116,7 +116,7 @@ describe('decideMode + dependency graph', () => {
       const { plugin, build: host } = createHosts(cfg, { deps })
       await loadPlugins({}, plugin)
 
-      const decided = decideMode(cfg, host, {
+      const decided = await decideMode(cfg, host, {
         paths: ['docs/_partial.adoc'],
         deps,
       })
@@ -132,30 +132,12 @@ describe('decideMode + dependency graph', () => {
       deps.setPageIncludes('docs/index.adoc', [])
       const { build: host } = createHosts(cfg, { deps })
 
-      const decided = decideMode(cfg, host, {
+      const decided = await decideMode(cfg, host, {
         paths: ['docs/_theme/topbar.css'],
         deps,
       })
       assert.equal(decided.mode, 'assets')
       assert.deepEqual(decided.pages, [])
-    })
-  })
-
-  it('expands index.adoc as site-wide to all live pages (via mkadoc:nav)', async () => {
-    await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yaml', root)
-      const deps = new DependencyGraph(root)
-      const { plugin, build: host } = createHosts(cfg, { deps })
-      await loadPlugins({ 'mkadoc:nav': {} }, plugin)
-      deps.setPageIncludes('docs/guide.adoc', [])
-      deps.setPageIncludes('docs/index.adoc', [])
-
-      const decided = decideMode(cfg, host, {
-        paths: ['docs/index.adoc'],
-        deps,
-      })
-      assert.equal(decided.mode, 'incremental')
-      assert.deepEqual(decided.pages, ['docs/guide.adoc', 'docs/index.adoc'])
     })
   })
 
@@ -168,7 +150,7 @@ describe('decideMode + dependency graph', () => {
       deps.setPageIncludes('docs/guide.adoc', [])
       deps.setPageIncludes('docs/index.adoc', [])
 
-      const decided = decideMode(cfg, host, {
+      const decided = await decideMode(cfg, host, {
         paths: ['docs/_assets/logo.svg'],
         deps,
       })
@@ -199,7 +181,7 @@ plugins:
 
         assert.equal(deps.isSiteWide('docs/_nav.adoc'), true)
 
-        const decided = decideMode(cfg, host, {
+        const decided = await decideMode(cfg, host, {
           paths: ['docs/_nav.adoc'],
           deps,
         })
@@ -215,7 +197,7 @@ plugins:
       const deps = new DependencyGraph(root)
       const { build: host } = createHosts(cfg, { deps })
 
-      const decided = decideMode(cfg, host, {
+      const decided = await decideMode(cfg, host, {
         paths: ['mkadoc.yaml'],
         deps,
       })

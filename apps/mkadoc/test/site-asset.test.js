@@ -27,7 +27,7 @@ describe('resolveSiteAsset', () => {
 })
 
 describe('topbar site logo', () => {
-  it('uses package default logo linked to first-source home', async () => {
+  it('uses package default logo linked to the site root', async () => {
     await withTempProject(
       smokeFixture({
         'mkadoc.yaml': yamlConfig(`sources:
@@ -44,7 +44,7 @@ plugins:
         const header = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
         const logo = header.querySelector('a.mkadoc-logo')
         assert.ok(logo)
-        assert.equal(logo.getAttribute('href'), '/docs/index.html')
+        assert.equal(logo.getAttribute('href'), '/')
         assert.equal(logo.querySelector('img')?.getAttribute('src'), '/styles/default-logo.svg')
         assert.ok(fs.existsSync(path.join(root, 'site/styles/default-logo.svg')))
       },
@@ -140,15 +140,10 @@ plugins:
   mkadoc:topbar: {}
   mkadoc:nav: {}
 `),
-        'docs/index.adoc': `= Dotfiles
-:nav_label: Site
-
-Root.
-`,
-        'apps/mkadoc/docs/index.adoc': `= mkadoc
-
-App.
-`,
+        'docs/index.adoc': '= Dotfiles\n\nRoot.\n',
+        'docs/_nav.adoc': '* xref:index.adoc[Site]\n',
+        'apps/mkadoc/docs/index.adoc': '= mkadoc\n\nApp.\n',
+        'apps/mkadoc/docs/_nav.adoc': '* xref:index.adoc[mkadoc]\n',
       }),
       async (root) => {
         const cfg = await loadConfig('mkadoc.yaml', root)

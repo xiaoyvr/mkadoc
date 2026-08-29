@@ -114,13 +114,11 @@ async function readTopbarCssBundle(host) {
 }
 
 function topbarHtml(host) {
-  const first = host.config.sources[0]
-  const homeHref = first ? `${first.mount}/index.html` : '/'
   const brandRaw = host.config.site.brand
   const logoSrc = resolveLogoHref(host.config)
 
   return `<header id="mkadoc-topbar" class="mkadoc-topbar">
-<a class="mkadoc-logo" href="${escapeHtmlAttr(homeHref)}" aria-label="Home"><img src="${escapeHtmlAttr(logoSrc)}" alt=""></a>
+<a class="mkadoc-logo" href="/" aria-label="Home"><img src="${escapeHtmlAttr(logoSrc)}" alt=""></a>
 <div class="mkadoc-brand" data-site-title="${escapeHtmlAttr(brandRaw)}"><p>${escapeHtml(brandRaw)}</p></div>
 </header>`
 }

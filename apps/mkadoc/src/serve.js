@@ -3,7 +3,7 @@ import { watch } from 'chokidar'
 import { build } from './build.js'
 import { defaultConfigPath, loadConfig, resolveServeListen } from './config.js'
 import { createDevServer } from './dev-server.js'
-import { rootRedirectHref, sourceForRepoPath } from './sources.js'
+import { sourceForRepoPath } from './sources.js'
 
 const WATCH_EXTS = new Set([
   '.adoc',
@@ -151,7 +151,7 @@ export async function serve(cfg, opts = {}) {
     host,
     port,
     open: opts.open ?? false,
-    rootRedirect: () => rootRedirectHref(current.sources),
+    rootRedirect: () => current.rootRedirect?.() ?? null,
   })
 
   if (remote) {

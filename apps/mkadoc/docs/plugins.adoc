@@ -19,7 +19,7 @@ Use the builtins under `src/builtins/` as reference implementations, and
 |===
 | Extension point | How
 
-| Rendering a markup format | A **renderer** plugin (`kind: 'renderer'`) with `extensions`, `extractMeta`, `render`, `renderFragment` (see <<Renderers>>)
+| Rendering a markup format | A **renderer** plugin (`kind: 'renderer'`) with `extensions`, `extractMeta`, `render`, `renderFragment`, `extractFirstLink` (see <<Renderers>>)
 | Renderer-specific document attributes | `addAttributes` in `setup` (e.g. `icons`, `source-highlighter` — consumed by the AsciiDoc renderer; other renderers ignore them)
 | Cross-format capabilities | `provideService(name, service)` / `getService(name)` (see <<Services>>)
 | Generated CSS / JS on every page | Write files under `host.config.output`, then `contributeHead({ links, scripts })`
@@ -42,8 +42,8 @@ export default function myRenderer(options = {}, host) {
     kind: 'renderer',
     extensions: ['.xyz'],
 
-    // → { title, navLabel } from an index file / frontmatter
-    async extractMeta(sourceText, path) { ... },
+    // → { title, navLabel } from a page (navLabel = :nav_label: / nav_label)
+    async extractMeta(sourceText, absPath) { ... },
 
     // → { html, title, lang, bodyClass, head, assets, includes }
     // html is the article body; core wraps it into the full page.
@@ -51,6 +51,10 @@ export default function myRenderer(options = {}, host) {
 
     // render a small markup fragment (used by mkadoc:nav for _nav.adoc files)
     async renderFragment({ sourceText, absPath, baseDir, attributes }) { ... },
+
+    // → { href, label } | null — the first link in a nav fragment
+    // (used by mkadoc:nav to derive a source's tab from _nav.adoc)
+    async extractFirstLink({ sourceText, absPath, baseDir, attributes }) { ... },
   }
 }
 ----
@@ -83,6 +87,8 @@ const hl = host.getService('syntax-highlight')
   blocks/fences and degrade to plain listings when it is absent.
 * `mkadoc-plugin-kroki` provides `diagram`; the `mkadoc:asciidoc` renderer
   consumes its `register` + `attributes` adapter.
+* `mkadoc:nav` provides `site-root` (`{ href }`) — the nav-owned home. Core's
+  dev server redirects `/` to it; with no nav there is no redirect.
 
 == What you cannot extend (core-owned)
 

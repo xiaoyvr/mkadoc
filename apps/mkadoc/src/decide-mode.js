@@ -22,10 +22,10 @@ function isThemeCssPath(cfg, p) {
   return cfg.sources.some((source) => p.startsWith(`${source.path}/_theme/`) && p.endsWith('.css'))
 }
 
-function needsFullRebuild(p, cfg, host) {
+async function needsFullRebuild(p, cfg, host) {
   const configRel = relToRoot(cfg.configPath, cfg.root)
   if (p === configRel) return true
-  return host.classifyPath(p) === 'full'
+  return (await host.classifyPath(p)) === 'full'
 }
 
 /**
@@ -33,7 +33,7 @@ function needsFullRebuild(p, cfg, host) {
  * @param {import('./plugin/contract.js').MkadocBuildHost} host
  * @param {{ forceFull?: boolean, paths?: string[], deps?: import('./deps.js').DependencyGraph | null }} [opts]
  */
-export function decideMode(cfg, host, { forceFull = false, paths = [], deps = null } = {}) {
+export async function decideMode(cfg, host, { forceFull = false, paths = [], deps = null } = {}) {
   if (forceFull || paths.length === 0) {
     return { mode: 'full', pages: [] }
   }
@@ -54,7 +54,7 @@ export function decideMode(cfg, host, { forceFull = false, paths = [], deps = nu
       assetsOnly = true
       continue
     }
-    if (needsFullRebuild(p, cfg, host)) {
+    if (await needsFullRebuild(p, cfg, host)) {
       return { mode: 'full', pages: [] }
     }
     // CSS-only theme override — rewrite stylesheet, do not reconvert pages.

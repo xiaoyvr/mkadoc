@@ -4,10 +4,10 @@ import { fileURLToPath } from 'node:url'
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
 import { formatConfigZodError } from '../config-schema.js'
-import { resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
+import { relToRoot, resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
 import { escapeHtml, escapeHtmlAttr } from '../html-utils.js'
 import { parsePluginOptions } from '../plugin/options.js'
-import { findSourceFile, listSourcePages, mountPrefix, pageToHref } from '../sources.js'
+import { listSourcePages, mountPrefix, pageToHref } from '../sources.js'
 import { readThemeOverride, themeDirForSource } from '../theme.js'
 
 const OptionsSchema = z.object({}).strict()
@@ -53,6 +53,17 @@ const NavItemSchema = z
   })
 
 const NavFileSchema = z.array(NavItemSchema).min(1)
+
+// ---------------------------------------------------------------------------
+// Nav-model state (module-level, persists across `serve` rebuilds) — used by
+// the async classifier to detect `:nav_label:`/title changes on nav-referenced
+// pages without forcing a full rebuild on content-only edits.
+// ---------------------------------------------------------------------------
+
+/** @type {Set<string>} repo-relative pages whose label feeds the nav */
+const navReferenced = new Set()
+/** @type {Map<string, string>} repo-relative page → last resolved label */
+const labelCache = new Map()
 const CSS_HREF = '/styles/nav.css'
 const JS_HREF = '/styles/nav.js'
 
@@ -197,16 +208,15 @@ const NAV_JS = `(function () {
 })();
 `
 
-function sourceHref(source) {
-  return `${source.mount}/index.html`
-}
-
-/** Level-1 bar: one link per source. */
-function sourcesBarHtml(sources) {
-  return sources
-    .map((source) => {
-      const href = sourceHref(source)
-      return `<a class="mkadoc-source" data-mount="${escapeHtmlAttr(source.mount)}" href="${escapeHtmlAttr(href)}">${escapeHtml(source.title)}</a>`
+/** Level-1 bar: one entry per source (clickable only when it has a href). */
+function sourcesBarHtml(entries) {
+  return entries
+    .map(({ source, title, href }) => {
+      const mountAttr = `data-mount="${escapeHtmlAttr(source.mount)}"`
+      const label = escapeHtml(title)
+      return href
+        ? `<a class="mkadoc-source" ${mountAttr} href="${escapeHtmlAttr(href)}">${label}</a>`
+        : `<span class="mkadoc-source" ${mountAttr}>${label}</span>`
     })
     .join('\n')
 }
@@ -267,8 +277,19 @@ function findPageFile(host, source, page) {
 }
 
 /**
- * Derive a `page:` entry's label from the page's own title.
- * Returns '' when the page has no title (caller falls back to `label`/basename).
+ * Read a page's metadata label (`:nav_label:` → title), or '' when absent.
+ * @param {string} absPath
+ * @param {import('../plugin/contract.js').MkadocRenderer} renderer
+ */
+async function metaLabelFor(absPath, renderer) {
+  const text = fs.readFileSync(absPath, 'utf8')
+  const meta = await renderer.extractMeta(text, absPath)
+  return String(meta.navLabel || meta.title || '').trim()
+}
+
+/**
+ * Derive a `page:` entry's label from the page's own nav label/title.
+ * Returns '' when the page has no label (caller falls back to `label`/basename).
  * @param {import('../plugin/contract.js').MkadocPluginHost} host
  * @param {import('../sources.js').MkadocSource} source
  * @param {string} page
@@ -276,9 +297,137 @@ function findPageFile(host, source, page) {
 async function derivePageLabel(host, source, page) {
   const found = findPageFile(host, source, page)
   if (!found) return ''
-  const text = fs.readFileSync(found.abs, 'utf8')
-  const meta = await found.renderer.extractMeta(text, found.abs)
-  return String(meta.title || '').trim()
+  return metaLabelFor(found.abs, found.renderer)
+}
+
+/**
+ * Resolve a repo-relative page path's nav label (used by the classifier).
+ * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {string} relPath
+ */
+async function pageLabelForRel(host, relPath) {
+  const abs = path.join(host.root, relPath)
+  if (!fs.existsSync(abs)) return ''
+  const renderer = host.renderers.find((r) =>
+    r.extensions?.includes(path.extname(relPath).toLowerCase()),
+  )
+  if (!renderer) return ''
+  return metaLabelFor(abs, renderer)
+}
+
+/** First leaf href in a `_nav.yaml` item tree (depth-first). */
+function firstLeafHref(items, source) {
+  for (const item of items) {
+    if (item.page) return navPageHref(source, item.page)
+    if (item.href) return item.href
+    if (item.children?.length) {
+      const href = firstLeafHref(item.children, source)
+      if (href) return href
+    }
+  }
+  return null
+}
+
+/** Flatten a `_nav.yaml` item tree into its `page:` entries. */
+function flattenPageItems(items, out = []) {
+  for (const item of items) {
+    if (item.page) out.push(item)
+    if (item.children?.length) flattenPageItems(item.children, out)
+  }
+  return out
+}
+
+/**
+ * Resolve a `_nav.yaml` item to its `{ title, href }` entry.
+ * @param {object} item
+ * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('../sources.js').MkadocSource} source
+ */
+async function resolveYamlItemEntry(item, host, source) {
+  if (item.page) {
+    const href = navPageHref(source, item.page)
+    const derived = await derivePageLabel(host, source, item.page)
+    const title = derived || item.label || path.basename(normalizePage(item.page))
+    return { title, href }
+  }
+  if (item.children?.length) {
+    return { title: item.label || '', href: firstLeafHref(item.children, source) }
+  }
+  return { title: item.label || '', href: item.href ?? null }
+}
+
+/**
+ * Resolve a source's entry point (first nav item) → `{ title, href }`.
+ * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('../sources.js').MkadocSource} source
+ */
+async function resolveSourceEntry(host, source) {
+  const mountLabel = path.basename(source.mount.replace(/\/$/, '')) || 'Docs'
+  const adocRenderer = host.renderers.find((r) => r.extensions?.includes('.adoc'))
+
+  const adocPath = path.join(host.root, source.path, '_nav.adoc')
+  if (adocRenderer && fs.existsSync(adocPath)) {
+    const text = fs.readFileSync(adocPath, 'utf8')
+    const link = await adocRenderer.extractFirstLink?.({
+      sourceText: text,
+      absPath: adocPath,
+      baseDir: path.join(host.root, source.path),
+      attributes: { icons: 'font', relfileprefix: mountPrefix(source.mount) },
+    })
+    if (link) return { title: link.label, href: link.href }
+  }
+
+  const items = readNavYaml(host, source)
+  if (items?.length) {
+    return resolveYamlItemEntry(items[0], host, source)
+  }
+
+  const rendererForPath = (p) =>
+    host.renderers.find((r) => r.extensions?.includes(path.extname(p).toLowerCase())) || null
+  const pages = listSourcePages(host.root, [source], { rendererForPath })
+    .map(({ page }) => page)
+    .sort()
+  if (pages.length) {
+    const first = pages[0]
+    const label = (await pageLabelForRel(host, first)) || path.basename(first, path.extname(first))
+    return { title: label, href: pageToHref(source, first) }
+  }
+
+  return { title: mountLabel, href: null }
+}
+
+/**
+ * Update the classifier state with the pages whose labels feed this source's nav.
+ * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('../sources.js').MkadocSource} source
+ */
+async function collectNavReferenced(host, source) {
+  // Rich `_nav.adoc` labels are inline, not page-derived — nothing to track.
+  if (fs.existsSync(path.join(host.root, source.path, '_nav.adoc'))) return
+
+  const items = readNavYaml(host, source)
+  if (items?.length) {
+    for (const item of flattenPageItems(items)) {
+      const found = findPageFile(host, source, item.page)
+      if (!found) continue
+      const rel = relToRoot(found.abs, host.root)
+      navReferenced.add(rel)
+      const label = await metaLabelFor(found.abs, found.renderer)
+      labelCache.set(rel, label)
+    }
+    return
+  }
+
+  // Auto-nav: the source-bar title uses the first page's label.
+  const rendererForPath = (p) =>
+    host.renderers.find((r) => r.extensions?.includes(path.extname(p).toLowerCase())) || null
+  const first = listSourcePages(host.root, [source], { rendererForPath })
+    .map(({ page }) => page)
+    .sort()[0]
+  if (first) {
+    navReferenced.add(first)
+    labelCache.set(first, await pageLabelForRel(host, first))
+  }
 }
 
 /** Render a validated `_nav.yaml` item tree to sidebar HTML. */
@@ -396,12 +545,18 @@ export default function navPlugin(rawOptions = {}) {
 
     async setup(host) {
       for (const source of host.config.sources) {
-        const indexFile = findSourceFile(host.root, source.path, 'index', host.renderers)
-        if (indexFile) host.registerSiteWideDep(indexFile.rel)
         host.registerSiteWideDep(`${source.path}/_nav.adoc`)
         host.registerSiteWideDep(`${source.path}/_nav.yaml`)
       }
       host.addAttributes({ icons: 'font' })
+
+      // A nav-referenced page forces a full rebuild only when its label
+      // (`:nav_label:`/title) actually changed — not on content-only edits.
+      host.registerClassifier(async (relPath) => {
+        if (!navReferenced.has(relPath)) return null
+        const current = await pageLabelForRel(host, relPath)
+        return current !== (labelCache.get(relPath) ?? '') ? 'full' : null
+      })
     },
 
     async contributeChrome(host, { mode }) {
@@ -416,8 +571,24 @@ export default function navPlugin(rawOptions = {}) {
         scripts: [{ src: jsAsset.href, defer: true }],
       })
 
+      const entries = []
+      for (const source of host.config.sources) {
+        entries.push({ source, ...(await resolveSourceEntry(host, source)) })
+      }
+
+      // Refresh classifier state for the next rebuild.
+      navReferenced.clear()
+      labelCache.clear()
+      for (const source of host.config.sources) {
+        await collectNavReferenced(host, source)
+      }
+
+      // Nav-owned home: where `/` redirects, published as a service.
+      const first = entries[0]
+      host.provideService('site-root', { href: first?.href ?? null })
+
       host.contributeChromeBody(
-        `<nav class="mkadoc-sources" aria-label="Sources">\n${sourcesBarHtml(host.config.sources)}\n</nav>\n${await buildArticlesHtml(host)}`,
+        `<nav class="mkadoc-sources" aria-label="Sources">\n${sourcesBarHtml(entries)}\n</nav>\n${await buildArticlesHtml(host)}`,
       )
     },
 

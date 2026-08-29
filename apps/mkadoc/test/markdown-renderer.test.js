@@ -30,6 +30,7 @@ Some *emphasis* and a [link](https://example.com).
 
 Mixed formats.
 `,
+        'docs/_nav.yaml': '- page: index\n- page: guide\n',
       },
       async (root) => {
         const cfg = await loadConfig('mkadoc.yaml', root)
@@ -42,7 +43,7 @@ Mixed formats.
         assert.equal(
           md.querySelector('a.mkadoc-source')?.text.trim(),
           'Markdown Home',
-          'source-bar label derives from frontmatter',
+          'source-bar label derives from the first nav item',
         )
 
         const adoc = parseHtml(fs.readFileSync(path.join(root, 'site/docs/guide.html'), 'utf8'))

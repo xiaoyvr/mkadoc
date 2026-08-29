@@ -8,13 +8,7 @@ import { defaultPoolConcurrency, mapPool } from './map-pool.js'
 import { assemblePage } from './page.js'
 import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
-import {
-  extractSourcesMeta,
-  listSourcePages,
-  pageToOutRel,
-  sourceForRepoPath,
-  sourceIndexRels,
-} from './sources.js'
+import { listSourcePages, pageToOutRel, sourceForRepoPath } from './sources.js'
 import { writeThemeCss } from './theme.js'
 
 export async function build(cfg, opts = {}) {
@@ -28,14 +22,8 @@ export async function build(cfg, opts = {}) {
   const deps = loadDependencyGraph(cfg.root)
   const { plugin: pluginHost, build: buildHost } = createHosts(cfg, { deps })
   const plugins = await loadPlugins(cfg.plugins, pluginHost)
-  const renderers = buildHost.renderers
 
-  const indexRels = sourceIndexRels(cfg, renderers)
-  if (opts.forceFull || touched.length === 0 || touched.some((p) => indexRels.has(p))) {
-    await extractSourcesMeta(cfg, renderers)
-  }
-
-  const { mode, pages } = decideMode(cfg, buildHost, { ...opts, deps })
+  const { mode, pages } = await decideMode(cfg, buildHost, { ...opts, deps })
 
   if (mode === 'noop') {
     console.log('mkadoc: noop')
@@ -44,6 +32,8 @@ export async function build(cfg, opts = {}) {
 
   fs.mkdirSync(path.join(cfg.root, cfg.output), { recursive: true })
   await plugins.contributeChrome({ mode, pages, paths: touched })
+  // Nav-owned home: whichever plugin provides `site-root` decides where / goes.
+  cfg.rootRedirect = () => pluginHost.getService('site-root')?.href ?? null
   writeThemeCss(cfg.root, cfg.output, cfg.sources)
   copyFirstSourceAssets(cfg)
 

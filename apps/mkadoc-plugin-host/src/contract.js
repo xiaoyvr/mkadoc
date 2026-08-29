@@ -10,7 +10,6 @@
  * @typedef {object} MkadocSource
  * @property {string} path        repo-relative source dir (posix)
  * @property {string} mount       site mount, e.g. `/` or `/apps/mkadoc`
- * @property {string} title       source bar / section label
  *
  * @typedef {object} MkadocConfig
  * @property {string} root
@@ -77,6 +76,7 @@
  * @property {(sourceText: string, absPath: string) => SourceMeta | Promise<SourceMeta>} extractMeta
  * @property {(input: RenderInput) => RenderOutput | Promise<RenderOutput>} render
  * @property {(input: RenderInput) => string | Promise<string>} renderFragment
+ * @property {(input: RenderInput) => { href: string, label: string } | Promise<{ href: string, label: string }>} [extractFirstLink] parse a nav fragment for its first link
  * @property {(host: MkadocPluginHost) => CheckResult | Promise<CheckResult>} [check]
  *
  * @typedef {object} MkadocPlugin

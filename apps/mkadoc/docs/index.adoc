@@ -14,7 +14,7 @@ mkadoc is for people who want:
 
 mkadoc treats your project as:
 
-* **Sources** — one or more documentation trees listed in `sources`; each source is a tab. `index.<ext>` is the entry point of each source.
+* **Sources** — one or more documentation trees listed in `sources`; each source is a tab. Its entry point (tab title + link) is the **first nav item** (`_nav.adoc` / `_nav.yaml` / first page).
 * **Pages** — a *renderer* converts each page file to HTML. Renderers are plugins: `mkadoc:asciidoc` (`.adoc`, `.asciidoc`) and `mkadoc:markdown` (`.md`, `.markdown`) are built in and auto-loaded.
 * **Output** — HTML under `output` (default `site/`)
 * **Plugins** — feature plugins (`mkadoc:topbar`, `mkadoc:nav`, `mkadoc:shiki`, …) decorate pages through a service registry, regardless of the page's markup.
@@ -24,12 +24,12 @@ Configuration is plain YAML in `mkadoc.yaml` (see xref:architecture-v1.adoc[Arch
 Some conventions:
 
 * **Config file**: `mkadoc.yaml` under repository root
-* **Site root**: `serve` redirects `/` to the *first* source's index page
-* **Source-bar label**: `:nav_label:` / frontmatter `nav_label`, else doctitle/title, else last mount segment, else `Docs`
+* **Site root**: `serve` redirects `/` to the **first nav item** (nav-owned); with no nav there is no redirect.
+* **Source-bar label**: the first nav item's label (`:nav_label:` → title → `_nav.yaml` `label` → basename).
 * **Pages**: files owned by a renderer; names starting with `_` are ignored
 * **Cache**: `.mkadoc/` under repository root (not configurable — add it to `.gitignore`). Includes the include-dependency graph (`.mkadoc/deps.json`) used for incremental rebuilds when an included partial changes.
 * **Output**: HTML under `site/` by default, configurable with `output:`
-* **Includes/partials**: editing an included partial rebuilds only the pages that depend on it. Site-wide chrome inputs (`index.*`, logo overrides, `_nav.adoc`/`_nav.yaml`) rebuild every page incrementally. `_theme/*.css` only rewrites stylesheets (assets). An unused partial with no known dependents is a no-op. Config changes still force a full rebuild.
+* **Includes/partials**: editing an included partial rebuilds only the pages that depend on it. Site-wide chrome inputs (logo overrides, `_nav.adoc`/`_nav.yaml`) rebuild every page incrementally. A nav-referenced page forces a full rebuild only when its label changes. `_theme/*.css` only rewrites stylesheets (assets). An unused partial with no known dependents is a no-op. Config changes still force a full rebuild.
 
 == Get started
 

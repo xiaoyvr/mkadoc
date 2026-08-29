@@ -175,9 +175,9 @@ function createBuildHost(state) {
       state.headScripts.push(...scripts)
     },
 
-    classifyPath(p) {
+    async classifyPath(p) {
       for (const fn of state.classifiers) {
-        const result = fn(p)
+        const result = await fn(p)
         if (result === 'full') return 'full'
       }
       return null

@@ -24,10 +24,10 @@ architecture. It is a living list — items are checked off as they are fixed.
 - [ ] *No plugin teardown/dispose lifecycle.* Removing `afterPluginsLoaded`
   also removed the only teardown path; shiki's highlighter lingers when removed
   from config. Add an optional `dispose(host)` hook.
-- [ ] *Renderer precedence is implicit and order-dependent.* `findSourceFile`
-  returns the first renderer whose extension matches; order is "config order,
-  then `mkadoc:asciidoc`, then `mkadoc:markdown`". Document and pin with a test.
-- [ ] *`sourceForPathname` is unused in production* (only a test references it).
+- [ ] *Renderer precedence is implicit and order-dependent.* `findPageFile`
+  (in `mkadoc:nav`) returns the first renderer whose extension matches; order is
+  "config order, then `mkadoc:asciidoc`, then `mkadoc:markdown`". Document and pin with a test.
+- [x] *`sourceForPathname` is unused in production* — removed with the nav model.
 - [ ] *`listSourcePages` has an AsciiDoc fallback regex* (`/\.(?:adoc|asciidoc)$/`)
   used only when `rendererForPath` is omitted; every caller passes it.
 

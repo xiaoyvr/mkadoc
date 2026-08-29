@@ -269,5 +269,37 @@ export default function asciidocRenderer(rawOptions = {}, host) {
       })
       return String(await doc.convert())
     },
+
+    /**
+     * Parse a nav fragment and return its first link's resolved href + label.
+     * @param {import('../plugin/contract.js').RenderInput} input
+     * @returns {Promise<{ href: string, label: string } | null>}
+     */
+    async extractFirstLink({ sourceText, baseDir, attributes }) {
+      const doc = await load(sourceText, {
+        safe: 'unsafe',
+        base_dir: baseDir,
+        standalone: false,
+        attributes,
+      })
+      for (const block of doc.findBy?.(() => true) || []) {
+        const text = String(block.getText?.() || '')
+        const m = /<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/.exec(text)
+        if (m) return { href: m[1], label: stripInlineTags(m[2]) }
+      }
+      return null
+    },
   }
+}
+
+/** Strip inline tags/entities from a label extracted from rendered inline text. */
+function stripInlineTags(text) {
+  return String(text)
+    .replace(/<[^>]*>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim()
 }
