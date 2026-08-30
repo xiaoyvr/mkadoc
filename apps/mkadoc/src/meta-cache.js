@@ -15,7 +15,7 @@ export function resetPageMetaCache() {
 
 /**
  * @param {string} absPath
- * @param {import('./plugin/contract.js').MkadocRenderer} renderer
+ * @param {import('@mkadoc/plugin-host').MkadocRenderer} renderer
  * @returns {Promise<{ title: string, navLabel?: string }>}
  */
 export async function pageMeta(absPath, renderer) {

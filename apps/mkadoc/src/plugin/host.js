@@ -23,14 +23,14 @@ function createHostState(cfg, deps = null) {
     chromeBody: [],
     /** @type {Map<string, unknown>} */
     services: new Map(),
-    /** @type {import('./contract.js').MkadocRenderer[]} */
+    /** @type {import('@mkadoc/plugin-host').MkadocRenderer[]} */
     renderers: [],
   }
 }
 
 /**
  * @param {ReturnType<typeof createHostState>} state
- * @returns {import('./contract.js').MkadocPluginHost}
+ * @returns {import('@mkadoc/plugin-host').MkadocPluginHost}
  */
 function createPluginHost(state) {
   const { cfg } = state
@@ -53,7 +53,7 @@ function createPluginHost(state) {
       return state.renderers
     },
 
-    /** @param {import('./contract.js').MkadocRenderer} renderer */
+    /** @param {import('@mkadoc/plugin-host').MkadocRenderer} renderer */
     registerRenderer(renderer) {
       state.renderers.push(renderer)
     },
@@ -157,7 +157,7 @@ function createPluginHost(state) {
 
 /**
  * @param {ReturnType<typeof createHostState>} state
- * @returns {import('./contract.js').MkadocBuildHost}
+ * @returns {import('@mkadoc/plugin-host').MkadocBuildHost}
  */
 function createBuildHost(state) {
   const { cfg } = state
@@ -197,11 +197,6 @@ function createBuildHost(state) {
 
     rendererForPath,
 
-    contributeHead({ links = [], scripts = [] } = {}) {
-      state.headLinks.push(...links)
-      state.headScripts.push(...scripts)
-    },
-
     async classifyPath(p) {
       for (const fn of state.classifiers) {
         const result = await fn(p)
@@ -218,7 +213,7 @@ function createBuildHost(state) {
  *
  * @param {import('../config.js').MkadocConfig} cfg
  * @param {{ deps?: import('../deps.js').DependencyGraph | null }} [opts]
- * @returns {{ plugin: import('./contract.js').MkadocPluginHost, build: import('./contract.js').MkadocBuildHost }}
+ * @returns {{ plugin: import('@mkadoc/plugin-host').MkadocPluginHost, build: import('@mkadoc/plugin-host').MkadocBuildHost }}
  */
 export function createHosts(cfg, { deps = null } = {}) {
   const state = createHostState(cfg, deps)

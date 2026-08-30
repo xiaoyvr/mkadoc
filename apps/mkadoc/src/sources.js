@@ -106,7 +106,7 @@ export function pageToHref(source, pageRel) {
 /**
  * @param {string} root
  * @param {MkadocSource[]} sources
- * @param {{ rendererForPath: (p: string) => import('./plugin/contract.js').MkadocRenderer | null }} opts
+ * @param {{ rendererForPath: (p: string) => import('@mkadoc/plugin-host').MkadocRenderer | null }} opts
  * @returns {{ page: string, source: MkadocSource }[]}
  */
 export function listSourcePages(root, sources, { rendererForPath }) {

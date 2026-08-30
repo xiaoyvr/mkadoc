@@ -127,7 +127,7 @@ function topbarHtml(host) {
 </header>`
 }
 
-/** @type {import('../plugin/contract.js').MkadocPluginFactory} */
+/** @type {import('@mkadoc/plugin-host').MkadocPluginFactory} */
 export default function topbarPlugin(rawOptions = {}) {
   parsePluginOptions('mkadoc:topbar', OptionsSchema, rawOptions)
 

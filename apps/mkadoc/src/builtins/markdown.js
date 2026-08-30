@@ -68,7 +68,7 @@ function collectAssets(tokens, absPath, root) {
 }
 
 /**
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {boolean} allowHtml
  */
 function createMarkdownIt(host, allowHtml) {
@@ -82,7 +82,7 @@ function createMarkdownIt(host, allowHtml) {
   return md
 }
 
-/** @type {import('../plugin/contract.js').MkadocPluginFactory} */
+/** @type {import('@mkadoc/plugin-host').MkadocPluginFactory} */
 export default function markdownRenderer(rawOptions = {}, host) {
   const { html } = parsePluginOptions('mkadoc:markdown', OptionsSchema, rawOptions)
 
@@ -93,7 +93,7 @@ export default function markdownRenderer(rawOptions = {}, host) {
 
     /**
      * @param {string} sourceText
-     * @returns {import('../plugin/contract.js').SourceMeta}
+     * @returns {import('@mkadoc/plugin-host').SourceMeta}
      */
     extractMeta(sourceText) {
       const { frontmatter, body } = splitFrontmatter(sourceText)
@@ -103,8 +103,8 @@ export default function markdownRenderer(rawOptions = {}, host) {
     },
 
     /**
-     * @param {import('../plugin/contract.js').RenderInput} input
-     * @returns {import('../plugin/contract.js').RenderOutput}
+     * @param {import('@mkadoc/plugin-host').RenderInput} input
+     * @returns {import('@mkadoc/plugin-host').RenderOutput}
      */
     render({ sourceText, absPath }) {
       const { frontmatter, body } = splitFrontmatter(sourceText)
@@ -124,7 +124,7 @@ export default function markdownRenderer(rawOptions = {}, host) {
     },
 
     /**
-     * @param {import('../plugin/contract.js').RenderInput} input
+     * @param {import('@mkadoc/plugin-host').RenderInput} input
      * @returns {string}
      */
     renderFragment({ sourceText, baseDir: _baseDir, linkPrefix: _linkPrefix }) {

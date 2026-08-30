@@ -80,7 +80,7 @@ async function withIncludeCollector(ctx, fn) {
  * module-global state. Registered with Asciidoctor under `mkadoc-syntax`;
  * re-registering replaces the previous class (builds are sequential, so the
  * current build's host is always the active one).
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  */
 function registerServiceSyntaxHighlighter(host) {
   class ServiceSyntaxHighlighter extends SyntaxHighlighterBase {
@@ -175,7 +175,7 @@ function baseAttrs(linkPrefix) {
   }
 }
 
-/** @type {import('../plugin/contract.js').MkadocPluginFactory} */
+/** @type {import('@mkadoc/plugin-host').MkadocPluginFactory} */
 export default function asciidocRenderer(rawOptions = {}, host) {
   parsePluginOptions('mkadoc:asciidoc', OptionsSchema, rawOptions)
   registerServiceSyntaxHighlighter(host)
@@ -211,7 +211,7 @@ export default function asciidocRenderer(rawOptions = {}, host) {
     /**
      * @param {string} sourceText
      * @param {string} absPath absolute source file path (base dir for includes)
-     * @returns {Promise<import('../plugin/contract.js').SourceMeta>}
+     * @returns {Promise<import('@mkadoc/plugin-host').SourceMeta>}
      */
     async extractMeta(sourceText, absPath) {
       const doc = await load(sourceText, {
@@ -225,8 +225,8 @@ export default function asciidocRenderer(rawOptions = {}, host) {
     },
 
     /**
-     * @param {import('../plugin/contract.js').RenderInput} input
-     * @returns {Promise<import('../plugin/contract.js').RenderOutput>}
+     * @param {import('@mkadoc/plugin-host').RenderInput} input
+     * @returns {Promise<import('@mkadoc/plugin-host').RenderOutput>}
      */
     async render({ sourceText, absPath, baseDir }) {
       // Icons default: the bundled theme ships Font Awesome glyph rules, so
@@ -270,7 +270,7 @@ export default function asciidocRenderer(rawOptions = {}, host) {
     },
 
     /**
-     * @param {import('../plugin/contract.js').RenderInput} input
+     * @param {import('@mkadoc/plugin-host').RenderInput} input
      * @returns {Promise<string>}
      */
     async renderFragment({ sourceText, baseDir, linkPrefix }) {
@@ -291,7 +291,7 @@ export default function asciidocRenderer(rawOptions = {}, host) {
 
     /**
      * Parse a nav fragment and return its first link's resolved href + label.
-     * @param {import('../plugin/contract.js').RenderInput} input
+     * @param {import('@mkadoc/plugin-host').RenderInput} input
      * @returns {Promise<{ href: string, label: string } | null>}
      */
     async extractFirstLink({ sourceText, baseDir, linkPrefix }) {

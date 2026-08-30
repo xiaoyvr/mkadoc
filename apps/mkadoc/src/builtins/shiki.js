@@ -50,7 +50,7 @@ function langListFor(langs) {
   return [...langList].sort()
 }
 
-/** @type {import('../plugin/contract.js').MkadocPluginFactory} */
+/** @type {import('@mkadoc/plugin-host').MkadocPluginFactory} */
 export default function shikiPlugin(rawOptions = {}) {
   const { theme, langs } = parsePluginOptions('mkadoc:shiki', OptionsSchema, rawOptions)
 

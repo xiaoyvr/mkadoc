@@ -47,7 +47,6 @@
  * @property {string[]} chromeBody
  * @property {MkadocRenderer[]} renderers
  * @property {(p: string) => MkadocRenderer | null} rendererForPath
- * @property {(contrib?: { links?: object[], scripts?: object[] }) => void} contributeHead
  * @property {(p: string) => 'full' | null} classifyPath
  *
  * @typedef {object} RenderInput

@@ -7,7 +7,7 @@ import topbar from '../builtins/topbar.js'
 import { installLocalPlugin, parseLocator, resolveEntry } from './installer.js'
 import { BUILTIN_LOCATORS } from './locators.js'
 
-/** @type {Record<string, import('./contract.js').MkadocPluginFactory>} */
+/** @type {Record<string, import('@mkadoc/plugin-host').MkadocPluginFactory>} */
 const BUILTINS = {
   'mkadoc:asciidoc': asciidoc,
   'mkadoc:markdown': markdown,
@@ -32,8 +32,8 @@ for (const locator of BUILTIN_LOCATORS) {
  * - anything else (registry ranges, git, remote, alias) — not implemented yet
  *
  * @param {string} locator
- * @param {import('./contract.js').MkadocPluginHost} host
- * @returns {Promise<import('./contract.js').MkadocPluginFactory>}
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
+ * @returns {Promise<import('@mkadoc/plugin-host').MkadocPluginFactory>}
  */
 async function resolveFactory(locator, host) {
   if (locator.startsWith('mkadoc:')) {
@@ -64,15 +64,15 @@ async function resolveFactory(locator, host) {
 }
 
 /**
- * @param {{ locator: string, plugin: import('./contract.js').MkadocPlugin }[]} loaded
- * @param {import('./contract.js').MkadocPluginHost} host
+ * @param {{ locator: string, plugin: import('@mkadoc/plugin-host').MkadocPlugin }[]} loaded
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  */
 function createPluginRunner(loaded, host) {
   return {
     list: loaded,
 
     /**
-     * @param {import('./contract.js').BuildContext} ctx
+     * @param {import('@mkadoc/plugin-host').BuildContext} ctx
      */
     async contributeChrome(ctx) {
       for (const { plugin } of loaded) {
@@ -106,7 +106,7 @@ function createPluginRunner(loaded, host) {
 
 /**
  * @param {Record<string, Record<string, unknown>> | null | undefined} pluginsConfig
- * @param {import('./contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  */
 export async function loadPlugins(pluginsConfig, host) {
   const entries = Object.entries(pluginsConfig || {})
@@ -119,7 +119,7 @@ export async function loadPlugins(pluginsConfig, host) {
 
   const optionsFor = (locator) => entries.find(([k]) => k === locator)?.[1] ?? {}
 
-  /** @type {{ locator: string, plugin: import('./contract.js').MkadocPlugin }[]} */
+  /** @type {{ locator: string, plugin: import('@mkadoc/plugin-host').MkadocPlugin }[]} */
   const loaded = []
 
   // Construct all plugins in config order first (chrome order is preserved).

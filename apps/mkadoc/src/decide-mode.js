@@ -30,7 +30,7 @@ async function needsFullRebuild(p, cfg, host) {
 
 /**
  * @param {import('./config.js').MkadocConfig} cfg
- * @param {import('./plugin/contract.js').MkadocBuildHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocBuildHost} host
  * @param {{ forceFull?: boolean, paths?: string[], deps?: import('./deps.js').DependencyGraph | null }} [opts]
  */
 export async function decideMode(cfg, host, { forceFull = false, paths = [], deps = null } = {}) {

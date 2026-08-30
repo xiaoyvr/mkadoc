@@ -11,7 +11,7 @@ import { listSourcePages, pageToHref } from './sources.js'
  * when enabled; without nav, `/` serves this page.
  *
  * @param {import('./config.js').MkadocConfig} cfg
- * @param {import('./plugin/contract.js').MkadocBuildHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocBuildHost} host
  */
 export async function writeSiteIndex(cfg, host) {
   const allPages = listSourcePages(cfg.root, cfg.sources, {

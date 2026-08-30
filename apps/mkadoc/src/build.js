@@ -106,7 +106,7 @@ export async function build(cfg, opts = {}) {
 
 /**
  * @param {import('./config.js').MkadocConfig} cfg
- * @param {import('./plugin/contract.js').MkadocBuildHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocBuildHost} host
  * @param {string[]} pages
  * @param {{ concurrency?: number, deps?: import('./deps.js').DependencyGraph | null }} [opts]
  */

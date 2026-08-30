@@ -251,7 +251,7 @@ function findIndexInDir(host, dirAbs) {
  * Build the convention-based auto-nav node for a directory.
  * node = `{ label, href, rel, children }`; `href`/`rel` are null when the
  * folder has no index page (a non-clickable section).
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {import('../sources.js').MkadocSource} source
  * @param {string} dirRel repo-relative directory
  */
@@ -347,10 +347,10 @@ function normalizePage(page) {
 
 /**
  * Find the page file a `page:` entry refers to (any renderer extension).
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {import('../sources.js').MkadocSource} source
  * @param {string} page
- * @returns {{ abs: string, renderer: import('../plugin/contract.js').MkadocRenderer } | null}
+ * @returns {{ abs: string, renderer: import('@mkadoc/plugin-host').MkadocRenderer } | null}
  */
 function findPageFile(host, source, page) {
   const p = normalizePage(page)
@@ -368,7 +368,7 @@ function findPageFile(host, source, page) {
 /**
  * Read a page's metadata label (`:nav_label:` → title), or '' when absent.
  * @param {string} absPath
- * @param {import('../plugin/contract.js').MkadocRenderer} renderer
+ * @param {import('@mkadoc/plugin-host').MkadocRenderer} renderer
  */
 async function metaLabelFor(absPath, renderer) {
   const meta = await pageMeta(absPath, renderer)
@@ -378,7 +378,7 @@ async function metaLabelFor(absPath, renderer) {
 /**
  * Derive a `page:` entry's label from the page's own nav label/title.
  * Returns '' when the page has no label (caller falls back to `label`/basename).
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {import('../sources.js').MkadocSource} source
  * @param {string} page
  */
@@ -390,7 +390,7 @@ async function derivePageLabel(host, source, page) {
 
 /**
  * Resolve a repo-relative page path's nav label (used by the classifier).
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {string} relPath
  */
 async function pageLabelForRel(host, relPath) {
@@ -428,7 +428,7 @@ function flattenPageItems(items, out = []) {
 /**
  * Resolve a `_nav.yaml` item to its `{ title, href }` entry.
  * @param {object} item
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {import('../sources.js').MkadocSource} source
  */
 async function resolveYamlItemEntry(item, host, source) {
@@ -446,7 +446,7 @@ async function resolveYamlItemEntry(item, host, source) {
 
 /**
  * Resolve a source's entry point (first nav item) → `{ title, href }`.
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {import('../sources.js').MkadocSource} source
  */
 async function resolveSourceEntry(host, source) {
@@ -475,7 +475,7 @@ async function resolveSourceEntry(host, source) {
 
 /**
  * Update the classifier state with the pages whose labels feed this source's nav.
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {import('../sources.js').MkadocSource} source
  */
 async function collectNavReferenced(host, source) {
@@ -502,7 +502,7 @@ async function collectNavReferenced(host, source) {
 
 /**
  * Walk an auto-nav tree and record each page's repo path + resolved label.
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {{ rel: string | null, children: object[] }} node
  */
 async function collectAutoNavRefs(host, node) {
@@ -547,7 +547,7 @@ async function renderYamlNav(items, host, source) {
 
 /**
  * Read + validate `<source>/_nav.yaml`, or return null when absent.
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {import('../sources.js').MkadocSource} source
  */
 function readNavYaml(host, source) {
@@ -586,7 +586,7 @@ async function readNavCssBundle(host) {
  * host.contributeChromeBody.
  * Nav sources, in precedence order: `_nav.adoc` (rich markup), `_nav.yaml`
  * (declarative), else an auto-generated page list. No other formats.
- * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  */
 async function buildArticlesHtml(host) {
   const adocRenderer = host.renderers.find((r) => r.extensions?.includes('.adoc'))
@@ -621,7 +621,7 @@ ${lists.join('\n')}
 </aside>`
 }
 
-/** @type {import('../plugin/contract.js').MkadocPluginFactory} */
+/** @type {import('@mkadoc/plugin-host').MkadocPluginFactory} */
 export default function navPlugin(rawOptions = {}) {
   parsePluginOptions('mkadoc:nav', OptionsSchema, rawOptions)
 
