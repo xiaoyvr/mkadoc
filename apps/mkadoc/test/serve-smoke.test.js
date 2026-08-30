@@ -43,7 +43,12 @@ describe('serve smoke (watch → build wiring)', () => {
       const { close, calls } = await startServe(cfg)
       try {
         assert.equal(calls.length, 1)
-        assert.deepEqual(calls[0].opts, { forceFull: true })
+        assert.equal(calls[0].opts.forceFull, true)
+        assert.ok(calls[0].opts.watchExts instanceof Set)
+        assert.ok(
+          calls[0].opts.watchExts.has('.adoc'),
+          'renderer extensions populate the watcher set',
+        )
         assert.equal(calls[0].mode, 'full')
         assert.match(read(root, 'site/docs/index.html'), /MARKER_INDEX_V1/)
       } finally {
@@ -124,7 +129,7 @@ plugins:
         )
 
         await waitFor(() => calls.length >= 2)
-        assert.deepEqual(calls[1].opts, { forceFull: true })
+        assert.equal(calls[1].opts.forceFull, true)
         assert.equal(calls[1].mode, 'full')
       } finally {
         await close()

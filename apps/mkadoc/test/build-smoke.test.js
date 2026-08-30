@@ -85,6 +85,17 @@ describe('build smoke (no plugins)', () => {
     )
   })
 
+  it('reports loaded renderer extensions to the watcher set', async () => {
+    await withTempProject(smokeFixture(), async (root) => {
+      const cfg = await loadConfig('mkadoc.yaml', root)
+      const watchExts = new Set(['.css'])
+      await build(cfg, { forceFull: true, watchExts })
+      assert.ok(watchExts.has('.adoc'))
+      assert.ok(watchExts.has('.md'))
+      assert.ok(watchExts.has('.css'), 'core-owned entries are preserved')
+    })
+  })
+
   it('unknown non-page path alone forces a full rebuild', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.yaml', root)

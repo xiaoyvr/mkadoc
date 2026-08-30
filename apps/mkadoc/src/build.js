@@ -42,6 +42,14 @@ export async function build(cfg, opts = {}) {
   prevPluginSignature = pluginSignature
   prevDisposePlugins = plugins.dispose
 
+  // Report loaded renderer extensions to the caller (serve's watcher), so a
+  // new renderer format is watched without core knowing its extensions.
+  for (const renderer of buildHost.renderers) {
+    for (const ext of renderer.extensions || []) {
+      opts.watchExts?.add(ext)
+    }
+  }
+
   const { mode, pages } = await decideMode(cfg, buildHost, { ...opts, deps })
 
   if (mode === 'noop') {

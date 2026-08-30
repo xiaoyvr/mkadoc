@@ -5,17 +5,7 @@ import { defaultConfigPath, loadConfig, resolveServeListen } from './config.js'
 import { createDevServer } from './dev-server.js'
 import { sourceForRepoPath } from './sources.js'
 
-const WATCH_EXTS = new Set([
-  '.adoc',
-  '.asciidoc',
-  '.md',
-  '.markdown',
-  '.css',
-  '.js',
-  '.html',
-  '.yaml',
-  '.yml',
-])
+const CORE_WATCH_EXTS = new Set(['.css', '.js', '.html', '.yaml', '.yml'])
 
 export async function serve(cfg, opts = {}) {
   let current = cfg
@@ -27,8 +17,13 @@ export async function serve(cfg, opts = {}) {
   const { host, port, remote } = resolveServeListen(current.serve)
   const outDir = path.join(current.root, current.output)
 
+  // Core-owned extensions plus every loaded renderer's extensions — build()
+  // populates the set on each pass, so a new renderer format is watched
+  // without core knowing its extensions.
+  const watchExts = new Set(CORE_WATCH_EXTS)
+
   console.log('mkadoc: initial full build')
-  await buildFn(current, { forceFull: true })
+  await buildFn(current, { forceFull: true, watchExts })
 
   let timer = null
   const pending = new Set()
@@ -67,7 +62,7 @@ export async function serve(cfg, opts = {}) {
       )
 
       if (!configTouched && paths.length === 0) return
-      await buildFn(current, configTouched ? { forceFull: true } : { paths })
+      await buildFn(current, configTouched ? { forceFull: true, watchExts } : { paths, watchExts })
       devServer?.reload()
     } catch (err) {
       console.error('mkadoc: rebuild failed:', err?.message || err)
@@ -94,7 +89,7 @@ export async function serve(cfg, opts = {}) {
     if (Date.now() < ignoreUntil) return
     if (!isWatchedPath(filePath)) return
     const ext = path.extname(filePath).toLowerCase()
-    if (ext && !WATCH_EXTS.has(ext)) return
+    if (ext && !watchExts.has(ext)) return
     pending.add(filePath)
     clearTimeout(timer)
     timer = setTimeout(() => {
