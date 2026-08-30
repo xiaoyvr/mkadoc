@@ -67,8 +67,7 @@ renderer's `extensions`, dispatches page → renderer, and owns page assembly
 [[Services]]
 === Services (provider/consumer)
 
-Cross-cutting capabilities are shared through named services — no dependency
-metadata in config:
+Cross-cutting capabilities are shared through named services:
 
 [source,js]
 ----
@@ -77,19 +76,28 @@ host.provideService('syntax-highlight', {
   highlight(code, lang) { ... },
 })
 
-// consumer (any renderer)
+// consumer (any renderer, at render time)
 const hl = host.getService('syntax-highlight')
 ----
 
-* Providers register in `setup`; consumers resolve at *render time*, so load
-  order is irrelevant.
+* Providers register in `setup`. `getService` is **only callable after every
+  plugin finished setup** — during load the registry is incomplete (providers
+  run in config order), so mkadoc throws instead of returning an
+  order-dependent result. Resolve at *render time*, or in `contributeChrome` /
+  `check`; never in `setup` or the factory.
+* Hard dependencies are declared on the plugin object:
+  `requires: ['syntax-highlight']`. mkadoc verifies them after all plugins
+  load and fails fast, listing every missing service — config order is
+  irrelevant for declared dependencies.
 * `mkadoc:shiki` provides `syntax-highlight`; renderers consume it for code
   blocks/fences and degrade to plain listings when it is absent.
 * `mkadoc-plugin-kroki` provides `diagram`; the `mkadoc:asciidoc` renderer
   consumes its `register` + `attributes` adapter (both are AsciiDoc-specific;
   future renderers would add their own adapter).
 * `mkadoc:nav` provides `site-root` (`{ href }`) — the nav-owned home. Core's
-  dev server redirects `/` to it; with no nav there is no redirect.
+  dev server redirects `/` to it; with no nav there is no redirect. It is
+  provided at chrome time, so it cannot be declared with `requires` (that is
+  load-time only) — consume it lazily.
 
 == What you cannot extend (core-owned)
 
@@ -112,18 +120,22 @@ Return:
 | Field | Purpose
 
 | `name` | Short id (e.g. `nav`)
-| `setup(host)` | Optional. Runs once after the plugin is constructed, **before** rebuild mode is decided. Register extensions, attributes, classifiers, asset prefixes here.
+| `requires` | Optional `string[]` of service names this plugin hard-depends on. Verified after all plugins load; a missing provider fails the build/check with a message listing every missing service.
+| `setup(host)` | Optional. Runs once after the plugin is constructed, **before** rebuild mode is decided. Register extensions, attributes, classifiers, asset prefixes here. `getService` is **not** available yet — it throws.
 | `contributeChrome(host, ctx)` | Optional. Runs each build after mode is known (not called for `noop`). Emit CSS/JS/HTML. `ctx`: `{ mode, pages, paths }` (`mode` is `full` \| `incremental` \| `assets`).
 | `check(host)` | Optional. Used by `mkadoc check` only. Keep it cheap.
+| `dispose(host)` | Optional. Called when the plugin is unloaded — currently when the `plugins` config changes under `serve`. Release module-level resources (e.g. shiki's highlighter).
 |===
 
 Lifecycle order that matters to you:
 
-. Your factory runs (options validated).
-. `setup(host)` — classifiers / prefixes must be registered here to affect this build’s mode.
+. Your factory runs (options validated). `getService` is **not** available yet.
+. `setup(host)` — classifiers / prefixes must be registered here to affect this build’s mode. Still no `getService` (throws); register `requires` + `provideService` here instead.
+. All plugins have loaded — `getService` becomes resolvable, `requires` is verified.
 . Core decides `full` / `incremental` / `assets` / `noop`.
 . `contributeChrome(host, ctx)` — skipped entirely for `noop`; skip heavy work when `ctx.mode === 'assets'` if you only care about HTML chrome.
 . Pages convert with the attributes you registered.
+. A later rebuild with a different `plugins` config (serve) calls `dispose(host)` on the previous set.
 
 == Plugin host API
 

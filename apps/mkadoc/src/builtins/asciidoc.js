@@ -8,9 +8,6 @@ import { parsePluginOptions } from '../plugin/options.js'
 
 const OptionsSchema = z.object({}).strict()
 
-/** @type {import('../plugin/contract.js').MkadocPluginHost | null} */
-let hostRef = null
-
 // ---------------------------------------------------------------------------
 // Include tracking (moved from core: Asciidoctor's include:: is renderer-owned)
 // ---------------------------------------------------------------------------
@@ -76,27 +73,36 @@ async function withIncludeCollector(ctx, fn) {
 // Syntax-highlight bridge: delegate to the `syntax-highlight` service
 // ---------------------------------------------------------------------------
 
-class ServiceSyntaxHighlighter extends SyntaxHighlighterBase {
-  constructor(name, backend, opts = {}) {
-    super(name, backend, opts)
-    this.name = 'mkadoc-syntax'
-    this._preClass = 'shiki'
-  }
-
-  highlight(_node, source, lang) {
-    const svc = hostRef?.getService('syntax-highlight')
-    if (!svc) {
-      throw new Error('mkadoc:asciidoc: syntax-highlight service is not available')
+/**
+ * Per-instance syntax-highlight bridge: the class closes over the build's
+ * host, so the adapter reaches the `syntax-highlight` service without
+ * module-global state. Registered with Asciidoctor under `mkadoc-syntax`;
+ * re-registering replaces the previous class (builds are sequential, so the
+ * current build's host is always the active one).
+ * @param {import('../plugin/contract.js').MkadocPluginHost} host
+ */
+function registerServiceSyntaxHighlighter(host) {
+  class ServiceSyntaxHighlighter extends SyntaxHighlighterBase {
+    constructor(name, backend, opts = {}) {
+      super(name, backend, opts)
+      this.name = 'mkadoc-syntax'
+      this._preClass = 'shiki'
     }
-    return svc.highlight(String(source), String(lang || ''))
-  }
 
-  handlesHighlighting() {
-    return true
+    highlight(_node, source, lang) {
+      const svc = host.getService('syntax-highlight')
+      if (!svc) {
+        throw new Error('mkadoc:asciidoc: syntax-highlight service is not available')
+      }
+      return svc.highlight(String(source), String(lang || ''))
+    }
+
+    handlesHighlighting() {
+      return true
+    }
   }
+  SyntaxHighlighter.register(ServiceSyntaxHighlighter, 'mkadoc-syntax')
 }
-
-SyntaxHighlighter.register(ServiceSyntaxHighlighter, 'mkadoc-syntax')
 
 // ---------------------------------------------------------------------------
 // Full-document → body/meta extraction (core owns the page wrapper)
@@ -161,7 +167,7 @@ function collectAssets(doc, absPath, root) {
 /** @type {import('../plugin/contract.js').MkadocPluginFactory} */
 export default function asciidocRenderer(rawOptions = {}, host) {
   parsePluginOptions('mkadoc:asciidoc', OptionsSchema, rawOptions)
-  hostRef = host
+  registerServiceSyntaxHighlighter(host)
 
   const registry = Extensions.create()
   registerIncludeCollector(registry)
@@ -174,7 +180,7 @@ export default function asciidocRenderer(rawOptions = {}, host) {
    * @returns {Record<string, unknown>}
    */
   function applyDiagramService(attrs) {
-    const svc = hostRef?.getService('diagram')
+    const svc = host.getService('diagram')
     if (!svc) return attrs
     if (!diagramRegistered && typeof svc.register === 'function') {
       svc.register(registry)
@@ -213,13 +219,13 @@ export default function asciidocRenderer(rawOptions = {}, host) {
      */
     async render({ sourceText, absPath, baseDir, attributes }) {
       let attrs = { ...attributes }
-      if (hostRef?.getService('syntax-highlight')) {
+      if (host.getService('syntax-highlight')) {
         attrs['source-highlighter'] = 'mkadoc-syntax'
       }
       attrs = applyDiagramService(attrs)
 
       const { result, includes } = await withIncludeCollector(
-        { root: hostRef?.root ?? '', baseDir },
+        { root: host.root, baseDir },
         async () => {
           const doc = await load(sourceText, {
             safe: 'unsafe',
@@ -234,7 +240,7 @@ export default function asciidocRenderer(rawOptions = {}, host) {
             converted,
             title: String(doc.getDoctitle?.() || '').trim(),
             lang: String(doc.getAttribute?.('lang') || 'en'),
-            assets: collectAssets(doc, absPath, hostRef?.root ?? ''),
+            assets: collectAssets(doc, absPath, host.root),
           }
         },
       )
@@ -256,7 +262,7 @@ export default function asciidocRenderer(rawOptions = {}, host) {
      */
     async renderFragment({ sourceText, baseDir, attributes }) {
       let attrs = { ...attributes }
-      if (hostRef?.getService('syntax-highlight')) {
+      if (host.getService('syntax-highlight')) {
         attrs['source-highlighter'] = 'mkadoc-syntax'
       }
       attrs = applyDiagramService(attrs)

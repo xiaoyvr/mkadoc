@@ -88,6 +88,19 @@ function createPluginRunner(loaded, host) {
       }
       return results
     },
+
+    /**
+     * Release plugin-owned resources in reverse load order (consumers before
+     * providers), then flip the host to `disposed` so service lookups fail
+     * loudly afterwards.
+     */
+    async dispose() {
+      for (let i = loaded.length - 1; i >= 0; i--) {
+        const { plugin } = loaded[i]
+        if (plugin.dispose) await plugin.dispose(host)
+      }
+      host.setPhase('disposed')
+    },
   }
 }
 
@@ -127,6 +140,30 @@ export async function loadPlugins(pluginsConfig, host) {
   }
   for (const { plugin } of loaded) {
     if (plugin.kind !== 'renderer' && plugin.setup) await plugin.setup(host)
+  }
+
+  // The registry is complete — every provider has run in config order. From
+  // here on `getService` is resolvable and the load-time phase gate is open.
+  host.setPhase('ready')
+
+  // Hard service dependencies: fail fast (and list every missing one) so a
+  // misconfigured plugin set is a loud error, not a silent degradation.
+  const missing = []
+  for (const { locator, plugin } of loaded) {
+    const requires = plugin.requires
+    if (requires != null && !Array.isArray(requires)) {
+      throw new Error(
+        `mkadoc: ${locator}: \`requires\` must be an array of service names (got ${typeof requires})`,
+      )
+    }
+    for (const name of requires ?? []) {
+      if (host.getService(name) === undefined) {
+        missing.push(`  - ${locator} requires service "${name}", which no loaded plugin provides`)
+      }
+    }
+  }
+  if (missing.length) {
+    throw new Error(`mkadoc: plugin dependency check failed:\n${missing.join('\n')}`)
   }
 
   return createPluginRunner(loaded, host)

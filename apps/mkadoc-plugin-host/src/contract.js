@@ -34,7 +34,7 @@
  * @property {(relPath: string) => void} registerSiteWideDep mark path as rebuilding every page
  * @property {(prefix: string) => void} registerAssetPrefix
  * @property {(name: string, service: unknown) => void} provideService publish a capability
- * @property {(name: string) => unknown} getService resolve a capability (or undefined)
+ * @property {(name: string) => unknown} getService resolve a capability (or undefined); throws during plugin load — only callable after all plugins finished setup
  * @property {(relOrAbs: string) => string} ensureDir
  * @property {(name: string) => string} cacheDir
  * @property {(p: string) => string} relToRoot
@@ -83,9 +83,11 @@
  * @property {string} name
  * @property {'feature' | 'renderer'} [kind] default `feature`
  * @property {string} [locator] set by the loader
+ * @property {string[]} [requires] hard service dependencies — verified after every plugin finishes setup
  * @property {(host: MkadocPluginHost) => void | Promise<void>} [setup]
  * @property {(host: MkadocPluginHost, ctx: BuildContext) => void | Promise<void>} [contributeChrome]
  * @property {(host: MkadocPluginHost) => CheckResult | Promise<CheckResult>} [check]
+ * @property {(host: MkadocPluginHost) => void | Promise<void>} [dispose] release resources when the plugin is unloaded (config change under serve)
  *
  * @typedef {(options?: Record<string, unknown>, host?: MkadocPluginHost) => MkadocPlugin | Promise<MkadocPlugin>} MkadocPluginFactory
  */

@@ -125,5 +125,17 @@ pre:has(> code[class*="language-"]) {
         links: [{ rel: 'stylesheet', href: cssAsset.href }],
       })
     },
+
+    async dispose() {
+      // Called when the plugin is unloaded (config change under serve): drop
+      // the shared highlighter so it does not linger after removal. Idempotent
+      // — a subsequent build with the same config never disposes between
+      // rebuilds, so the expensive highlighter is still reused.
+      shared.highlighter?.dispose()
+      shared.highlighter = null
+      shared.key = null
+      shared.theme = DEFAULT_THEME
+      shared.colors = { bg: '#ffffff', fg: '#1f2328' }
+    },
   }
 }

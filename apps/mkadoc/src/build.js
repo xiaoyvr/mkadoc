@@ -12,10 +12,26 @@ import { writeSiteIndex } from './sitemap.js'
 import { listSourcePages, pageToOutRel, sourceForRepoPath } from './sources.js'
 import { writeThemeCss } from './theme.js'
 
+/**
+ * Disposers of the previous build's plugins, kept across rebuilds inside one
+ * process (serve). A changed `plugins` config disposes the old plugin set so
+ * module-level resources (e.g. shiki's highlighter) are released instead of
+ * lingering after a plugin is removed from config.
+ */
+let prevPluginSignature = null
+let prevDisposePlugins = null
+
 export async function build(cfg, opts = {}) {
   if (opts.clean) {
     fs.rmSync(path.join(cfg.root, cfg.output), { recursive: true, force: true })
     fs.rmSync(path.join(cfg.root, CACHE_DIR), { recursive: true, force: true })
+  }
+
+  // Same plugin set → the cached resources are reused; different set → the
+  // previous build's plugins are released before the new ones load.
+  const pluginSignature = JSON.stringify(cfg.plugins ?? {})
+  if (prevDisposePlugins && pluginSignature !== prevPluginSignature) {
+    await prevDisposePlugins()
   }
 
   const touched = (opts.paths || []).map((p) => relToRoot(p, cfg.root))
@@ -23,6 +39,8 @@ export async function build(cfg, opts = {}) {
   const deps = loadDependencyGraph(cfg.root)
   const { plugin: pluginHost, build: buildHost } = createHosts(cfg, { deps })
   const plugins = await loadPlugins(cfg.plugins, pluginHost)
+  prevPluginSignature = pluginSignature
+  prevDisposePlugins = plugins.dispose
 
   const { mode, pages } = await decideMode(cfg, buildHost, { ...opts, deps })
 

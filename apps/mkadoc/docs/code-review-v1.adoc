@@ -17,16 +17,25 @@ architecture. It is a living list — items are checked off as they are fixed.
   in core.* Only the AsciiDoc renderer interprets it; Markdown ignores it.
   `mkadoc:nav` sets `icons: font` (an AsciiDoc attribute) globally. Re-examine
   when the next renderer lands.
-- [ ] *Module-level `hostRef` singleton in `src/builtins/asciidoc.js`.* Set in
+- [x] *Module-level `hostRef` singleton in `src/builtins/asciidoc.js`.* Set in
   the factory, read by `render()` and the module-level
-  `ServiceSyntaxHighlighter`. Register the highlighter per-instance with a
-  closure over `host` instead.
-- [ ] *No plugin teardown/dispose lifecycle.* Removing `afterPluginsLoaded`
+  `ServiceSyntaxHighlighter`. Fixed: the highlighter is now registered
+  per-instance with a closure over `host`
+  (`registerServiceSyntaxHighlighter`), and all `hostRef` reads in
+  `render`/`renderFragment`/`applyDiagramService` use the factory's `host`
+  parameter directly.
+- [x] *No plugin teardown/dispose lifecycle.* Removing `afterPluginsLoaded`
   also removed the only teardown path; shiki's highlighter lingers when removed
-  from config. Add an optional `dispose(host)` hook.
-- [ ] *Renderer precedence is implicit and order-dependent.* `findPageFile`
+  from config. Added an optional `dispose(host)` hook (called on `plugins`
+  config change under serve) and wired shiki to release its highlighter. Also
+  added a loading-phase gate on `getService` + a `requires` service contract —
+  see `src/plugin/host.js` / `src/plugin/load.js`.
+- [x] *Renderer precedence is implicit and order-dependent.* `findPageFile`
   (in `mkadoc:nav`) returns the first renderer whose extension matches; order is
-  "config order, then `mkadoc:asciidoc`, then `mkadoc:markdown`". Document and pin with a test.
+  "config order, then `mkadoc:asciidoc`, then `mkadoc:markdown`". Won't do —
+  decided by design: the first-registered renderer wins and dispatch is
+  deterministic; no renderer shares an extension today, so no material impact
+  on end users.
 - [x] *`sourceForPathname` is unused in production* — removed with the nav model.
 - [ ] *`listSourcePages` has an AsciiDoc fallback regex* (`/\.(?:adoc|asciidoc)$/`)
   used only when `rendererForPath` is omitted; every caller (build, decide-mode,

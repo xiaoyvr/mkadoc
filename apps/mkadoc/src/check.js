@@ -9,7 +9,16 @@ export async function check(cfg) {
 
   const deps = loadDependencyGraph(cfg.root)
   const { plugin: pluginHost } = createHosts(cfg, { deps })
-  const plugins = await loadPlugins(cfg.plugins, pluginHost)
+
+  let plugins = null
+  try {
+    plugins = await loadPlugins(cfg.plugins, pluginHost)
+  } catch (err) {
+    // e.g. a missing `requires` service or a plugin option error — source
+    // checks below still run, but per-plugin checks cannot.
+    console.error(`mkadoc check: ${err?.message || err}`)
+    failed = true
+  }
 
   for (const source of cfg.sources) {
     const abs = path.join(cfg.root, source.path)
@@ -21,15 +30,17 @@ export async function check(cfg) {
     }
   }
 
-  const results = await plugins.check()
+  if (plugins) {
+    const results = await plugins.check()
 
-  for (const result of results) {
-    const label = result.locator
-    if (result.ok) {
-      console.log(`mkadoc check: ${label}: ${result.message || 'ok'}`)
-    } else {
-      console.error(`mkadoc check: ${label}: ${result.message || 'failed'}`)
-      failed = true
+    for (const result of results) {
+      const label = result.locator
+      if (result.ok) {
+        console.log(`mkadoc check: ${label}: ${result.message || 'ok'}`)
+      } else {
+        console.error(`mkadoc check: ${label}: ${result.message || 'failed'}`)
+        failed = true
+      }
     }
   }
 

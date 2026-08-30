@@ -13,6 +13,8 @@ function createHostState(cfg, deps = null) {
   return {
     cfg,
     deps,
+    /** Plugin lifecycle phase — gates `getService` (see `createPluginHost`). */
+    phase: 'loading',
     attributes: {},
     headLinks: [],
     headScripts: [],
@@ -61,8 +63,41 @@ function createPluginHost(state) {
       state.services.set(name, service)
     },
 
+    /**
+     * Resolve a capability registered by another plugin.
+     *
+     * Only callable after every plugin finished `setup` — during load the
+     * registry is incomplete (providers run in config order), so a lookup
+     * could only ever be order-dependent or miss a provider that hasn't run
+     * yet. The loader flips the phase to `ready` before returning the runner;
+     * `dispose` flips it to `disposed`.
+     * @param {string} name
+     * @returns {unknown}
+     */
     getService(name) {
+      if (state.phase === 'loading') {
+        throw new Error(
+          `mkadoc: getService('${name}') during plugin load — services are only resolvable after every plugin finished setup. Defer the lookup to render time (or contributeChrome/check), or declare a hard dependency with requires: ['${name}'] on the plugin.`,
+        )
+      }
+      if (state.phase === 'disposed') {
+        throw new Error(
+          `mkadoc: getService('${name}') after plugins were disposed — services are no longer available`,
+        )
+      }
       return state.services.get(name)
+    },
+
+    /**
+     * Advance the plugin lifecycle phase. Loader-internal — plugins must not
+     * call this; the loading-phase gate exists precisely to stop load-time
+     * service reads (plugins are trusted, so this is a convention, not a
+     * sandbox).
+     * @internal
+     * @param {'loading' | 'ready' | 'disposed'} phase
+     */
+    setPhase(phase) {
+      state.phase = phase
     },
 
     addAttributes(attrs) {
