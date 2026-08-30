@@ -60,6 +60,16 @@ const NavFileSchema = z.array(NavItemSchema).min(1)
 // pages without forcing a full rebuild on content-only edits.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Label-staleness state is intentionally module-level: it is serve-session
+// state that must outlive the per-build plugin instances (the staleness
+// classifier compares against the previous build's labels). Safe today because
+// the CLI `build` is always forceFull, so this classifier is only consulted
+// under `serve`, where the caches are warmed by the initial build's chrome
+// pass. A fresh process has no history — if a non-forceFull CLI path is ever
+// added, this needs revisiting.
+// ---------------------------------------------------------------------------
+
 /** @type {Set<string>} repo-relative pages whose label feeds the nav */
 const navReferenced = new Set()
 /** @type {Map<string, string>} repo-relative page → last resolved label */
