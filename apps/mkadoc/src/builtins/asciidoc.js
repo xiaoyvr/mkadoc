@@ -164,6 +164,14 @@ function collectAssets(doc, absPath, root) {
 
 // ---------------------------------------------------------------------------
 
+/** Asciidoctor attribute set for a conversion; `linkPrefix` maps to `relfileprefix`. */
+function baseAttrs(linkPrefix) {
+  return {
+    icons: 'font',
+    ...(linkPrefix ? { relfileprefix: linkPrefix } : {}),
+  }
+}
+
 /** @type {import('../plugin/contract.js').MkadocPluginFactory} */
 export default function asciidocRenderer(rawOptions = {}, host) {
   parsePluginOptions('mkadoc:asciidoc', OptionsSchema, rawOptions)
@@ -217,10 +225,10 @@ export default function asciidocRenderer(rawOptions = {}, host) {
      * @param {import('../plugin/contract.js').RenderInput} input
      * @returns {Promise<import('../plugin/contract.js').RenderOutput>}
      */
-    async render({ sourceText, absPath, baseDir, attributes }) {
+    async render({ sourceText, absPath, baseDir }) {
       // Icons default: the bundled theme ships Font Awesome glyph rules, so
       // admonition/icon markup renders as font classes on every conversion.
-      let attrs = { icons: 'font', ...attributes }
+      let attrs = { icons: 'font' }
       if (host.getService('syntax-highlight')) {
         attrs['source-highlighter'] = 'mkadoc-syntax'
       }
@@ -262,8 +270,8 @@ export default function asciidocRenderer(rawOptions = {}, host) {
      * @param {import('../plugin/contract.js').RenderInput} input
      * @returns {Promise<string>}
      */
-    async renderFragment({ sourceText, baseDir, attributes }) {
-      let attrs = { icons: 'font', ...attributes }
+    async renderFragment({ sourceText, baseDir, linkPrefix }) {
+      let attrs = baseAttrs(linkPrefix)
       if (host.getService('syntax-highlight')) {
         attrs['source-highlighter'] = 'mkadoc-syntax'
       }
@@ -283,12 +291,12 @@ export default function asciidocRenderer(rawOptions = {}, host) {
      * @param {import('../plugin/contract.js').RenderInput} input
      * @returns {Promise<{ href: string, label: string } | null>}
      */
-    async extractFirstLink({ sourceText, baseDir, attributes }) {
+    async extractFirstLink({ sourceText, baseDir, linkPrefix }) {
       const doc = await load(sourceText, {
         safe: 'unsafe',
         base_dir: baseDir,
         standalone: false,
-        attributes,
+        attributes: baseAttrs(linkPrefix),
       })
       for (const block of doc.findBy?.(() => true) || []) {
         const text = String(block.getText?.() || '')

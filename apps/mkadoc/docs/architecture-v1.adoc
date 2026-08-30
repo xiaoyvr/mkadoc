@@ -45,16 +45,16 @@ A renderer is a plugin with `kind: 'renderer'` and these additions:
   async extractMeta(sourceText, absPath) { ... },
 
   // Render one full page's article body.
-  // input: { sourceText, absPath, baseDir, attributes }
+  // input: { sourceText, absPath, baseDir }
   // returns: { html, title, lang, bodyClass, head, assets, includes }
   async render(input) { ... },
 
   // Render a small markup fragment (used by mkadoc:nav for _nav files).
-  // input: { sourceText, baseDir, attributes }
+  // input: { sourceText, baseDir, linkPrefix }
   async renderFragment(input) { ... },
 
   // Parse a nav fragment for its first link (used by mkadoc:nav for _nav.adoc).
-  // input: { sourceText, baseDir, attributes } → { href, label } | null
+  // input: { sourceText, baseDir, linkPrefix } → { href, label } | null
   async extractFirstLink(input) { ... },
 
   // Optional per-plugin health check.

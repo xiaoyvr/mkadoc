@@ -46,14 +46,14 @@ export default function myRenderer(options = {}, host) {
 
     // → { html, title, lang, bodyClass, head, assets, includes }
     // html is the article body; core wraps it into the full page.
-    async render({ sourceText, absPath, baseDir, attributes }) { ... },
+    async render({ sourceText, absPath, baseDir }) { ... },
 
     // render a small markup fragment (used by mkadoc:nav for _nav.adoc files)
-    async renderFragment({ sourceText, absPath, baseDir, attributes }) { ... },
+    async renderFragment({ sourceText, absPath, baseDir, linkPrefix }) { ... },
 
     // → { href, label } | null — the first link in a nav fragment
     // (used by mkadoc:nav to derive a source's tab from _nav.adoc)
-    async extractFirstLink({ sourceText, absPath, baseDir, attributes }) { ... },
+    async extractFirstLink({ sourceText, absPath, baseDir, linkPrefix }) { ... },
   }
 }
 ----
@@ -120,7 +120,7 @@ Return:
 
 | `name` | Short id (e.g. `nav`)
 | `requires` | Optional `string[]` of service names this plugin hard-depends on. Verified after all plugins load; a missing provider fails the build/check with a message listing every missing service.
-| `setup(host)` | Optional. Runs once after the plugin is constructed, **before** rebuild mode is decided. Register extensions, attributes, classifiers, asset prefixes here. `getService` is **not** available yet — it throws.
+| `setup(host)` | Optional. Runs once after the plugin is constructed, **before** rebuild mode is decided. Register extensions, classifiers, asset prefixes here. `getService` is **not** available yet — it throws.
 | `contributeChrome(host, ctx)` | Optional. Runs each build after mode is known (not called for `noop`). Emit CSS/JS/HTML. `ctx`: `{ mode, pages, paths }` (`mode` is `full` \| `incremental` \| `assets`).
 | `check(host)` | Optional. Used by `mkadoc check` only. Keep it cheap.
 | `dispose(host)` | Optional. Called when the plugin is unloaded — currently when the `plugins` config changes under `serve`. Release module-level resources (e.g. shiki's highlighter).
@@ -133,7 +133,7 @@ Lifecycle order that matters to you:
 . All plugins have loaded — `getService` becomes resolvable, `requires` is verified.
 . Core decides `full` / `incremental` / `assets` / `noop`.
 . `contributeChrome(host, ctx)` — skipped entirely for `noop`; skip heavy work when `ctx.mode === 'assets'` if you only care about HTML chrome.
-. Pages convert with the attributes you registered.
+. Pages convert (renderers apply their own defaults — e.g. `icons: font` — plus any per-call options like `linkPrefix`).
 . A later rebuild with a different `plugins` config (serve) calls `dispose(host)` on the previous set.
 
 == Plugin host API

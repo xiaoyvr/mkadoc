@@ -58,8 +58,13 @@ architecture. It is a living list — items are checked off as they are fixed.
   not setext (`T\n===`). Fixed: `firstHeading` also matches setext h1
   (`=`) underlines (used for both `extractMeta` and the page `<title>`); a
   setext h2 (`---`) is still not a document title.
-- [ ] *Markdown `renderFragment` ignores `attributes` and `baseDir`* — fine for
+- [x] *Markdown `renderFragment` ignores `attributes` and `baseDir`* — fine for
   nav today, but inconsistent with the contract and the AsciiDoc renderer.
+  Fixed: the AsciiDoc-shaped `RenderInput.attributes` bag is gone entirely —
+  replaced by an explicit format-neutral `linkPrefix` field (nav's real need;
+  the asciidoc renderer maps it to `relfileprefix` internally). Markdown's
+  fragment path now accepts the full contract shape (`baseDir`/`linkPrefix`),
+  with its no-op documented.
 - [x] *Topbar scroll-swap only works for AsciiDoc pages.* `TOPBAR_JS` read
   `#header h1` for the document title; Markdown pages emit a bare `<h1>` with
   no `#header`, so the brand never swapped on scroll for Markdown. Fixed: the

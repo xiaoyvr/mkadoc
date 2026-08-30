@@ -106,7 +106,7 @@ export default function markdownRenderer(rawOptions = {}, host) {
      * @param {import('../plugin/contract.js').RenderInput} input
      * @returns {import('../plugin/contract.js').RenderOutput}
      */
-    render({ sourceText, absPath, attributes: _attributes }) {
+    render({ sourceText, absPath }) {
       const { frontmatter, body } = splitFrontmatter(sourceText)
       const md = createMarkdownIt(host, html)
       const tokens = md.parse(body, {})
@@ -127,8 +127,10 @@ export default function markdownRenderer(rawOptions = {}, host) {
      * @param {import('../plugin/contract.js').RenderInput} input
      * @returns {string}
      */
-    renderFragment({ sourceText }) {
+    renderFragment({ sourceText, baseDir: _baseDir, linkPrefix: _linkPrefix }) {
       const { body } = splitFrontmatter(sourceText)
+      // baseDir/linkPrefix: markdown has no includes and no fragment
+      // consumers yet (_nav.md doesn't exist) — accepted for contract shape.
       return createMarkdownIt(host, html).render(body)
     },
   }

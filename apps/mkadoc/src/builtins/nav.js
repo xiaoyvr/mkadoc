@@ -466,7 +466,7 @@ async function resolveSourceEntry(host, source) {
       sourceText: text,
       absPath: adocPath,
       baseDir: path.join(host.root, source.path),
-      attributes: { icons: 'font', relfileprefix: mountPrefix(source.mount) },
+      linkPrefix: mountPrefix(source.mount),
     })
     if (link) return { title: link.label, href: link.href }
   }
@@ -607,7 +607,7 @@ async function buildArticlesHtml(host) {
         sourceText,
         absPath: adocPath,
         baseDir: path.join(host.root, source.path),
-        attributes: { icons: 'font', relfileprefix: mountPrefix(source.mount) },
+        linkPrefix: mountPrefix(source.mount),
       })
     } else {
       const items = readNavYaml(host, source)

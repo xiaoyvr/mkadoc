@@ -54,7 +54,7 @@
  * @property {string} sourceText
  * @property {string} absPath       absolute source file path
  * @property {string} baseDir       absolute source dir
- * @property {Record<string, unknown>} [attributes] per-call renderer attributes (nav passes icon/relfileprefix hints for `_nav.adoc` fragments)
+ * @property {string} [linkPrefix] prefix for relative links in fragments (nav's `_nav.adoc` mounted at a non-root path)
  *
  * @typedef {object} RenderOutput
  * @property {string} html           article body (inside <body>, after chrome)

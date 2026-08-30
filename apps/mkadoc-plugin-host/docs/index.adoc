@@ -49,7 +49,7 @@ Returned plugin:
 |===
 | Field | Purpose
 | `name` | Short id, e.g. `nav`, `kroki-diagram`
-| `setup(host)` | Optional. Runs once after construction, **before** rebuild mode is decided. Register extensions, attributes, classifiers, asset prefixes here.
+| `setup(host)` | Optional. Runs once after construction, **before** rebuild mode is decided. Register extensions, classifiers, asset prefixes here.
 | `contributeChrome(host, ctx)` | Optional. Runs each build after mode is known (not called for `noop`). Emit CSS/JS/HTML. `ctx`: `{ mode, pages, paths }`.
 | `check(host)` | Optional. Used by `mkadoc check` only; keep it cheap.
 |===
