@@ -8,3 +8,4 @@ source's _theme/nav.css. Topbar overrides: first source's _theme/topbar.css.
 * xref:index.adoc[Overview]
 * xref:chrome-design.adoc[Site chrome design]
 * xref:plugins.adoc[Writing plugins]
+* xref:architecture-review.adoc[Architecture review]

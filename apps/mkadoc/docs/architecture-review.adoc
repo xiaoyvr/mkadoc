@@ -1,0 +1,145 @@
+= Architecture review (2025-08)
+
+Status: open — findings to address. Verdict: architecture is sound; the items
+below are edge-case and robustness concerns, not structural ones.
+
+Review basis: core `src/`, builtins, plugin machinery, `@mkadoc/plugin-host`
+contract package, Nix flake, docs, tests. State at review time: 121 tests /
+34 suites passing, biome lint clean, ~3.8k lines of JS in `src`.
+
+== Verdict
+
+A well-architected, disciplined static site generator. The core is small,
+renderer-agnostic, and the plugin/service model is coherent and well
+documented. The main risks are session-scoped module state, serve-mode
+incremental edge cases, and a few consistency gaps between declared
+conventions and their enforcement.
+
+== Strengths
+
+. *Clean layering.* Core ↔ plugins ↔ contract package is a proper seam. Core
+holds no markup concepts: it discovers pages via renderer extensions, owns the
+wrapper, and delegates conversion state to renderers. The `createHosts`
+pattern (paired plugin/build hosts over one state object) lets core and
+plugins share state without plugins seeing orchestration internals.
+. *Incremental rebuild model.* Build modes (`full | incremental | assets |
+noop`), a versioned `deps.json` dependency graph with reverse edges,
+`writeIfChanged`/`copyFileIfChanged` everywhere, a per-build meta cache
+(nav + sitemap share one parse per page), site-wide deps
+(`_nav.adoc`, `_assets/logo.svg`) that force every-page rebuilds only when
+needed, and a nav-label classifier that avoids full rebuilds on content-only
+edits. `_theme/*.css` changes deliberately degrade to asset-only rewrites.
+. *Validation discipline.* zod schemas for config, every plugin's options, and
+`_nav.yaml`; aggregated errors with paths; a `requires` hard-dependency check
+that lists *all* missing services; unknown `mkadoc:` locators rejected at
+config parse time.
+. *Security posture.* Path-traversal guards on site assets, renderer-copied
+assets, and the dev server's HTML resolver; HTML escaping on all injected
+values; plugin installs never run lifecycle scripts and skip dev deps.
+. *DX details.* SSE live reload, config hot-reload, `--open`, remote binding,
+watcher extensions derived from loaded renderers (core doesn't hardcode format
+lists), `check` command with per-plugin health output.
+. *Engineering hygiene.* Comments explain *why* (phase gate rationale,
+module-state caveats, cache lifetimes). Nix fileset keeps tests out of the
+installable package. CLI clears `SOURCE_DATE_EPOCH` for reproducibility.
+Tests execute the generated `TOPBAR_JS`/`NAV_JS` against DOM stubs.
+
+== Risks and concerns
+
+=== 1. Process-global session state (moderate)
+
+`src/build.js` (`prevDisposePlugins`), `src/builtins/shiki.js` (shared
+highlighter), and `src/builtins/nav.js` (classifier label caches) keep
+serve-session state at module scope. All are documented, and all are safe today
+because the CLI `build` is always forceFull and tests run sequentially. But
+this is the most fragile seam: concurrent builds in one process, parallel test
+files in one process, or any future non-forceFull CLI path silently corrupts
+incremental behavior. The `nav.js` comment admits this.
+
+*Fix direction:* an explicit session object, or at minimum a defensive guard.
+
+=== 2. Serve-mode incremental edge cases (moderate)
+
+. *Page deletion under serve* — `decideMode` classifies a deleted page as an
+"orphan partial" → `noop` → the stale HTML stays in `site/` (and stays in
+`deps.json`, since `noop` returns before `retainPages`/`pruneStaleHtml`) until
+some *other* change triggers a non-noop build.
+. *`_theme/*.css` for non-first sources* — `decideMode` treats it as
+assets-only (`cfg.sources.some(...)`), but theme overrides are only ever
+*read* from the first source (`theme.js`, `topbar.js`, `nav.js` all use
+`sources[0]`). Editing a second source's `_theme/theme.css` is a silent no-op.
+. *Config changes under serve are half-applied* — `reloadConfigIfNeeded` swaps
+the config and forces a full rebuild, but the source watchers and the dev
+server's root were created once from the *old* sources/output. Changing
+`sources:` or `output:` under serve rebuilds with new config yet
+watches/serves stale paths.
+
+*Fix direction:* prune stale HTML when the changed path was a previously-known
+page; align `decideMode`'s `_theme` check with the first-source-only
+convention (or honor `_theme/` for all sources); recreate watchers + dev
+server on config change, or document the limitation.
+
+=== 3. Untrusted-source assumption (moderate, conditional)
+
+The Asciidoctor include processor resolves `include::` targets with
+`path.resolve` and *reads* them regardless of project root; the `..` guard
+only prevents dependency *recording*. Combined with `safe: 'unsafe'`, this is
+fine for locally trusted docs but a real exfiltration/impact vector if mkadoc
+ever builds untrusted repositories in CI.
+
+*Fix direction:* containment check before `readFileSync` in the include
+processor.
+
+=== 4. Output-inside-source-tree livelock is timing-mitigated (minor)
+
+If `output:` lives inside a watched source (e.g. `docs/_site` — chokidar
+doesn't ignore `_` dirs, only dotfiles), rebuild writes fire the watcher, and
+the only protection is the `ignoreUntil = now + 250ms` window after each
+flush. Fragile for very fast builds.
+
+*Fix direction:* exclude the output dir from the watcher explicitly.
+
+== Minor nits
+
+. JSDoc drift in `sources.js` `pageToOutRel`: example says mount
+`/apps/mkadoc`, but `mountFromSourcePath` derives it verbatim as
+`/apps/mkadoc/docs`.
+. Schema/loader mismatch: config accepts registry/git/remote plugin locators
+(npa-validated) but the loader throws "not supported yet". Documented, but the
+config schema could reject them earlier for a better error.
+. Hardcoded Google Fonts `<link>` in `page.js` — every page hits Google at view
+time; offline/air-gapped deployments silently lose the intended typography.
+. Duplicated `escapeHtml` in `topbar.js` instead of importing `html-utils.js`.
+. Embedded JS strings (`NAV_JS`, `TOPBAR_JS`) are un-lintable/un-testable as
+code — mitigated by the DOM-stub tests, but a template-literal asset pattern
+would be cleaner.
+. Installer dependency surface: exact pins on `@npmcli/arborist`,
+`libnpmpack`, `pacote`, `npm-package-arg` are deliberate, but this
+npm-internal family is heavy for a docs tool and churns; worth periodically
+confirming upstream maintenance and considering whether `npm pack` + tar could
+replace `libnpmpack` (no deprecation flag at review time — verify before
+acting).
+
+== Recommendations (in order of value)
+
+. Fix the serve-mode deletion case (prune stale HTML on `noop` when the path
+was a previously-known page) and the non-first `_theme/` inconsistency (honor
+`_theme/` for all sources or make `decideMode` match the first-source-only
+convention).
+. Containment check in the include processor — reject `include::` targets
+resolving outside the project root.
+. Restart watchers/dev-server root on config change under serve, or document
+the limitation in `serve`'s help/README.
+. Refactor session state (highlighter, nav classifier, plugin disposal) into
+an explicit object with a documented lifetime, to unblock future concurrency.
+. Exclude the output dir from the watcher instead of relying on timing
+windows.
+
+== Bottom line
+
+The architecture is genuinely good — the plugin contract, service registry,
+and incremental-rebuild engine are designed with care and backed by a real
+test suite and honest documentation. The issues above are edge-case and
+robustness concerns rather than structural ones; items 1–3 in the
+recommendations are small, well-scoped fixes that would close the remaining
+correctness gaps in serve mode and untrusted-input handling.
