@@ -72,7 +72,6 @@ export async function build(cfg, opts = {}) {
       )
       await writeSiteIndex(cfg, buildHost)
       pruneStaleHtml(cfg, buildHost.rendererForPath)
-      cleanupArtifacts(cfg)
       break
     case 'incremental':
       console.log(`mkadoc: incremental ${pages.join(' ')}`)
@@ -206,20 +205,6 @@ function pruneStaleHtml(cfg, rendererForPath) {
       const norm = relToRoot(full, cfg.root)
       const rel = norm.slice(`${cfg.output}/`.length)
       if (!live.has(rel)) fs.rmSync(full)
-    },
-  })
-}
-
-function cleanupArtifacts(cfg) {
-  fs.rmSync(path.join(cfg.root, cfg.output, '.asciidoctor'), {
-    recursive: true,
-    force: true,
-  })
-  walkDir(path.join(cfg.root, cfg.output), {
-    onFile: (full, name) => {
-      if (/^diag-/.test(name) || name.endsWith('.cache')) {
-        fs.rmSync(full, { force: true })
-      }
     },
   })
 }

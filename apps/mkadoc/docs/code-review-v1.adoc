@@ -39,10 +39,11 @@ architecture. It is a living list — items are checked off as they are fixed.
   deterministic; no renderer shares an extension today, so no material impact
   on end users.
 - [x] *`sourceForPathname` is unused in production* — removed with the nav model.
-- [ ] *`listSourcePages` has an AsciiDoc fallback regex* (`/\.(?:adoc|asciidoc)$/`)
+- [x] *`listSourcePages` has an AsciiDoc fallback regex* (`/\.(?:adoc|asciidoc)$/`)
   used only when `rendererForPath` is omitted; every caller (build, decide-mode,
-  sitemap) passes it, and nav no longer uses it at all (auto-nav walks via
-  `fs.readdirSync`). The fallback is dead — could be removed.
+  sitemap) passes it. Fixed: `rendererForPath` is now required and the AsciiDoc
+  regex is gone — omission fails loudly instead of silently degrading to
+  AsciiDoc-only page discovery.
 
 == P3 — minor / dead code
 

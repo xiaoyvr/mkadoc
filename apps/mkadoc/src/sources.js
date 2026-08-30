@@ -109,7 +109,7 @@ export function pageToHref(source, pageRel) {
  * @param {{ rendererForPath: (p: string) => import('./plugin/contract.js').MkadocRenderer | null }} opts
  * @returns {{ page: string, source: MkadocSource }[]}
  */
-export function listSourcePages(root, sources, { rendererForPath } = {}) {
+export function listSourcePages(root, sources, { rendererForPath }) {
   const pages = []
   for (const source of sources) {
     walkDir(path.join(root, source.path), {
@@ -118,9 +118,7 @@ export function listSourcePages(root, sources, { rendererForPath } = {}) {
       onFile: (full, name) => {
         if (name.startsWith('_')) return
         const rel = relToRoot(full, root)
-        const ok = rendererForPath
-          ? Boolean(rendererForPath(rel))
-          : /\.(?:adoc|asciidoc)$/.test(name)
+        const ok = Boolean(rendererForPath(rel))
         if (ok) pages.push({ page: rel, source })
       },
     })
