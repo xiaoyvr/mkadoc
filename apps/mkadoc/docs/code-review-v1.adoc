@@ -47,9 +47,12 @@ architecture. It is a living list — items are checked off as they are fixed.
 
 == P3 — minor / dead code
 
-- [ ] *`extractBody` / `extractHeadMeta` use `indexOf('<body')` + a `<meta>`
-  regex* over the full standalone HTML. Brittle string surgery; a parser or a
-  well-tested splitter would be more robust.
+- [x] *`extractBody` / `extractHeadMeta` use `indexOf('<body')` + a `<meta>`
+  regex* over the full standalone HTML. Fixed: both now parse with
+  `node-html-parser` (promoted to a runtime dep) — body extraction via
+  `body.innerHTML`, head metas via structured attribute checks (the previous
+  `!== null` check was in fact buggy for absent attrs, dropping all renderer
+  metas).
 - [ ] *`assemblePage` emits plugin-supplied attribute names unsanitized* (values
   are escaped, names are not). Trusted-plugin context, low risk.
 - [ ] *`copyAssets` trusts renderer-returned relative paths*; core does not
@@ -72,10 +75,12 @@ architecture. It is a living list — items are checked off as they are fixed.
   `<body data-doc-title="…">` and `TOPBAR_JS` reads that — the swap timing is
   a pure scroll threshold, so chrome never parses renderer body markup (h1,
   h2, or no heading, any renderer).
-- [ ] *`extractFirstLink` (asciidoc) regexes over rendered inline HTML.*
+- [x] *`extractFirstLink` (asciidoc) regexes over rendered inline HTML.*
   `doc.findBy(...)` + `getText()` yields `<a href="...">label</a>`, which nav
-  parses with a regex — the same brittle string-surgery family as
-  `extractBody`/`extractHeadMeta`.
+  parsed with a regex. Fixed: the block text is parsed with `node-html-parser`
+  and the first `<a>` read structurally — href + text (entities decoded),
+  replacing `stripInlineTags`. Same parser family as `extractBody`/
+  `extractHeadMeta`.
 - [ ] *Auto-nav + site map resolve every page's title via `extractMeta` each
   build.* The auto-nav tree is cached per source within a build, but the site
   map is not; both read every page's metadata. Fine for small sites; worth a

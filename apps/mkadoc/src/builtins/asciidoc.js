@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs'
 import path from 'node:path'
 import { Extensions, load, SyntaxHighlighter, SyntaxHighlighterBase } from '@asciidoctor/core'
+import { parse } from 'node-html-parser'
 import { z } from 'zod'
 import { relToRoot } from '../fs-utils.js'
 import { parsePluginOptions } from '../plugin/options.js'
@@ -110,22 +111,24 @@ function registerServiceSyntaxHighlighter(host) {
 
 /** Extract everything between `<body ...>` and `</body>`. */
 function extractBody(html) {
-  const open = html.indexOf('<body')
-  const close = html.indexOf('</body>')
-  if (open === -1 || close === -1) return html
-  const gt = html.indexOf('>', open)
-  return html.slice(gt + 1, close)
+  const body = parse(html).querySelector('body')
+  return body ? body.innerHTML : html
 }
 
 /** Keep renderer-owned `<meta>` tags, dropping the ones core's template owns. */
 function extractHeadMeta(html) {
-  const headOpen = html.indexOf('<head')
-  const headClose = html.indexOf('</head>')
-  if (headOpen === -1 || headClose === -1) return ''
-  const head = html.slice(headOpen, headClose)
-  const metas = head.match(/<meta[^>]*>/g) || []
-  const owned = /charset=|http-equiv="X-UA-Compatible"|name="viewport"|name="generator"/
-  return metas.filter((m) => !owned.test(m)).join('\n')
+  const head = parse(html).querySelector('head')
+  if (!head) return ''
+  const owned = (m) =>
+    m.getAttribute('charset') != null ||
+    m.getAttribute('http-equiv') === 'X-UA-Compatible' ||
+    m.getAttribute('name') === 'viewport' ||
+    m.getAttribute('name') === 'generator'
+  return head
+    .querySelectorAll('meta')
+    .filter((m) => !owned(m))
+    .map((m) => m.outerHTML)
+    .join('\n')
 }
 
 function isExternalOrAbsoluteTarget(target) {
@@ -299,23 +302,12 @@ export default function asciidocRenderer(rawOptions = {}, host) {
         attributes: baseAttrs(linkPrefix),
       })
       for (const block of doc.findBy?.(() => true) || []) {
-        const text = String(block.getText?.() || '')
-        const m = /<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/.exec(text)
-        if (m) return { href: m[1], label: stripInlineTags(m[2]) }
+        const anchor = parse(String(block.getText?.() || '')).querySelector('a')
+        if (anchor) {
+          return { href: anchor.getAttribute('href') ?? '', label: anchor.text.trim() }
+        }
       }
       return null
     },
   }
-}
-
-/** Strip inline tags/entities from a label extracted from rendered inline text. */
-function stripInlineTags(text) {
-  return String(text)
-    .replace(/<[^>]*>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .trim()
 }

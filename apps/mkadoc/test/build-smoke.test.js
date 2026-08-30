@@ -96,6 +96,30 @@ describe('build smoke (no plugins)', () => {
     })
   })
 
+  it('keeps renderer-owned head meta tags (description survives assembly)', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:
+  - docs
+output: site
+`),
+        'docs/index.adoc': `= Smoke Index
+:description: A doc about smoke
+
+MARKER_INDEX_V1
+`,
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await build(cfg, { forceFull: true })
+        const html = read(root, 'site/docs/index.html')
+        assert.match(html, /<meta name="description" content="A doc about smoke">/)
+        // core-owned metas are not duplicated by the wrapper
+        assert.equal((html.match(/charset=/g) || []).length, 1)
+      },
+    )
+  })
+
   it('unknown non-page path alone forces a full rebuild', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.yaml', root)
