@@ -160,10 +160,14 @@ async function buildPages(cfg, host, pages, { concurrency, deps } = {}) {
  * @param {import('./config.js').MkadocConfig} cfg
  * @param {string[]} assets repo-relative file paths
  */
-function copyAssets(cfg, assets) {
+export function copyAssets(cfg, assets) {
   const outRoot = path.join(cfg.root, cfg.output)
   for (const rel of assets) {
-    const srcAbs = path.join(cfg.root, rel)
+    const srcAbs = path.resolve(cfg.root, rel)
+    if (srcAbs !== cfg.root && !srcAbs.startsWith(`${cfg.root}${path.sep}`)) {
+      console.warn(`mkadoc: referenced asset escapes the project root: ${rel}`)
+      continue
+    }
     if (!fs.existsSync(srcAbs) || !fs.statSync(srcAbs).isFile()) {
       console.warn(`mkadoc: referenced asset not found: ${rel}`)
       continue

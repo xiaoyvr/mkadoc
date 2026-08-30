@@ -53,10 +53,14 @@ architecture. It is a living list — items are checked off as they are fixed.
   `body.innerHTML`, head metas via structured attribute checks (the previous
   `!== null` check was in fact buggy for absent attrs, dropping all renderer
   metas).
-- [ ] *`assemblePage` emits plugin-supplied attribute names unsanitized* (values
-  are escaped, names are not). Trusted-plugin context, low risk.
-- [ ] *`copyAssets` trusts renderer-returned relative paths*; core does not
-  re-validate before `path.join(cfg.root, rel)`. Defense-in-depth would re-check.
+- [x] *`assemblePage` emits plugin-supplied attribute names unsanitized* (values
+  are escaped, names are not). Won't do — accepted: plugins are trusted code
+  and only plugins supply head links/scripts; defense-in-depth not worth the
+  code.
+- [x] *`copyAssets` trusts renderer-returned relative paths*; core does not
+  re-validate before `path.join(cfg.root, rel)`. Fixed: paths are resolved and
+  rejected when they escape the project root (warn + skip), defense-in-depth
+  behind the renderer-side `collectAssets` guard.
 - [x] *Markdown `extractMeta` title fallback reads only ATX headings* (`# T`),
   not setext (`T\n===`). Fixed: `firstHeading` also matches setext h1
   (`=`) underlines (used for both `extractMeta` and the page `<title>`); a
@@ -85,10 +89,11 @@ architecture. It is a living list — items are checked off as they are fixed.
   build.* The auto-nav tree is cached per source within a build, but the site
   map is not; both read every page's metadata. Fine for small sites; worth a
   cache/`writeIfChanged` pass for large ones.
-- [ ] *Nav label-staleness state is module-level, in-memory* (`navReferenced` /
-  `labelCache` / `autoNavCache`). It only persists across rebuilds inside one
-  `serve` process; a fresh process has no history (acceptable today because the
-  CLI `build` is always `forceFull`, but worth documenting).
+- [x] *Nav label-staleness state is module-level, in-memory* (`navReferenced` /
+  `labelCache` / `autoNavCache`). Won't do — accepted and unchanged: the
+  staleness memory only needs to survive rebuilds inside one `serve` process;
+  the CLI `build` is always `forceFull`, so a fresh process has no stale-label
+  risk.
 
 == Docs drift
 

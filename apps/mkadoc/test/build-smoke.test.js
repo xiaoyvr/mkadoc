@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { build } from '../src/build.js'
+import { build, copyAssets } from '../src/build.js'
 import { loadConfig } from '../src/config.js'
 import { smokeFixture, withTempProject, yamlConfig } from './helpers/project.js'
 
@@ -116,6 +116,49 @@ MARKER_INDEX_V1
         assert.match(html, /<meta name="description" content="A doc about smoke">/)
         // core-owned metas are not duplicated by the wrapper
         assert.equal((html.match(/charset=/g) || []).length, 1)
+      },
+    )
+  })
+
+  it('rejects renderer asset paths that escape the project root', async () => {
+    await withTempProject(
+      { 'docs/x.png': 'X', 'safe.png': 'OK' },
+      async (root) => {
+        const cfg = { root, output: 'site' }
+        const warnings = []
+        const originalWarn = console.warn
+        console.warn = (msg) => warnings.push(String(msg))
+        try {
+          copyAssets(cfg, ['docs/x.png', '../../outside/evil.png', '/abs/evil.png'])
+        } finally {
+          console.warn = originalWarn
+        }
+        assert.ok(fs.existsSync(path.join(root, 'site/docs/x.png')), 'in-root asset copied')
+        assert.equal(
+          warnings.filter((w) => /escapes the project root/.test(w)).length,
+          2,
+          'both escaping paths are warned and skipped',
+        )
+      },
+    )
+  })
+
+  it('renders admonition icons as font classes by default (icons: font)', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:
+  - docs
+output: site
+`),
+        'docs/index.adoc': `= Home
+
+NOTE: A note.
+`,
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await build(cfg, { forceFull: true })
+        assert.match(read(root, 'site/docs/index.html'), /<i class="fa icon-note"/)
       },
     )
   })
