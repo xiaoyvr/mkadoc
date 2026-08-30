@@ -5,6 +5,7 @@ import { decideMode } from './decide-mode.js'
 import { loadDependencyGraph } from './deps.js'
 import { copyFileIfChanged, relToRoot, walkDir, writeIfChanged } from './fs-utils.js'
 import { defaultPoolConcurrency, mapPool } from './map-pool.js'
+import { resetPageMetaCache } from './meta-cache.js'
 import { assemblePage } from './page.js'
 import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
@@ -22,6 +23,8 @@ let prevPluginSignature = null
 let prevDisposePlugins = null
 
 export async function build(cfg, opts = {}) {
+  resetPageMetaCache()
+
   if (opts.clean) {
     fs.rmSync(path.join(cfg.root, cfg.output), { recursive: true, force: true })
     fs.rmSync(path.join(cfg.root, CACHE_DIR), { recursive: true, force: true })

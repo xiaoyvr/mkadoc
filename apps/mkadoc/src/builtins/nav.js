@@ -56,27 +56,20 @@ const NavItemSchema = z
 const NavFileSchema = z.array(NavItemSchema).min(1)
 
 // ---------------------------------------------------------------------------
-// Nav-model state (module-level, persists across `serve` rebuilds) — used by
-// the async classifier to detect `:nav_label:`/title changes on nav-referenced
-// pages without forcing a full rebuild on content-only edits.
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Label-staleness state is intentionally module-level: it is serve-session
-// state that must outlive the per-build plugin instances (the staleness
-// classifier compares against the previous build's labels). Safe today because
-// the CLI `build` is always forceFull, so this classifier is only consulted
-// under `serve`, where the caches are warmed by the initial build's chrome
-// pass. A fresh process has no history — if a non-forceFull CLI path is ever
-// added, this needs revisiting.
+// Nav-model state (module-level) — used by the async classifier to detect
+// `:nav_label:`/title changes on nav-referenced pages without forcing a full
+// rebuild on content-only edits. It is serve-session state that must outlive
+// the per-build plugin instances (the classifier compares against the previous
+// build's labels). Safe today because the CLI `build` is always forceFull, so
+// this classifier is only consulted under `serve`, where the caches are warmed
+// by the initial build's chrome pass. A fresh process has no history — if a
+// non-forceFull CLI path is ever added, this needs revisiting.
 // ---------------------------------------------------------------------------
 
 /** @type {Set<string>} repo-relative pages whose label feeds the nav */
 const navReferenced = new Set()
 /** @type {Map<string, string>} repo-relative page → last resolved label */
 const labelCache = new Map()
-/** @type {Map<string, object>} source.path → auto-nav root, valid for one build */
-const autoNavCache = new Map()
 const CSS_HREF = '/styles/nav.css'
 const JS_HREF = '/styles/nav.js'
 
@@ -307,16 +300,6 @@ async function buildFolder(host, source, dirRel) {
   return { label, href, rel, children }
 }
 
-/** Build (or fetch the cached) auto-nav root for a source. */
-async function getAutoNavRoot(host, source) {
-  let root = autoNavCache.get(source.path)
-  if (!root) {
-    root = await buildFolder(host, source, source.path)
-    autoNavCache.set(source.path, root)
-  }
-  return root
-}
-
 function renderAutoNavNode(node) {
   const linkHtml = node.href
     ? `<a href="${escapeHtmlAttr(node.href)}">${escapeHtml(node.label)}</a>`
@@ -330,7 +313,7 @@ function renderAutoNavNode(node) {
 
 /** Convention-based sidebar: the source's own page first, then its tree. */
 async function autoNavHtml(host, source) {
-  const root = await getAutoNavRoot(host, source)
+  const root = await buildFolder(host, source, source.path)
   const items = []
   if (root.href) {
     items.push(
@@ -486,7 +469,7 @@ async function resolveSourceEntry(host, source) {
     return resolveYamlItemEntry(items[0], host, source)
   }
 
-  const root = await getAutoNavRoot(host, source)
+  const root = await buildFolder(host, source, source.path)
   return { title: root.label, href: root.href }
 }
 
@@ -513,7 +496,7 @@ async function collectNavReferenced(host, source) {
   }
 
   // Auto-nav: every page in the convention tree feeds a label.
-  const root = await getAutoNavRoot(host, source)
+  const root = await buildFolder(host, source, source.path)
   await collectAutoNavRefs(host, root)
 }
 
@@ -662,8 +645,6 @@ export default function navPlugin(rawOptions = {}) {
 
     async contributeChrome(host, { mode }) {
       if (mode === 'assets') return
-
-      autoNavCache.clear()
 
       const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
       const jsAsset = resolveSiteAsset(host.root, host.config.output, JS_HREF)

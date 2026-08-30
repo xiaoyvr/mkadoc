@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { pageMeta } from '../src/meta-cache.js'
-import { sleep, withTempProject } from './helpers/project.js'
+import { pageMeta, resetPageMetaCache } from '../src/meta-cache.js'
+import { withTempProject } from './helpers/project.js'
 
-describe('pageMeta cache', () => {
-  it('memoizes by path + mtime: one parse per unchanged file', async () => {
+describe('pageMeta cache (per build)', () => {
+  it('memoizes per path: one parse per page within a build', async () => {
     await withTempProject({ 'docs/a.adoc': '= A\n' }, async (root) => {
       const abs = path.join(root, 'docs/a.adoc')
       let calls = 0
@@ -19,27 +18,28 @@ describe('pageMeta cache', () => {
 
       const first = await pageMeta(abs, renderer)
       const second = await pageMeta(abs, renderer)
-      assert.equal(calls, 1, 'unchanged file parses once')
+      assert.equal(calls, 1, 'same build parses once')
       assert.deepEqual(first, second)
       assert.deepEqual(first, { title: 'A', navLabel: undefined })
     })
   })
 
-  it('invalidates when the file changes', async () => {
+  it('resetPageMetaCache clears between builds', async () => {
     await withTempProject({ 'docs/a.adoc': '= A\n' }, async (root) => {
       const abs = path.join(root, 'docs/a.adoc')
-      let title = 'A'
+      let calls = 0
       const renderer = {
         async extractMeta() {
-          return { title, navLabel: undefined }
+          calls += 1
+          return { title: 'A', navLabel: undefined }
         },
       }
 
-      assert.equal((await pageMeta(abs, renderer)).title, 'A')
-      title = 'B'
-      fs.writeFileSync(abs, '= B\n')
-      await sleep(20) // mtime granularity
-      assert.equal((await pageMeta(abs, renderer)).title, 'B', 'edited file re-parses')
+      await pageMeta(abs, renderer)
+      await pageMeta(abs, renderer)
+      resetPageMetaCache()
+      await pageMeta(abs, renderer)
+      assert.equal(calls, 2, 'a fresh build re-parses')
     })
   })
 

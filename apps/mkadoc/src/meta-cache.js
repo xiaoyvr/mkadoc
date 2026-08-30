@@ -1,14 +1,17 @@
 import fs from 'node:fs'
 
 /**
- * Session-scoped page-metadata cache (`extractMeta` results keyed by
- * path + mtime). Nav and the site map both resolve every page's title/label
- * on each build; on large sites, unchanged pages are re-parsed once instead of
- * on every pass. mtime invalidation makes staleness impossible; the size cap
- * bounds the map over long `serve` sessions.
+ * Per-build page-metadata cache (`extractMeta` results keyed by path). Nav and
+ * the site map both resolve every page's title/label during one build; the
+ * cache makes them share a single parse per page. Cleared at the start of each
+ * build (`resetPageMetaCache`) — no state is retained across builds or
+ * processes.
  */
 const cache = new Map()
-const MAX_ENTRIES = 5000
+
+export function resetPageMetaCache() {
+  cache.clear()
+}
 
 /**
  * @param {string} absPath
@@ -16,8 +19,7 @@ const MAX_ENTRIES = 5000
  * @returns {Promise<{ title: string, navLabel?: string }>}
  */
 export async function pageMeta(absPath, renderer) {
-  const key = `${absPath}\0${fs.statSync(absPath).mtimeMs}`
-  const hit = cache.get(key)
+  const hit = cache.get(absPath)
   if (hit) return hit
   const text = fs.readFileSync(absPath, 'utf8')
   const meta = await renderer.extractMeta(text, absPath)
@@ -25,7 +27,6 @@ export async function pageMeta(absPath, renderer) {
     title: String(meta.title ?? '').trim(),
     navLabel: String(meta.navLabel ?? '').trim() || undefined,
   }
-  if (cache.size >= MAX_ENTRIES) cache.clear()
-  cache.set(key, result)
+  cache.set(absPath, result)
   return result
 }
