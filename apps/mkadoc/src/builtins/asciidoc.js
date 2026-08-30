@@ -218,7 +218,9 @@ export default function asciidocRenderer(rawOptions = {}, host) {
      * @returns {Promise<import('../plugin/contract.js').RenderOutput>}
      */
     async render({ sourceText, absPath, baseDir, attributes }) {
-      let attrs = { ...attributes }
+      // Icons default: the bundled theme ships Font Awesome glyph rules, so
+      // admonition/icon markup renders as font classes on every conversion.
+      let attrs = { icons: 'font', ...attributes }
       if (host.getService('syntax-highlight')) {
         attrs['source-highlighter'] = 'mkadoc-syntax'
       }
@@ -261,7 +263,7 @@ export default function asciidocRenderer(rawOptions = {}, host) {
      * @returns {Promise<string>}
      */
     async renderFragment({ sourceText, baseDir, attributes }) {
-      let attrs = { ...attributes }
+      let attrs = { icons: 'font', ...attributes }
       if (host.getService('syntax-highlight')) {
         attrs['source-highlighter'] = 'mkadoc-syntax'
       }

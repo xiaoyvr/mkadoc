@@ -17,13 +17,11 @@ describe('createTestHost', () => {
 
   it('records hook calls into _test', () => {
     const host = createTestHost()
-    host.addAttributes({ icons: 'font' })
     host.registerSiteWideDep('docs/_nav.adoc')
     host.registerAssetPrefix('site/styles/')
     host.contributeChromeBody('<aside>hi</aside>')
     host.contributeHead({ links: [{ rel: 'stylesheet', href: '/x.css' }] })
 
-    assert.deepEqual(host._test.attributes, { icons: 'font' })
     assert.deepEqual(host._test.siteWideDeps, ['docs/_nav.adoc'])
     assert.deepEqual(host._test.assetPrefixes, ['site/styles/'])
     assert.deepEqual(host._test.chromeBody, ['<aside>hi</aside>'])

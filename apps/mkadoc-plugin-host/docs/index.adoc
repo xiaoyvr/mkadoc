@@ -72,11 +72,6 @@ Every hook receives the same host object.
   dependencies** (single shared instance). Use this for shared libraries instead
   of declaring them as plugin deps: `const { z } = await host.import('zod')`.
   Only specifiers mkadoc itself depends on are resolvable.
-`host.addAttributes(attrs)`:: Merge document attributes applied on every convert
-  (e.g. `source-highlighter`, `kroki-server-url`, `icons`).
-
-=== Head assets
-
 `host.contributeHead({ links?, scripts? })`:: Queue `<link>` / `<script>` tags
   that core injects into every page's `<head>`.
   * `links` — objects like `{ rel: 'stylesheet', href: '/styles/my.css' }`
@@ -125,7 +120,6 @@ import { z } from 'zod'
 
 const host = createTestHost({ imports: { zod: { z } } })
 
-// host._test.attributes        — merged via addAttributes
 // host._test.extensions        — registered via registerExtension
 // host._test.headLinks         — queued via contributeHead
 // host._test.chromeBody        — appended via contributeChromeBody

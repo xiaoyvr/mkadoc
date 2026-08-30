@@ -3,7 +3,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import { loadConfig } from '../src/config.js'
-import { parseProjectConfig } from '../src/config-schema.js'
 import { createHosts } from '../src/plugin/host.js'
 import { installLocalPlugin } from '../src/plugin/installer.js'
 import { loadPlugins } from '../src/plugin/load.js'
@@ -24,9 +23,6 @@ const FIXTURE_PLUGIN = {
   'plugins/my-plugin/index.js': `export default function myPlugin(rawOptions = {}, host) {
   return {
     name: 'my',
-    async setup(host) {
-      host.addAttributes({ 'my-flag': 'true' })
-    },
     async contributeChrome(host, { mode }) {
       if (mode === 'assets') return
       host.contributeChromeBody('<aside id="mkadoc-my">my</aside>')
@@ -59,8 +55,6 @@ describe('external plugins (local folder protocol)', () => {
       assert.ok(entry)
       assert.equal(entry.plugin.name, 'my')
       assert.equal(entry.locator, 'file:./plugins/my-plugin')
-      // setup ran
-      assert.equal(build.attributes['my-flag'], 'true')
       // contributeChrome ran
       await runner.contributeChrome({ mode: 'full', pages: [] })
       assert.deepEqual(build.chromeBody, ['<aside id="mkadoc-my">my</aside>'])
@@ -153,39 +147,6 @@ describe('external plugins (local folder protocol)', () => {
       const { plugin: host } = createHosts(cfg)
       await assert.rejects(() => loadPlugins(cfg.plugins, host), /not supported yet.*local folder/)
     })
-  })
-
-  it('schema accepts mkadoc builtins and file specs, rejects unknown builtins and bad locators', () => {
-    const ok = parseProjectConfig({
-      sources: ['docs'],
-      site: { brand: 'Docs' },
-      plugins: {
-        'mkadoc:nav': {},
-        'file:./plugins/x': {},
-        './plugins/y': {},
-      },
-    })
-    assert.deepEqual(ok.plugins['mkadoc:nav'], {})
-    assert.ok(ok.plugins['file:./plugins/x'])
-
-    assert.throws(
-      () =>
-        parseProjectConfig({
-          sources: ['docs'],
-          site: { brand: 'Docs' },
-          plugins: { 'mkadoc:nope': {} },
-        }),
-      /Unknown builtin plugin/,
-    )
-    assert.throws(
-      () =>
-        parseProjectConfig({
-          sources: ['docs'],
-          site: { brand: 'Docs' },
-          plugins: { 'not a locator!!': {} },
-        }),
-      /Invalid plugin locator/,
-    )
   })
 
   it('works end to end through loadConfig with a file: plugin', async () => {

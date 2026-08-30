@@ -127,7 +127,6 @@ async function buildPages(cfg, host, pages, { concurrency, deps } = {}) {
         sourceText: text,
         absPath,
         baseDir,
-        attributes: host.attributes,
       })
       const html = assemblePage({
         title: output.title || '',

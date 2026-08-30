@@ -13,10 +13,12 @@ architecture. It is a living list — items are checked off as they are fixed.
 
 == P2 — design smells
 
-- [ ] *`addAttributes` / `attributes` is a leaky, AsciiDoc-shaped abstraction
+- [x] *`addAttributes` / `attributes` is a leaky, AsciiDoc-shaped abstraction
   in core.* Only the AsciiDoc renderer interprets it; Markdown ignores it.
-  `mkadoc:nav` sets `icons: font` (an AsciiDoc attribute) globally. Re-examine
-  when the next renderer lands.
+  `mkadoc:nav` set `icons: font` (an AsciiDoc attribute) globally. Fixed: the
+  `addAttributes` / `attributes` channel is removed entirely — `icons: font`
+  is now the AsciiDoc renderer's own conversion default (the bundled theme
+  ships the Font Awesome glyph rules it pairs with).
 - [x] *Module-level `hostRef` singleton in `src/builtins/asciidoc.js`.* Set in
   the factory, read by `render()` and the module-level
   `ServiceSyntaxHighlighter`. Fixed: the highlighter is now registered

@@ -11,7 +11,6 @@ import path from 'node:path'
  */
 export function createTestHost({ config = {}, imports = {}, root = process.cwd() } = {}) {
   const state = {
-    attributes: {},
     headLinks: [],
     headScripts: [],
     chromeBody: [],
@@ -57,10 +56,6 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
 
     getService(name) {
       return state.services.get(name)
-    },
-
-    addAttributes(attrs) {
-      Object.assign(state.attributes, attrs)
     },
 
     contributeHead({ links = [], scripts = [] } = {}) {

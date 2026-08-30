@@ -27,7 +27,6 @@
  * @typedef {object} MkadocPluginHost
  * @property {MkadocConfig} config
  * @property {string} root
- * @property {(attrs: Record<string, unknown>) => void} addAttributes
  * @property {(contrib?: { links?: object[], scripts?: object[] }) => void} contributeHead
  * @property {(html: string) => void} contributeChromeBody append below-topbar chrome HTML
  * @property {(fn: (p: string) => 'full' | null | undefined) => void} registerClassifier
@@ -44,7 +43,6 @@
  * @typedef {object} MkadocBuildHost
  * @property {MkadocConfig} config
  * @property {string} root
- * @property {Record<string, unknown>} attributes
  * @property {string[]} assetPrefixes
  * @property {string[]} chromeBody
  * @property {MkadocRenderer[]} renderers
@@ -56,7 +54,7 @@
  * @property {string} sourceText
  * @property {string} absPath       absolute source file path
  * @property {string} baseDir       absolute source dir
- * @property {Record<string, unknown>} attributes merged plugin attributes
+ * @property {Record<string, unknown>} [attributes] per-call renderer attributes (nav passes icon/relfileprefix hints for `_nav.adoc` fragments)
  *
  * @typedef {object} RenderOutput
  * @property {string} html           article body (inside <body>, after chrome)

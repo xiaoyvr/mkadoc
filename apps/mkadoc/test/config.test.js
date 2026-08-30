@@ -189,7 +189,16 @@ describe('parseProjectConfig (zod schema)', () => {
           site: { brand: 'Docs' },
           plugins: { 'mkadoc:nope': {} },
         }),
-      /invalid config:.*plugins/,
+      /Unknown builtin plugin/,
+    )
+    assert.throws(
+      () =>
+        parseProjectConfig({
+          sources: ['docs'],
+          site: { brand: 'Docs' },
+          plugins: { 'not a locator!!': {} },
+        }),
+      /Invalid plugin locator/,
     )
   })
 
@@ -202,12 +211,14 @@ describe('parseProjectConfig (zod schema)', () => {
         'mkadoc:markdown': { html: true },
         'mkadoc:nav': {},
         'file:./plugins/x': { server_url: 'http://127.0.0.1:8080' },
+        './plugins/y': {},
       },
     })
     assert.deepEqual(cfg.plugins['mkadoc:asciidoc'], {})
     assert.equal(cfg.plugins['mkadoc:markdown'].html, true)
     assert.deepEqual(cfg.plugins['mkadoc:nav'], {})
     assert.deepEqual(cfg.plugins['file:./plugins/x'], { server_url: 'http://127.0.0.1:8080' })
+    assert.deepEqual(cfg.plugins['./plugins/y'], {})
   })
 
   it('loadConfig surfaces schema errors from YAML configs', async () => {

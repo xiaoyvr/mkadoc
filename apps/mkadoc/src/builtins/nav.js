@@ -640,7 +640,6 @@ export default function navPlugin(rawOptions = {}) {
         host.registerSiteWideDep(`${source.path}/_nav.adoc`)
         host.registerSiteWideDep(`${source.path}/_nav.yaml`)
       }
-      host.addAttributes({ icons: 'font' })
 
       // A nav-referenced page forces a full rebuild only when its label
       // (`:nav_label:`/title) actually changed — not on content-only edits.

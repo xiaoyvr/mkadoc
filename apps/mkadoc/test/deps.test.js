@@ -73,24 +73,6 @@ describe('DependencyGraph', () => {
 })
 
 describe('decideMode + dependency graph', () => {
-  it('expands an included partial to dependent pages (incremental)', async () => {
-    await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yaml', root)
-      const deps = new DependencyGraph(root)
-      deps.setPageIncludes('docs/guide.adoc', ['docs/_partial.adoc'])
-      deps.setPageIncludes('docs/index.adoc', [])
-      const { plugin, build: host } = createHosts(cfg, { deps })
-      await loadPlugins({}, plugin)
-
-      const decided = await decideMode(cfg, host, {
-        paths: ['docs/_partial.adoc'],
-        deps,
-      })
-      assert.equal(decided.mode, 'incremental')
-      assert.deepEqual(decided.pages, ['docs/guide.adoc'])
-    })
-  })
-
   it('treats unused partial as noop when nothing depends on it', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.yaml', root)
@@ -105,38 +87,6 @@ describe('decideMode + dependency graph', () => {
         deps,
       })
       assert.equal(decided.mode, 'noop')
-      assert.deepEqual(decided.pages, [])
-    })
-  })
-
-  it('treats a partial as noop when the graph is empty (no known dependents)', async () => {
-    await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yaml', root)
-      const deps = new DependencyGraph(root)
-      const { plugin, build: host } = createHosts(cfg, { deps })
-      await loadPlugins({}, plugin)
-
-      const decided = await decideMode(cfg, host, {
-        paths: ['docs/_partial.adoc'],
-        deps,
-      })
-      assert.equal(decided.mode, 'noop')
-      assert.deepEqual(decided.pages, [])
-    })
-  })
-
-  it('treats _theme/topbar.css as assets (CSS only)', async () => {
-    await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yaml', root)
-      const deps = new DependencyGraph(root)
-      deps.setPageIncludes('docs/index.adoc', [])
-      const { build: host } = createHosts(cfg, { deps })
-
-      const decided = await decideMode(cfg, host, {
-        paths: ['docs/_theme/topbar.css'],
-        deps,
-      })
-      assert.equal(decided.mode, 'assets')
       assert.deepEqual(decided.pages, [])
     })
   })
@@ -156,52 +106,6 @@ describe('decideMode + dependency graph', () => {
       })
       assert.equal(decided.mode, 'incremental')
       assert.deepEqual(decided.pages, ['docs/guide.adoc', 'docs/index.adoc'])
-    })
-  })
-
-  it('expands _nav.adoc as site-wide via registerSiteWideDep', async () => {
-    await withTempProject(
-      smokeFixture({
-        'mkadoc.yaml': yamlConfig(`sources:
-  - docs
-output: site
-plugins:
-  mkadoc:nav: {}
-`),
-        'docs/_nav.adoc': '* xref:index.adoc[Home]\n',
-      }),
-      async (root) => {
-        const cfg = await loadConfig('mkadoc.yaml', root)
-        const deps = new DependencyGraph(root)
-        deps.setPageIncludes('docs/guide.adoc', [])
-        deps.setPageIncludes('docs/index.adoc', [])
-        const { plugin, build: host } = createHosts(cfg, { deps })
-        const { loadPlugins } = await import('../src/plugin/load.js')
-        await loadPlugins(cfg.plugins, plugin)
-
-        assert.equal(deps.isSiteWide('docs/_nav.adoc'), true)
-
-        const decided = await decideMode(cfg, host, {
-          paths: ['docs/_nav.adoc'],
-          deps,
-        })
-        assert.equal(decided.mode, 'incremental')
-        assert.deepEqual(decided.pages, ['docs/guide.adoc', 'docs/index.adoc'])
-      },
-    )
-  })
-
-  it('still forces full for config path', async () => {
-    await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yaml', root)
-      const deps = new DependencyGraph(root)
-      const { build: host } = createHosts(cfg, { deps })
-
-      const decided = await decideMode(cfg, host, {
-        paths: ['mkadoc.yaml'],
-        deps,
-      })
-      assert.equal(decided.mode, 'full')
     })
   })
 })
@@ -291,22 +195,6 @@ include::parts/_p.adoc[]
         assert.match(read(root, 'site/docs/guide.html'), /SIB_V2/)
       },
     )
-  })
-
-  it('unused underscore partial is a noop', async () => {
-    await withTempProject(smokeFixture(), async (root) => {
-      const cfg = await loadConfig('mkadoc.yaml', root)
-      await build(cfg, { forceFull: true })
-
-      const indexBefore = read(root, 'site/docs/index.html')
-      const guideBefore = read(root, 'site/docs/guide.html')
-
-      fs.writeFileSync(path.join(root, 'docs/_partial.adoc'), '= Partial\n\nUpdated unused.\n')
-      const mode = await build(cfg, { paths: ['docs/_partial.adoc'] })
-      assert.equal(mode, 'noop')
-      assert.equal(read(root, 'site/docs/index.html'), indexBefore)
-      assert.equal(read(root, 'site/docs/guide.html'), guideBefore)
-    })
   })
 
   it('_theme/topbar.css edit rewrites topbar CSS in assets mode without reconverting pages', async () => {

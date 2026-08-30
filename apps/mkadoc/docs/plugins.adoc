@@ -20,7 +20,6 @@ Use the builtins under `src/builtins/` as reference implementations, and
 | Extension point | How
 
 | Rendering a markup format | A **renderer** plugin (`kind: 'renderer'`) with `extensions`, `extractMeta`, `render`, `renderFragment`, `extractFirstLink` (see <<Renderers>>)
-| Renderer-specific document attributes | `addAttributes` in `setup` (e.g. `icons`, `source-highlighter` — consumed by the AsciiDoc renderer; other renderers ignore them)
 | Cross-format capabilities | `provideService(name, service)` / `getService(name)` (see <<Services>>)
 | Generated CSS / JS on every page | Write files under `host.config.output`, then `contributeHead({ links, scripts })`
 | UI below the site topbar | `contributeChromeBody(html)` — HTML appended below the topbar, in plugin load order
@@ -154,13 +153,6 @@ Use this for shared libraries instead of declaring them as plugin deps:
 `const { z } = await host.import('zod')`. Anchored at mkadoc, so plugins never ship
 duplicate copies of shared stateful/stateless libs. Only imports that mkadoc itself
 depends on are resolvable.
-
-=== Document attributes
-
-`host.addAttributes(attrs)`::
-Merge document attributes applied on every convert (e.g. `source-highlighter`,
-`kroki-server-url`, `icons`). These are consumed by the AsciiDoc renderer;
-non-AsciiDoc renderers ignore them.
 
 === Head assets
 
@@ -297,7 +289,7 @@ export default async function myPlugin(raw = {}, host) {
     name: 'my',
 
     async setup(host) {
-      host.addAttributes({ 'my-flag': true })
+      host.provideService('my-flag', { value: true })
       host.registerSiteWideDep('docs/_my.adoc')
      // or, for true full rebuilds only:
      // host.registerClassifier((p) => (p.endsWith('/_my.adoc') ? 'full' : null))

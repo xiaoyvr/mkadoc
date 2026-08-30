@@ -15,7 +15,6 @@ function createHostState(cfg, deps = null) {
     deps,
     /** Plugin lifecycle phase — gates `getService` (see `createPluginHost`). */
     phase: 'loading',
-    attributes: {},
     headLinks: [],
     headScripts: [],
     classifiers: [],
@@ -100,10 +99,6 @@ function createPluginHost(state) {
       state.phase = phase
     },
 
-    addAttributes(attrs) {
-      Object.assign(state.attributes, attrs)
-    },
-
     contributeHead({ links = [], scripts = [] } = {}) {
       state.headLinks.push(...links)
       state.headScripts.push(...scripts)
@@ -183,9 +178,6 @@ function createBuildHost(state) {
     },
     get root() {
       return cfg.root
-    },
-    get attributes() {
-      return state.attributes
     },
     get headLinks() {
       return state.headLinks

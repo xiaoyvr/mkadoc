@@ -42,6 +42,7 @@ describe('shiki syntax-highlight service', () => {
       const css1 = fs.readFileSync(path.join(root, 'site/styles/shiki.css'), 'utf8')
       const html1 = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
       assert.ok(html1.querySelector('.shiki'))
+      assert.ok(html1.querySelector('link[href="/styles/shiki.css"]'))
 
       fs.writeFileSync(
         path.join(root, 'mkadoc.yaml'),
