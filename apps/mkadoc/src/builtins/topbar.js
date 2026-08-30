@@ -26,7 +26,7 @@ const TOPBAR_CSS = fs
  * scrolling away gets its own bottom line. Self-contained — reads core/nav
  * DOM via class/id selectors only.
  */
-const TOPBAR_JS = `(function () {
+export const TOPBAR_JS = `(function () {
   var root = document.documentElement;
   var topbar = document.getElementById("mkadoc-topbar");
   var sourcesNav = document.querySelector(".mkadoc-sources");
