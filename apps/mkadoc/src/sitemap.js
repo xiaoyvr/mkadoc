@@ -1,7 +1,7 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import { writeIfChanged } from './fs-utils.js'
 import { escapeHtml, escapeHtmlAttr } from './html-utils.js'
+import { pageMeta } from './meta-cache.js'
 import { assemblePage } from './page.js'
 import { listSourcePages, pageToHref } from './sources.js'
 
@@ -28,7 +28,7 @@ export async function writeSiteIndex(cfg, host) {
       let title = path.basename(page, path.extname(page))
       if (renderer) {
         try {
-          const meta = await renderer.extractMeta(fs.readFileSync(abs, 'utf8'), abs)
+          const meta = await pageMeta(abs, renderer)
           if (meta.title) title = meta.title
         } catch {
           // unreadable page — keep the basename fallback

@@ -85,10 +85,11 @@ architecture. It is a living list — items are checked off as they are fixed.
   and the first `<a>` read structurally — href + text (entities decoded),
   replacing `stripInlineTags`. Same parser family as `extractBody`/
   `extractHeadMeta`.
-- [ ] *Auto-nav + site map resolve every page's title via `extractMeta` each
-  build.* The auto-nav tree is cached per source within a build, but the site
-  map is not; both read every page's metadata. Fine for small sites; worth a
-  cache/`writeIfChanged` pass for large ones.
+- [x] *Auto-nav + site map resolve every page's title via `extractMeta` each
+  build.* Fixed: a session-scoped `pageMeta` cache (`src/meta-cache.js`) keys
+  `extractMeta` results by path + mtime — nav's `metaLabelFor` and the site
+  map share it, so unchanged pages parse once instead of on every pass
+  (mtime invalidation, size-capped for long `serve` sessions).
 - [x] *Nav label-staleness state is module-level, in-memory* (`navReferenced` /
   `labelCache` / `autoNavCache`). Won't do — accepted and unchanged: the
   staleness memory only needs to survive rebuilds inside one `serve` process;

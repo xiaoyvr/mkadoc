@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { formatConfigZodError } from '../config-schema.js'
 import { relToRoot, resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
 import { escapeHtml, escapeHtmlAttr } from '../html-utils.js'
+import { pageMeta } from '../meta-cache.js'
 import { parsePluginOptions } from '../plugin/options.js'
 import { mountPrefix, pageToHref } from '../sources.js'
 import { readThemeOverride, themeDirForSource } from '../theme.js'
@@ -387,8 +388,7 @@ function findPageFile(host, source, page) {
  * @param {import('../plugin/contract.js').MkadocRenderer} renderer
  */
 async function metaLabelFor(absPath, renderer) {
-  const text = fs.readFileSync(absPath, 'utf8')
-  const meta = await renderer.extractMeta(text, absPath)
+  const meta = await pageMeta(absPath, renderer)
   return String(meta.navLabel || meta.title || '').trim()
 }
 

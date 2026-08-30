@@ -121,26 +121,23 @@ MARKER_INDEX_V1
   })
 
   it('rejects renderer asset paths that escape the project root', async () => {
-    await withTempProject(
-      { 'docs/x.png': 'X', 'safe.png': 'OK' },
-      async (root) => {
-        const cfg = { root, output: 'site' }
-        const warnings = []
-        const originalWarn = console.warn
-        console.warn = (msg) => warnings.push(String(msg))
-        try {
-          copyAssets(cfg, ['docs/x.png', '../../outside/evil.png', '/abs/evil.png'])
-        } finally {
-          console.warn = originalWarn
-        }
-        assert.ok(fs.existsSync(path.join(root, 'site/docs/x.png')), 'in-root asset copied')
-        assert.equal(
-          warnings.filter((w) => /escapes the project root/.test(w)).length,
-          2,
-          'both escaping paths are warned and skipped',
-        )
-      },
-    )
+    await withTempProject({ 'docs/x.png': 'X', 'safe.png': 'OK' }, async (root) => {
+      const cfg = { root, output: 'site' }
+      const warnings = []
+      const originalWarn = console.warn
+      console.warn = (msg) => warnings.push(String(msg))
+      try {
+        copyAssets(cfg, ['docs/x.png', '../../outside/evil.png', '/abs/evil.png'])
+      } finally {
+        console.warn = originalWarn
+      }
+      assert.ok(fs.existsSync(path.join(root, 'site/docs/x.png')), 'in-root asset copied')
+      assert.equal(
+        warnings.filter((w) => /escapes the project root/.test(w)).length,
+        2,
+        'both escaping paths are warned and skipped',
+      )
+    })
   })
 
   it('renders admonition icons as font classes by default (icons: font)', async () => {
