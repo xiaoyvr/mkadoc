@@ -54,8 +54,10 @@ architecture. It is a living list — items are checked off as they are fixed.
   are escaped, names are not). Trusted-plugin context, low risk.
 - [ ] *`copyAssets` trusts renderer-returned relative paths*; core does not
   re-validate before `path.join(cfg.root, rel)`. Defense-in-depth would re-check.
-- [ ] *Markdown `extractMeta` title fallback reads only ATX headings* (`# T`),
-  not setext (`T\n===`).
+- [x] *Markdown `extractMeta` title fallback reads only ATX headings* (`# T`),
+  not setext (`T\n===`). Fixed: `firstHeading` also matches setext h1
+  (`=`) underlines (used for both `extractMeta` and the page `<title>`); a
+  setext h2 (`---`) is still not a document title.
 - [ ] *Markdown `renderFragment` ignores `attributes` and `baseDir`* — fine for
   nav today, but inconsistent with the contract and the AsciiDoc renderer.
 - [x] *Topbar scroll-swap only works for AsciiDoc pages.* `TOPBAR_JS` read

@@ -62,6 +62,52 @@ Mixed formats.
     )
   })
 
+  it('derives the title from a setext h1 when there is no frontmatter', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:
+  - docs
+output: site
+`),
+        'docs/index.md': `Setext Title
+============
+
+Body paragraph.
+`,
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await build(cfg, { forceFull: true })
+        const html = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
+        assert.equal(html.querySelector('title')?.text.trim(), 'Setext Title')
+        assert.equal(html.querySelector('h1')?.text.trim(), 'Setext Title')
+      },
+    )
+  })
+
+  it('ignores a setext h2 (---) as the document title', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:
+  - docs
+output: site
+`),
+        'docs/index.md': `Sub Section
+-----------
+
+Body.
+`,
+      },
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await build(cfg, { forceFull: true })
+        const html = parseHtml(fs.readFileSync(path.join(root, 'site/docs/index.html'), 'utf8'))
+        assert.equal(html.querySelector('title')?.text.trim(), '')
+        assert.equal(html.querySelector('h2')?.text.trim(), 'Sub Section')
+      },
+    )
+  })
+
   it('highlights fenced code blocks through the syntax-highlight service', async () => {
     await withTempProject(
       {

@@ -28,9 +28,15 @@ function splitFrontmatter(text) {
   return { frontmatter, body: text.slice(m[0].length), hasFrontmatter: true }
 }
 
+/**
+ * First h1 of a Markdown body — ATX (`# T`) or setext (`T\n===`) — used as
+ * the title fallback when frontmatter has no `title`.
+ */
 function firstHeading(body) {
-  const m = /^#\s+(.+)$/m.exec(body)
-  return m ? m[1].trim() : ''
+  const atx = /^#\s+(.+)$/m.exec(body)
+  if (atx) return atx[1].trim()
+  const setext = /^(.+)\n=+\s*$/m.exec(body)
+  return setext ? setext[1].trim() : ''
 }
 
 function isExternalOrAbsoluteTarget(target) {
