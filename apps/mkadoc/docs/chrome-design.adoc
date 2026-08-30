@@ -109,5 +109,4 @@ Until then: **siblings for safety.**
 == Related
 
 * Site author overview: xref:index.adoc[mkadoc]
-* Multi-format renderer design: xref:architecture-v1.adoc[Architecture v1]
 * Plugin APIs for contributing under the topbar: xref:plugins.adoc[Writing mkadoc plugins]

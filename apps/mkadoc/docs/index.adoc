@@ -19,7 +19,7 @@ mkadoc treats your project as:
 * **Output** — HTML under `output` (default `site/`)
 * **Plugins** — feature plugins (`mkadoc:topbar`, `mkadoc:nav`, `mkadoc:shiki`, …) decorate pages through a service registry, regardless of the page's markup.
 
-Configuration is plain YAML in `mkadoc.yaml` (see xref:architecture-v1.adoc[Architecture v1] for the rationale).
+Configuration is plain YAML in `mkadoc.yaml`.
 
 Some conventions:
 
@@ -122,7 +122,6 @@ Common options (defaults shown):
 
 == Related
 
-* xref:architecture-v1.adoc[Architecture v1] — the multi-format renderer design.
 * xref:chrome-design.adoc[Site chrome design] — how shared chrome is injected per page.
 * xref:plugins.adoc[Writing mkadoc plugins] — the plugin + renderer contract.
 
