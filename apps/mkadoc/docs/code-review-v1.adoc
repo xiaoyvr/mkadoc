@@ -58,11 +58,13 @@ architecture. It is a living list — items are checked off as they are fixed.
   not setext (`T\n===`).
 - [ ] *Markdown `renderFragment` ignores `attributes` and `baseDir`* — fine for
   nav today, but inconsistent with the contract and the AsciiDoc renderer.
-- [ ] *Topbar scroll-swap only works for AsciiDoc pages.* `TOPBAR_JS` reads
-  `#header h1` for the document title; Markdown pages emit a bare `<h1>` with no
-  `#header`, so the brand never swaps to the page title on scroll for Markdown.
-  Fix by targeting the first `<h1>` (or having renderers emit a consistent
-  header element).
+- [x] *Topbar scroll-swap only works for AsciiDoc pages.* `TOPBAR_JS` read
+  `#header h1` for the document title; Markdown pages emit a bare `<h1>` with
+  no `#header`, so the brand never swapped on scroll for Markdown. Fixed: the
+  page wrapper now emits the renderer-declared title as
+  `<body data-doc-title="…">` and `TOPBAR_JS` reads that — the swap timing is
+  a pure scroll threshold, so chrome never parses renderer body markup (h1,
+  h2, or no heading, any renderer).
 - [ ] *`extractFirstLink` (asciidoc) regexes over rendered inline HTML.*
   `doc.findBy(...)` + `getText()` yields `<a href="...">label</a>`, which nav
   parses with a regex — the same brittle string-surgery family as

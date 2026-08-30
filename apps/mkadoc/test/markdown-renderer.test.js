@@ -45,10 +45,19 @@ Mixed formats.
           'Markdown Home',
           'source-bar label derives from the first nav item',
         )
+        // renderer-agnostic doc title: declared by the renderer, carried by
+        // the wrapper — chrome never parses renderer body markup
+        assert.equal(md.querySelector('body')?.getAttribute('data-doc-title'), 'Markdown Home')
 
         const adoc = parseHtml(fs.readFileSync(path.join(root, 'site/docs/guide.html'), 'utf8'))
         assert.ok(adoc.querySelector('#header'), 'asciidoc page keeps its own header')
         assert.ok(adoc.querySelector('#mkadoc-topbar'), 'asciidoc page gets shared chrome')
+        assert.equal(adoc.querySelector('body')?.getAttribute('data-doc-title'), 'AsciiDoc Guide')
+
+        // topbar swap logic reads the core-owned attribute, not #header h1
+        const topbarJs = fs.readFileSync(path.join(root, 'site/styles/topbar.js'), 'utf8')
+        assert.ok(topbarJs.includes('data-doc-title'))
+        assert.ok(!topbarJs.includes('#header h1'))
       },
     )
   })

@@ -34,8 +34,10 @@ const TOPBAR_JS = `(function () {
   var brand = document.querySelector(".mkadoc-brand");
   var brandEl = brand ? brand.querySelector("p") : null;
   var siteTitle = (brand ? brand.getAttribute("data-site-title") : "") || "";
-  var h1 = document.querySelector("#header h1");
-  var docTitle = h1 ? String(h1.textContent || "").trim() : "";
+  // Core-owned, renderer-agnostic: the page wrapper sets data-doc-title from
+  // RenderOutput.title, so chrome never parses renderer body markup (a
+  // renderer may title with h1, h2, or nothing at all).
+  var docTitle = String(document.body.getAttribute("data-doc-title") || "").trim();
   var ticking = false;
 
   function setBrand(text) {
@@ -50,12 +52,14 @@ const TOPBAR_JS = `(function () {
     ticking = false;
     var y = window.scrollY || document.documentElement.scrollTop || 0;
     if (sourcesNav) root.classList.toggle("mkadoc-scrolled", y >= sourcesHeight);
-    if (!topbar || !h1) {
+    if (!topbar || !docTitle) {
       setBrand(siteTitle);
       return;
     }
-    var past = h1.getBoundingClientRect().bottom <= topbar.getBoundingClientRect().bottom;
-    setBrand(past && docTitle ? docTitle : siteTitle);
+    // Swap once scrolled past the nav (or past the topbar when there is no
+    // nav) — a pure scroll threshold, no body-structure measurement.
+    var past = y >= (sourcesNav ? sourcesHeight : topbar.offsetHeight);
+    setBrand(past ? docTitle : siteTitle);
   }
 
   function onScroll() {

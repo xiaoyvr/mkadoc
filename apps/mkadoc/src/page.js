@@ -65,7 +65,7 @@ export function assemblePage({
 <link rel="stylesheet" href="${FONT_LINK}">
 <link rel="stylesheet" href="${escapeHtmlAttr(themeCssHref)}">
 ${extras}${extras ? '\n' : ''}</head>
-<body class="${escapeHtmlAttr(bodyClass)}">
+<body class="${escapeHtmlAttr(bodyClass)}" data-doc-title="${escapeHtmlAttr(title)}">
 ${chromeBody}
 ${body}
 </body>
