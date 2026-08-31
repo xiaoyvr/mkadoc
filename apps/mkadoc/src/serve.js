@@ -3,11 +3,16 @@ import { watch } from 'chokidar'
 import { build } from './build.js'
 import { defaultConfigPath, loadConfig, resolveServeListen } from './config.js'
 import { createDevServer } from './dev-server.js'
+import { createSession } from './session.js'
 import { sourceForRepoPath } from './sources.js'
 
 const CORE_WATCH_EXTS = new Set(['.css', '.js', '.html', '.yaml', '.yml'])
 
 export async function serve(cfg, opts = {}) {
+  // One session for the whole serve lifecycle: rebuilds share the dependency
+  // registry memoization (e.g. shiki's highlighter) and plugin disposal
+  // bookkeeping. See src/session.js.
+  const session = opts.session ?? createSession()
   let current = cfg
   const buildFn = opts.buildFn || build
   const createServer = opts.createServer || createDevServer
@@ -23,7 +28,7 @@ export async function serve(cfg, opts = {}) {
   const watchExts = new Set(CORE_WATCH_EXTS)
 
   console.log('mkadoc: initial full build')
-  await buildFn(current, { forceFull: true, watchExts })
+  await buildFn(current, { forceFull: true, watchExts, session })
 
   let timer = null
   const pending = new Set()
@@ -62,7 +67,10 @@ export async function serve(cfg, opts = {}) {
       )
 
       if (!configTouched && paths.length === 0) return
-      await buildFn(current, configTouched ? { forceFull: true, watchExts } : { paths, watchExts })
+      await buildFn(
+        current,
+        configTouched ? { forceFull: true, watchExts, session } : { paths, watchExts, session },
+      )
       devServer?.reload()
     } catch (err) {
       console.error('mkadoc: rebuild failed:', err?.message || err)

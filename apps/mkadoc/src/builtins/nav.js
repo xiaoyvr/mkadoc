@@ -58,18 +58,20 @@ const NavFileSchema = z.array(NavItemSchema).min(1)
 // ---------------------------------------------------------------------------
 // Nav-model state (module-level) — used by the async classifier to detect
 // `:nav_label:`/title changes on nav-referenced pages without forcing a full
-// rebuild on content-only edits. It is serve-session state that must outlive
-// the per-build plugin instances (the classifier compares against the previous
-// build's labels). Safe today because the CLI `build` is always forceFull, so
-// this classifier is only consulted under `serve`, where the caches are warmed
-// by the initial build's chrome pass. A fresh process has no history — if a
+// rebuild on content-only edits. It is session state that must outlive the
+// per-build plugin instances (the classifier compares against the previous
+// build's labels), so it lives in the session (host.session.nav) rather than
+// module scope: warmed by each chrome pass, read by the next rebuild's
+// classifier. Safe today because the CLI `build` is always forceFull, so this
+// classifier is only consulted under `serve`, where the caches are warmed by
+// the initial build's chrome pass. A fresh session has no history — if a
 // non-forceFull CLI path is ever added, this needs revisiting.
 // ---------------------------------------------------------------------------
 
-/** @type {Set<string>} repo-relative pages whose label feeds the nav */
-const navReferenced = new Set()
-/** @type {Map<string, string>} repo-relative page → last resolved label */
-const labelCache = new Map()
+/** Session-scoped nav classifier state (see src/session.js). */
+function navState(host) {
+  return host.session.nav
+}
 const CSS_HREF = '/styles/nav.css'
 const JS_HREF = '/styles/nav.js'
 
@@ -488,9 +490,9 @@ async function collectNavReferenced(host, source) {
       const found = findPageFile(host, source, item.page)
       if (!found) continue
       const rel = relToRoot(found.abs, host.root)
-      navReferenced.add(rel)
+      navState(host).referenced.add(rel)
       const label = await metaLabelFor(found.abs, found.renderer)
-      labelCache.set(rel, label)
+      navState(host).labels.set(rel, label)
     }
     return
   }
@@ -507,8 +509,8 @@ async function collectNavReferenced(host, source) {
  */
 async function collectAutoNavRefs(host, node) {
   if (node.rel) {
-    navReferenced.add(node.rel)
-    labelCache.set(node.rel, await pageLabelForRel(host, node.rel))
+    navState(host).referenced.add(node.rel)
+    navState(host).labels.set(node.rel, await pageLabelForRel(host, node.rel))
   }
   for (const child of node.children) {
     await collectAutoNavRefs(host, child)
@@ -622,10 +624,10 @@ ${lists.join('\n')}
 }
 
 /** @type {import('@mkadoc/plugin-host').MkadocPluginFactory} */
-export default function navPlugin(rawOptions = {}) {
+export default function navPlugin(rawOptions = {}, host) {
   parsePluginOptions('mkadoc:nav', OptionsSchema, rawOptions)
 
-  return {
+  return host.plugin([], () => ({
     name: 'nav',
 
     async setup(host) {
@@ -636,10 +638,11 @@ export default function navPlugin(rawOptions = {}) {
 
       // A nav-referenced page forces a full rebuild only when its label
       // (`:nav_label:`/title) actually changed — not on content-only edits.
+      const { referenced, labels } = navState(host)
       host.registerClassifier(async (relPath) => {
-        if (!navReferenced.has(relPath)) return null
+        if (!referenced.has(relPath)) return null
         const current = await pageLabelForRel(host, relPath)
-        return current !== (labelCache.get(relPath) ?? '') ? 'full' : null
+        return current !== (labels.get(relPath) ?? '') ? 'full' : null
       })
     },
 
@@ -661,8 +664,9 @@ export default function navPlugin(rawOptions = {}) {
       }
 
       // Refresh classifier state for the next rebuild.
-      navReferenced.clear()
-      labelCache.clear()
+      const { referenced, labels } = navState(host)
+      referenced.clear()
+      labels.clear()
       for (const source of host.config.sources) {
         await collectNavReferenced(host, source)
       }
@@ -709,5 +713,5 @@ export default function navPlugin(rawOptions = {}) {
 
       return { ok, message: notes.join('; ') || 'nav ok' }
     },
-  }
+  }))
 }

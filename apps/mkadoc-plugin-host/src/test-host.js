@@ -6,6 +6,12 @@ import path from 'node:path'
  * Records hook calls into `host._test` for assertions; `import` serves from a
  * caller-provided module map (e.g. `{ zod: { z } }`).
  *
+ * DI test double semantics: `host.plugin(deps, create)` resolves deps *eagerly*
+ * — from `provide()`d providers (awaited) or the `imports` map — and returns
+ * the created plugin object directly (the real loader instead returns a
+ * declaration and calls `create` later). Optional deps (`'name?'`) resolve to
+ * `undefined` when nothing provides them; missing required deps throw.
+ *
  * @param {{ config?: Record<string, unknown>, imports?: Record<string, unknown>, root?: string }} [opts]
  * @returns {import('./contract.js').MkadocPluginHost & { _test: object }}
  */
@@ -18,6 +24,8 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
     siteWideDeps: [],
     assetPrefixes: [],
     services: new Map(),
+    /** @type {Map<string, () => unknown>} DI providers (name → provider factory) */
+    provides: new Map(),
     renderers: [],
   }
 
@@ -25,6 +33,27 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
     const abs = path.isAbsolute(relOrAbs) ? relOrAbs : path.join(root, relOrAbs)
     fs.mkdirSync(abs, { recursive: true })
     return abs
+  }
+
+  /** Resolve one dependency name against provides + imports; `?` = optional. */
+  async function resolveDeps(deps) {
+    const resolved = []
+    for (const raw of deps) {
+      const optional = String(raw).endsWith('?')
+      const name = optional ? String(raw).slice(0, -1) : String(raw)
+      if (state.provides.has(name)) {
+        resolved.push(await state.provides.get(name)())
+      } else if (Object.hasOwn(imports, name)) {
+        resolved.push(imports[name])
+      } else if (optional) {
+        resolved.push(undefined)
+      } else {
+        throw new Error(
+          `mkadoc test host: plugin depends on "${name}" but no provider registered it (use host.provide(name, () => value) or createTestHost({ imports }) — optional deps end with "?")`,
+        )
+      }
+    }
+    return resolved
   }
 
   const host = {
@@ -48,6 +77,20 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
 
     registerRenderer(renderer) {
       state.renderers.push(renderer)
+    },
+
+    provide(name, provider, _opts) {
+      state.provides.set(name, provider)
+    },
+
+    /** Core-internal session stub (see contract.js — builtins only). */
+    session: {
+      nav: { referenced: new Set(), labels: new Map() },
+      plugin: { signature: null, dispose: null },
+    },
+
+    async plugin(deps, create) {
+      return create(...(await resolveDeps(deps)))
     },
 
     provideService(name, service) {

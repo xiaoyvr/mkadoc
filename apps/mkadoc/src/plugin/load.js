@@ -4,6 +4,7 @@ import markdown from '../builtins/markdown.js'
 import nav from '../builtins/nav.js'
 import shiki from '../builtins/shiki.js'
 import topbar from '../builtins/topbar.js'
+import { DECLARATION } from './host.js'
 import { installLocalPlugin, parseLocator, resolveEntry } from './installer.js'
 import { BUILTIN_LOCATORS } from './locators.js'
 
@@ -64,6 +65,96 @@ async function resolveFactory(locator, host) {
 }
 
 /**
+ * Run one factory and append its plugin (or declaration) to `loaded` in
+ * config order. DI factories return a `host.plugin(...)` declaration; legacy
+ * factories return a plugin object directly — both are supported so existing
+ * external plugins keep working unchanged.
+ *
+ * @typedef {{ owner: string, deps: { name: string, optional: boolean }[], create: (deps: unknown[]) => import('@mkadoc/plugin-host').MkadocPlugin | Promise<import('@mkadoc/plugin-host').MkadocPlugin> }} PluginDeclaration
+ *
+ * @param {string} locator
+ * @param {import('@mkadoc/plugin-host').MkadocPluginFactory} factory
+ * @param {Record<string, unknown>} options
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
+ * @param {{ loaded: { locator: string, plugin: import('@mkadoc/plugin-host').MkadocPlugin }[], declarations: PluginDeclaration[] }} acc
+ */
+async function constructPlugin(locator, factory, options, host, acc) {
+  host.setOwner(locator)
+  const result = await factory(options, host)
+  const declaration = result?.[DECLARATION]
+  if (declaration) {
+    acc.declarations.push(declaration)
+    return
+  }
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    result.locator = locator
+    acc.loaded.push({ locator, plugin: result })
+    return
+  }
+  throw new Error(
+    `mkadoc: plugin "${locator}" must return a plugin object or a host.plugin(deps, create) declaration (got ${typeof result})`,
+  )
+}
+
+/**
+ * Resolve every declaration's dependencies (coverage check first, then run
+ * the needed provider factories — memoized in the registry — then call each
+ * `create` in config order), appending the resulting plugin objects to
+ * `loaded`.
+ *
+ * @param {{ loaded: { locator: string, plugin: import('@mkadoc/plugin-host').MkadocPlugin }[], declarations: PluginDeclaration[] }} acc
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
+ */
+async function resolveDeclarations(acc, host) {
+  const { declarations } = acc
+  if (!declarations.length) return
+
+  // Coverage: fail fast, listing every missing non-optional dependency.
+  const missing = []
+  for (const declaration of declarations) {
+    for (const { name, optional } of declaration.deps) {
+      if (optional || host.hasDep(name)) continue
+      missing.push(`  - ${declaration.owner} depends on "${name}", which no loaded plugin provides`)
+    }
+  }
+  if (missing.length) {
+    throw new Error(`mkadoc: plugin dependency check failed:\n${missing.join('\n')}`)
+  }
+
+  // Run the needed providers once each (registry memoizes), in parallel —
+  // provider factories have no dependencies, so resolution order is free.
+  const needed = new Set()
+  for (const declaration of declarations) {
+    for (const { name } of declaration.deps) {
+      if (host.hasDep(name)) needed.add(name)
+    }
+  }
+  const values = {}
+  await Promise.all(
+    [...needed].map(async (name) => {
+      values[name] = await host.resolveDep(name)
+    }),
+  )
+
+  // Create plugin objects in config order (declaration order) — chrome order
+  // is preserved regardless of the dependency graph. Values are passed
+  // positionally, in declared order (registry names may contain hyphens).
+  for (const declaration of declarations) {
+    const args = declaration.deps.map(({ name, optional }) =>
+      optional && !(name in values) ? undefined : values[name],
+    )
+    const plugin = await declaration.create(...args)
+    if (!plugin || typeof plugin !== 'object') {
+      throw new Error(
+        `mkadoc: plugin "${declaration.owner}" create() must return a plugin object (got ${typeof plugin})`,
+      )
+    }
+    plugin.locator = declaration.owner
+    acc.loaded.push({ locator: declaration.owner, plugin })
+  }
+}
+
+/**
  * @param {{ locator: string, plugin: import('@mkadoc/plugin-host').MkadocPlugin }[]} loaded
  * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  */
@@ -109,6 +200,17 @@ function createPluginRunner(loaded, host) {
  * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  */
 export async function loadPlugins(pluginsConfig, host) {
+  host.beginLoad()
+  try {
+    return await loadPluginsInner(pluginsConfig, host)
+  } finally {
+    // Close the load even on failure: prune partial registrations (releasing
+    // their values) and clear the reentrancy guard.
+    host.endLoad()
+  }
+}
+
+async function loadPluginsInner(pluginsConfig, host) {
   const entries = Object.entries(pluginsConfig || {})
   const configured = new Set(entries.map(([locator]) => locator))
   // Config order first (chrome order), then any unlisted built-in renderers.
@@ -121,17 +223,24 @@ export async function loadPlugins(pluginsConfig, host) {
 
   /** @type {{ locator: string, plugin: import('@mkadoc/plugin-host').MkadocPlugin }[]} */
   const loaded = []
+  /** @type {{ owner: string, deps: { name: string, optional: boolean }[], create: (deps: unknown[]) => import('@mkadoc/plugin-host').MkadocPlugin | Promise<import('@mkadoc/plugin-host').MkadocPlugin> }[]} */
+  const declarations = []
 
-  // Construct all plugins in config order first (chrome order is preserved).
+  // Phase 1 — factories run in config order: options parsed, capabilities
+  // declared via host.provide, deps declared via host.plugin. Nothing is
+  // executed yet — declarations are cheap and order-independent.
   for (const locator of ordered) {
     const factory = await resolveFactory(locator, host)
-    const plugin = await factory(optionsFor(locator), host)
-    plugin.locator = locator
-    loaded.push({ locator, plugin })
+    await constructPlugin(locator, factory, optionsFor(locator), host, { loaded, declarations })
   }
 
-  // Renderers register + setup before feature plugins so feature plugins can
-  // discover them (e.g. mkadoc:nav finds the `.adoc` renderer for _nav.adoc).
+  // Phase 2 — resolve the dependency graph, then create plugin objects.
+  host.setPhase('resolving')
+  await resolveDeclarations({ loaded, declarations }, host)
+
+  // Phase 3 — renderers register + setup before feature plugins so feature
+  // plugins can discover them (e.g. mkadoc:nav finds the `.adoc` renderer for
+  // _nav.adoc).
   for (const { plugin } of loaded) {
     if (plugin.kind === 'renderer') {
       host.registerRenderer(plugin)
@@ -146,8 +255,10 @@ export async function loadPlugins(pluginsConfig, host) {
   // here on `getService` is resolvable and the load-time phase gate is open.
   host.setPhase('ready')
 
-  // Hard service dependencies: fail fast (and list every missing one) so a
-  // misconfigured plugin set is a loud error, not a silent degradation.
+  // Legacy hard service dependencies (runtime `provideService` values): fail
+  // fast (and list every missing one) so a misconfigured plugin set is a loud
+  // error, not a silent degradation. DI plugins declare deps instead and are
+  // covered by the resolution check above.
   const missing = []
   for (const { locator, plugin } of loaded) {
     const requires = plugin.requires

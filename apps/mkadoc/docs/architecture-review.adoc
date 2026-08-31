@@ -46,17 +46,20 @@ Tests execute the generated `TOPBAR_JS`/`NAV_JS` against DOM stubs.
 
 == Risks and concerns
 
-=== 1. Process-global session state (moderate)
+=== 1. Process-global session state (moderate) — RESOLVED
 
-`src/build.js` (`prevDisposePlugins`), `src/builtins/shiki.js` (shared
-highlighter), and `src/builtins/nav.js` (classifier label caches) keep
-serve-session state at module scope. All are documented, and all are safe today
-because the CLI `build` is always forceFull and tests run sequentially. But
-this is the most fragile seam: concurrent builds in one process, parallel test
-files in one process, or any future non-forceFull CLI path silently corrupts
-incremental behavior. The `nav.js` comment admits this.
+Fixed by the session-scoped DI container (2025-08): all three instances now
+live in an explicit session object (`src/session.js`, one per serve session /
+CLI invocation, threaded through `createHosts`):
 
-*Fix direction:* an explicit session object, or at minimum a defensive guard.
+* `src/build.js` `prevDisposePlugins` → `session.plugin`
+* `src/builtins/shiki.js` shared highlighter → the session registry's memoized
+  provider value (keyed by `theme\0langs`; `onRelease` disposes on key change
+  or removal from config) — no module-level cache remains
+* `src/builtins/nav.js` classifier label caches → `session.nav`
+
+The registry's `beginLoad`/`endLoad` pair also guards against re-entrant
+builds in one session (concurrent builds must use separate sessions).
 
 === 2. Serve-mode incremental edge cases (moderate)
 

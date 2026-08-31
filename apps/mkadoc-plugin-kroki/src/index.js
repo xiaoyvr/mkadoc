@@ -1,10 +1,10 @@
-import path from 'node:path'
 import asciidoctorKroki from 'asciidoctor-kroki'
 
 /**
  * Parse + validate plugin options with the zod instance provided by the host.
- * External plugins must not import zod themselves — shared deps come from
- * `host.import` so mkadoc's single instance is used.
+ * External plugins must not import zod themselves — shared deps come from the
+ * core whitelist via `host.import` (factory-time need: options parse before
+ * dependency resolution) or `host.plugin(['zod'], ...)` inside the body.
  *
  * @param {import('zod').ZodType} schema
  * @param {unknown} raw
@@ -36,34 +36,34 @@ export default async function krokiDiagramPlugin(rawOptions = {}, host) {
     })
     .strict()
 
-  const { server_url: serverUrl, allow_uri_read: allowUriRead, cache_dir: cacheName } =
-    parseOptions(OptionsSchema, rawOptions)
+  const {
+    server_url: serverUrl,
+    allow_uri_read: allowUriRead,
+    cache_dir: cacheName,
+  } = parseOptions(OptionsSchema, rawOptions)
 
-  let diagramDir = ''
-
-  return {
-    name: 'kroki-diagram',
-
-    async setup(host) {
-      diagramDir = host.cacheDir(cacheName)
-      // Provide a renderer-agnostic `diagram` capability. The Asciidoctor
-      // renderer consumes `register` + `attributes`; future renderers can add
-      // other adapters (e.g. a generic `render(source, type)`).
-      host.provideService('diagram', {
-        register(registry) {
-          asciidoctorKroki.register(registry)
-        },
-        attributes: {
-          'kroki-server-url': serverUrl,
-          'kroki-fetch-diagram': '',
-          // Scope data-URI embedding to kroki diagrams only (kroki-data-uri),
-          // leaving regular images as file references that get copied.
-          'kroki-data-uri': '',
-          'allow-uri-read': allowUriRead,
-          imagesoutdir: diagramDir,
-        },
-      })
+  // Provide a renderer-agnostic `diagram` capability. The Asciidoctor
+  // renderer consumes `register` + `attributes`; future renderers can add
+  // other adapters (e.g. a generic `render(source, type)`). The provider
+  // factory runs at dependency resolution — lazily, only when a consumer
+  // depends on `diagram`.
+  host.provide('diagram', () => ({
+    register(registry) {
+      asciidoctorKroki.register(registry)
     },
+    attributes: {
+      'kroki-server-url': serverUrl,
+      'kroki-fetch-diagram': '',
+      // Scope data-URI embedding to kroki diagrams only (kroki-data-uri),
+      // leaving regular images as file references that get copied.
+      'kroki-data-uri': '',
+      'allow-uri-read': allowUriRead,
+      imagesoutdir: host.cacheDir(cacheName),
+    },
+  }))
+
+  return host.plugin([], () => ({
+    name: 'kroki-diagram',
 
     async check() {
       const url = `${serverUrl.replace(/\/$/, '')}/`
@@ -83,5 +83,5 @@ export default async function krokiDiagramPlugin(rawOptions = {}, host) {
         }
       }
     },
-  }
+  }))
 }

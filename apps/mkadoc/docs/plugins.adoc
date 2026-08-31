@@ -20,7 +20,7 @@ Use the builtins under `src/builtins/` as reference implementations, and
 | Extension point | How
 
 | Rendering a markup format | A **renderer** plugin (`kind: 'renderer'`) with `extensions`, `extractMeta`, `render`, `renderFragment`, `extractFirstLink` (see <<Renderers>>)
-| Cross-format capabilities | `provideService(name, service)` / `getService(name)` (see <<Services>>)
+| Cross-format capabilities | `provide(name, providerFactory)` / declare them as deps in `host.plugin([...])` (see <<Dependencies>>)
 | Generated CSS / JS on every page | Write files under `host.config.output`, then `contributeHead({ links, scripts })`
 | UI below the site topbar | `contributeChromeBody(html)` — HTML appended below the topbar, in plugin load order
 | Rebuild sensitivity | `registerSiteWideDep` (rebuild every page), `registerClassifier` (force **full**), or `registerAssetPrefix` (**assets** mode)
@@ -36,7 +36,7 @@ A renderer is a plugin with `kind: 'renderer'`:
 [source,js]
 ----
 export default function myRenderer(options = {}, host) {
-  return {
+  return host.plugin([], () => ({
     name: 'my',
     kind: 'renderer',
     extensions: ['.xyz'],
@@ -54,7 +54,7 @@ export default function myRenderer(options = {}, host) {
     // → { href, label } | null — the first link in a nav fragment
     // (used by mkadoc:nav to derive a source's tab from _nav.adoc)
     async extractFirstLink({ sourceText, absPath, baseDir, linkPrefix }) { ... },
-  }
+  }))
 }
 ----
 
@@ -63,40 +63,85 @@ under `plugins:` only passes it options. Core discovers pages by asking each
 renderer's `extensions`, dispatches page → renderer, and owns page assembly
 (wrapper, theme CSS, chrome, head tags).
 
-[[Services]]
-=== Services (provider/consumer)
+[[Dependencies]]
+=== Dependencies (dependency injection)
 
-Cross-cutting capabilities are shared through named services:
+Plugins share capabilities through **one flat registry** of names. Core seeds
+it with an explicit **module whitelist** (`zod`, `yaml` — the only modules
+exposed to plugins, anchored at mkadoc for a single shared instance). Plugins
+add to it with `host.provide(name, providerFactory)`; consumers declare what
+they need with `host.plugin(deps, create)` and the loader injects the resolved
+values **positionally, in declared order**:
 
 [source,js]
 ----
-// provider (e.g. mkadoc:shiki)
-host.provideService('syntax-highlight', {
-  highlight(code, lang) { ... },
+// provider (e.g. mkadoc:shiki) — factory phase, declaration only. The
+// container runs `provider` (once, lazily) when a consumer depends on it.
+host.provide('syntax-highlight', async () => {
+  const highlighter = await createHighlighter({ themes: [theme], langs })
+  return {
+    highlight(code, lang) { return highlighter.codeToHtml(code, { lang, theme }) },
+  }
 })
 
-// consumer (any renderer, at render time)
-const hl = host.getService('syntax-highlight')
+// consumer (any renderer) — the injected value closes over `syntaxHighlight`
+return host.plugin(['syntax-highlight?'], (syntaxHighlight) => ({
+  name: 'my-renderer',
+  render({ sourceText }) {
+    // syntaxHighlight is the resolved value (or undefined when absent)
+    // — no lookup at render time, the closure captured it
+  },
+}))
 ----
 
-* Providers register in `setup`. `getService` is **only callable after every
-  plugin finished setup** — during load the registry is incomplete (providers
-  run in config order), so mkadoc throws instead of returning an
-  order-dependent result. Resolve at *render time*, or in `contributeChrome` /
-  `check`; never in `setup` or the factory.
-* Hard dependencies are declared on the plugin object:
-  `requires: ['syntax-highlight']`. mkadoc verifies them after all plugins
-  load and fails fast, listing every missing service — config order is
-  irrelevant for declared dependencies.
-* `mkadoc:shiki` provides `syntax-highlight`; renderers consume it for code
-  blocks/fences and degrade to plain listings when it is absent.
-* `mkadoc-plugin-kroki` provides `diagram`; the `mkadoc:asciidoc` renderer
-  consumes its `register` + `attributes` adapter (both are AsciiDoc-specific;
-  future renderers would add their own adapter).
-* `mkadoc:nav` provides `site-root` (`{ href }`) — the nav-owned home. Core's
-  dev server redirects `/` to it; with no nav there is no redirect. It is
-  provided at chrome time, so it cannot be declared with `requires` (that is
-  load-time only) — consume it lazily.
+* **The dep list is a name list.** A trailing `?` marks the dependency
+  optional: it resolves to `undefined` when no provider is loaded (e.g.
+  `'syntax-highlight?'` — degrade to plain listings). A non-optional name with
+  no provider fails the load, listing **every** missing dependency at once.
+* **`provide` is a declaration, not a value.** The container decides when to
+  run provider factories (after all plugins declare, in dependency order,
+  `Promise.all`-ed), so construction order never depends on config order.
+  `provide` is **factory-phase only** — it throws afterwards, because the
+  graph must be fixed before resolution.
+* **The registry is session-scoped.** Under `serve`, rebuilds share one
+  registry (see xref:../src/session.js[src/session.js]): a provider runs **at
+  most once per session** while its `opts.key` is unchanged — pass a key that
+  captures everything the value depends on (e.g. shiki uses
+  `theme\0langs`), and an `opts.onRelease` that disposes the value when it is
+  replaced (key change) or the provider leaves config. Without a key, every
+  rebuild re-runs the provider.
+* **`host.plugin` is factory-phase only too**, and `create` runs in *config
+  order* with all values ready — so chrome order (load order) is preserved
+  regardless of the dependency graph.
+* **Option parsing stays in the factory** (before deps resolve): use
+  `host.import('zod')` there, or import zod directly in builtins. The injected
+  values are for the plugin body (`create`), not the factory.
+* **Duplicate providers for the same name are a load error** naming both
+  owners; core whitelist names (`zod`, `yaml`) are reserved — a plugin cannot
+  shadow them. Service names are lowercase-hyphenated **capability nouns**
+  describing the interface, never the implementation or package name:
+  `syntax-highlight` ✓, `shiki` ✗. Well-known names are listed in
+  xref:plugins.adoc[this guide]; check it before picking a name.
+
+=== Runtime services (escape hatch)
+
+Some values cannot exist at load time — they are derived *during* the build.
+`mkadoc:nav` publishes `site-root` at chrome time (from the first `_nav.adoc`
+link). For those, the legacy runtime pair remains:
+
+[source,js]
+----
+// provider (at chrome time)
+host.provideService('site-root', { href: first?.href ?? null })
+
+// consumer (core's dev server, after chrome)
+const root = host.getService('site-root')  // only callable after setup — never during load
+----
+
+`getService` throws during plugin load/creation — the registry is incomplete
+until every plugin finished setup. Prefer injected deps for anything that is
+knowable at load time; keep `provideService`/`getService` for build-time
+values only.
 
 == What you cannot extend (core-owned)
 
@@ -108,9 +153,14 @@ const hl = host.getService('syntax-highlight')
 
 == Plugin shape
 
-Export a factory: `(options, host) => plugin` (may be async).
+Export a factory: `(options, host) => declaration` (may be async).
 
 Validate `options` in the factory (Zod + `parsePluginOptions`). Reject unknown keys.
+Declare capabilities with `host.provide` and dependencies with `host.plugin`.
+The factory returns whatever `host.plugin(deps, create)` returns; the loader
+calls `create` with the resolved values and gets your plugin. (A legacy plugin
+may still return the plugin object directly; `requires`/`provideService` are
+honored for those.)
 
 Return:
 
@@ -119,8 +169,8 @@ Return:
 | Field | Purpose
 
 | `name` | Short id (e.g. `nav`)
-| `requires` | Optional `string[]` of service names this plugin hard-depends on. Verified after all plugins load; a missing provider fails the build/check with a message listing every missing service.
-| `setup(host)` | Optional. Runs once after the plugin is constructed, **before** rebuild mode is decided. Register extensions, classifiers, asset prefixes here. `getService` is **not** available yet — it throws.
+| `requires` | Optional `string[]` of *runtime* service names this plugin hard-depends on (legacy; verified after load). Load-time capabilities are declared as deps in `host.plugin([...])` instead.
+| `setup(host)` | Optional. Runs once after the plugin is created, **before** rebuild mode is decided. Register extensions, classifiers, asset prefixes here. `getService` is **not** available yet — it throws.
 | `contributeChrome(host, ctx)` | Optional. Runs each build after mode is known (not called for `noop`). Emit CSS/JS/HTML. `ctx`: `{ mode, pages, paths }` (`mode` is `full` \| `incremental` \| `assets`).
 | `check(host)` | Optional. Used by `mkadoc check` only. Keep it cheap.
 | `dispose(host)` | Optional. Called when the plugin is unloaded — currently when the `plugins` config changes under `serve`. Release module-level resources (e.g. shiki's highlighter).
@@ -128,8 +178,9 @@ Return:
 
 Lifecycle order that matters to you:
 
-. Your factory runs (options validated). `getService` is **not** available yet.
-. `setup(host)` — classifiers / prefixes must be registered here to affect this build’s mode. Still no `getService` (throws); register `requires` + `provideService` here instead.
+. Your factory runs — options validated, `host.provide` + `host.plugin` declarations collected. `getService` is **not** available.
+. All factories have run — the container resolves every declared dependency (coverage check, then provider factories), then calls each `create(...)` in config order. Injected values are plain closure variables from here on.
+. `setup(host)` — classifiers / prefixes must be registered here to affect this build's mode. Still no `getService`; legacy `requires` + `provideService` work here.
 . All plugins have loaded — `getService` becomes resolvable, `requires` is verified.
 . Core decides `full` / `incremental` / `assets` / `noop`.
 . `contributeChrome(host, ctx)` — skipped entirely for `noop`; skip heavy work when `ctx.mode === 'assets'` if you only care about HTML chrome.
@@ -145,14 +196,31 @@ Every hook receives the same host object.
 `host.config`:: Resolved project config (`sources`, `output`, `plugins`, …).
 `host.root`:: Absolute project root. Join with relative paths from config.
 
-=== Shared dependencies
+=== Core modules and dependencies
 
 `host.import(specifier)`::
-Resolve + import a module from **mkadoc's own dependencies** (single shared instance).
-Use this for shared libraries instead of declaring them as plugin deps:
-`const { z } = await host.import('zod')`. Anchored at mkadoc, so plugins never ship
-duplicate copies of shared stateful/stateless libs. Only imports that mkadoc itself
-depends on are resolvable.
+Resolve a module from **mkadoc's core whitelist** (single shared instance).
+Only whitelist names resolve — `zod` and `yaml` today; the whitelist is
+curated deliberately, and every entry is drift-checked against mkadoc's
+`package.json`. Use it for factory-time needs (option parsing) that run before
+deps resolve: `const { z } = await host.import('zod')`. Plugin-provided
+capabilities are injected via `host.plugin([...])`, never imported.
+
+`host.provide(name, providerFactory, opts?)`::
+Declare a load-time capability. `providerFactory` is called (at most once per
+session) when a consumer depends on `name`; may be async. Factory-phase only;
+duplicate names and whitelist collisions are load errors. Convention: the name
+is a lowercase-hyphenated capability noun (`syntax-highlight`, `diagram`).
+`opts.key` is the session cache identity — re-providing with the same key
+across rebuilds (serve) retains the memoized value, so expensive construction
+(e.g. shiki's highlighter) happens once per session; `opts.onRelease` runs
+when the value is replaced or the provider is removed from config.
+
+`host.plugin(deps, create)`::
+Declare dependencies and your plugin body. `deps` is an array of registry
+names (`'name?'` = optional); `create` receives the resolved values
+positionally, in declared order, and returns the plugin object. The loader
+runs it in config order after all dependencies resolve. Factory-phase only.
 
 === Head assets
 
@@ -222,8 +290,9 @@ Example: `mkadoc:shiki` registers the directory of its generated CSS so a CSS-on
   arborist (`ignoreScripts`, `--omit=dev`, cache under `.mkadoc/cache`), entry
   resolved from `package.json` `main`/`exports` else `index.js`.
 * Enable in config as `plugins: { "file:./plugins/you": { … } }`.
-* Validate options in the factory; shared libraries come from `host.import`
-  (e.g. `zod`) instead of being declared as plugin deps. Do not scrape undeclared
+* Validate options in the factory; shared libraries come from the core
+  whitelist (`host.import('zod')` at factory time, `host.plugin(['zod'], ...)`
+  in the body) instead of being declared as plugin deps. Do not scrape undeclared
   keys from `host.config.plugins` inside hooks.
 
 === Assets
@@ -281,15 +350,16 @@ These are site conventions your plugin may *read*; they are not host APIs:
 [source,js]
 ----
 export default async function myPlugin(raw = {}, host) {
-  const { z } = await host.import('zod')
+  const { z } = await host.import('zod')          // factory-time options parsing
   const OptionsSchema = z.object({}).strict()
   const options = OptionsSchema.parse(raw)
 
-  return {
+  host.provide('my-flag', () => ({ value: true })) // load-time capability (optional)
+
+  return host.plugin(['syntax-highlight?'], (syntaxHighlight) => ({
     name: 'my',
 
     async setup(host) {
-      host.provideService('my-flag', { value: true })
       host.registerSiteWideDep('docs/_my.adoc')
      // or, for true full rebuilds only:
      // host.registerClassifier((p) => (p.endsWith('/_my.adoc') ? 'full' : null))
@@ -305,8 +375,8 @@ export default async function myPlugin(raw = {}, host) {
     async check(host) {
       return { ok: true, message: 'my ok' }
     },
-  }
+  }))
 }
 ----
 
-Study `src/builtins/nav.js` and `shiki.js` for built-in patterns (options parsing, `resolveSiteAsset`, classifiers, extensions), and `apps/mkadoc-plugin-kroki` for the external-plugin pattern (`host.import('zod')`, self-contained package, its own test suite).
+Study `src/builtins/nav.js` and `shiki.js` for built-in patterns (options parsing, `resolveSiteAsset`, classifiers, `host.provide` + `host.plugin`), and `apps/mkadoc-plugin-kroki` for the external-plugin pattern (`host.import('zod')`, self-contained package, its own test suite).

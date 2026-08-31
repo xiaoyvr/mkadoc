@@ -9,20 +9,16 @@ import { resetPageMetaCache } from './meta-cache.js'
 import { assemblePage } from './page.js'
 import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
+import { createSession } from './session.js'
 import { writeSiteIndex } from './sitemap.js'
 import { listSourcePages, pageToOutRel, sourceForRepoPath } from './sources.js'
 import { writeThemeCss } from './theme.js'
 
-/**
- * Disposers of the previous build's plugins, kept across rebuilds inside one
- * process (serve). A changed `plugins` config disposes the old plugin set so
- * module-level resources (e.g. shiki's highlighter) are released instead of
- * lingering after a plugin is removed from config.
- */
-let prevPluginSignature = null
-let prevDisposePlugins = null
-
 export async function build(cfg, opts = {}) {
+  // One explicit session per CLI invocation, or the serve session passed in —
+  // the home of all cross-build state (dependency registry memoization, plugin
+  // disposal bookkeeping). See src/session.js.
+  const session = opts.session ?? createSession()
   resetPageMetaCache()
 
   if (opts.clean) {
@@ -33,17 +29,17 @@ export async function build(cfg, opts = {}) {
   // Same plugin set → the cached resources are reused; different set → the
   // previous build's plugins are released before the new ones load.
   const pluginSignature = JSON.stringify(cfg.plugins ?? {})
-  if (prevDisposePlugins && pluginSignature !== prevPluginSignature) {
-    await prevDisposePlugins()
+  if (session.plugin.dispose && pluginSignature !== session.plugin.signature) {
+    await session.plugin.dispose()
   }
 
   const touched = (opts.paths || []).map((p) => relToRoot(p, cfg.root))
 
   const deps = loadDependencyGraph(cfg.root)
-  const { plugin: pluginHost, build: buildHost } = createHosts(cfg, { deps })
+  const { plugin: pluginHost, build: buildHost } = createHosts(cfg, { deps, session })
   const plugins = await loadPlugins(cfg.plugins, pluginHost)
-  prevPluginSignature = pluginSignature
-  prevDisposePlugins = plugins.dispose
+  session.plugin.signature = pluginSignature
+  session.plugin.dispose = plugins.dispose
 
   // Report loaded renderer extensions to the caller (serve's watcher), so a
   // new renderer format is watched without core knowing its extensions.

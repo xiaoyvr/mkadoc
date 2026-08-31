@@ -28,6 +28,24 @@ describe('createTestHost', () => {
     assert.equal(host._test.headLinks.length, 1)
   })
 
+  it('plugin() resolves deps from provides (positional) and returns the plugin', async () => {
+    const host = createTestHost()
+    host.provide('answer', () => 42)
+    const plugin = await host.plugin(['answer', 'missing?'], (answer, missing) => ({
+      name: 'test',
+      answer,
+      missing,
+    }))
+    assert.equal(plugin.name, 'test')
+    assert.equal(plugin.answer, 42)
+    assert.equal(plugin.missing, undefined)
+  })
+
+  it('plugin() throws on a missing required dep', async () => {
+    const host = createTestHost()
+    await assert.rejects(() => host.plugin(['nope'], () => ({ name: 'x' })), /depends on "nope"/)
+  })
+
   it('ensureDir / cacheDir create directories under root', () => {
     const root = '/tmp/mkadoc-test-host'
     const host = createTestHost({ root })

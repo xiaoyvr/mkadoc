@@ -128,10 +128,10 @@ function topbarHtml(host) {
 }
 
 /** @type {import('@mkadoc/plugin-host').MkadocPluginFactory} */
-export default function topbarPlugin(rawOptions = {}) {
+export default function topbarPlugin(rawOptions = {}, host) {
   parsePluginOptions('mkadoc:topbar', OptionsSchema, rawOptions)
 
-  return {
+  return host.plugin([], () => ({
     name: 'topbar',
 
     async setup(host) {
@@ -180,5 +180,5 @@ export default function topbarPlugin(rawOptions = {}) {
       })
       host.contributeChromeBody(topbarHtml(host))
     },
-  }
+  }))
 }

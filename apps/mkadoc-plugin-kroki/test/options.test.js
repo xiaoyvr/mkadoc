@@ -20,12 +20,11 @@ describe('mkadoc-plugin-kroki', () => {
     )
   })
 
-  it('setup provides the diagram service (register + attributes)', async () => {
+  it('provides the diagram capability (register + attributes)', async () => {
     const plugin = await krokiPlugin({ server_url: 'http://127.0.0.1:8080' }, host)
     assert.equal(plugin.name, 'kroki-diagram')
-    await plugin.setup(host)
 
-    const svc = host._test.services.get('diagram')
+    const svc = await host._test.provides.get('diagram')()
     assert.ok(svc)
     assert.equal(typeof svc.register, 'function')
     assert.equal(svc.attributes['kroki-server-url'], 'http://127.0.0.1:8080')

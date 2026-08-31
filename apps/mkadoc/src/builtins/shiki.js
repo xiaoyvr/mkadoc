@@ -28,6 +28,7 @@ const OptionsSchema = z
 
 const CSS_HREF = '/styles/shiki.css'
 const DEFAULT_THEME = 'github-light-default'
+const DEFAULT_COLORS = { bg: '#ffffff', fg: '#1f2328' }
 
 const LANG_ALIASES = {
   sh: 'shellscript',
@@ -37,73 +38,81 @@ const LANG_ALIASES = {
   js: 'javascript',
 }
 
-const shared = {
-  highlighter: null,
-  key: null,
-  theme: DEFAULT_THEME,
-  colors: { bg: '#ffffff', fg: '#1f2328' },
-}
-
 function langListFor(langs) {
   const langList = new Set([...langs, 'plaintext'])
   for (const alias of Object.values(LANG_ALIASES)) langList.add(alias)
   return [...langList].sort()
 }
 
-/** @type {import('@mkadoc/plugin-host').MkadocPluginFactory} */
-export default function shikiPlugin(rawOptions = {}) {
-  const { theme, langs } = parsePluginOptions('mkadoc:shiki', OptionsSchema, rawOptions)
+/**
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
+ * @param {string} theme
+ * @param {string[]} langs
+ */
+function syntaxHighlightProvider(theme, langs) {
+  // Highlighter + resolved theme colors, owned by the provide closure. The
+  // session registry retains the memoized value across rebuilds while `key`
+  // is unchanged, so the (expensive) highlighter is built once per session —
+  // no module-level cache needed. `onRelease` runs when the value is replaced
+  // (theme/langs change) or the plugin is removed from config.
+  let highlighter = null
+  let colors = { ...DEFAULT_COLORS }
 
   return {
-    name: 'shiki',
-
-    async setup(host) {
-      const langsSorted = langListFor(langs)
-      const key = `${theme}\0${langsSorted.join(',')}`
-
-      if (!shared.highlighter || shared.key !== key) {
-        shared.highlighter?.dispose()
-        shared.highlighter = await createHighlighter({
-          themes: [theme],
-          langs: langsSorted,
-        })
-        shared.key = key
-        shared.theme = theme
-        const resolved = shared.highlighter.getTheme(theme)
-        shared.colors = {
-          bg: resolved.bg || shared.colors.bg,
-          fg: resolved.fg || shared.colors.fg,
-        }
+    key: `${theme}\0${langListFor(langs).join(',')}`,
+    onRelease() {
+      highlighter?.dispose()
+      highlighter = null
+    },
+    async provider() {
+      highlighter?.dispose()
+      highlighter = await createHighlighter({
+        themes: [theme],
+        langs: langListFor(langs),
+      })
+      const resolved = highlighter.getTheme(theme)
+      colors = {
+        bg: resolved.bg || colors.bg,
+        fg: resolved.fg || colors.fg,
       }
-
-      if (!shared.highlighter) {
-        throw new Error('mkadoc:shiki: highlighter not initialized (setup failed)')
-      }
-
-      shared.theme = theme
-
-      // Capability consumed by renderers (mkadoc:asciidoc, mkadoc:markdown, …).
-      host.provideService('syntax-highlight', {
+      return {
+        // Consumers (renderers) use `highlight`; the extra `colors` field
+        // lets this plugin read its own memoized value's theme colors.
+        colors,
         highlight(code, lang) {
-          const h = shared.highlighter
-          if (!h) {
+          if (!highlighter) {
             throw new Error('mkadoc:shiki: highlighter is not active')
           }
           let language = LANG_ALIASES[lang] || lang || 'plaintext'
-          if (!h.getLoadedLanguages().includes(language)) {
+          if (!highlighter.getLoadedLanguages().includes(language)) {
             language = 'plaintext'
           }
-          const themeName = h.getLoadedThemes().includes(shared.theme)
-            ? shared.theme
-            : DEFAULT_THEME
-          return h.codeToHtml(String(code), {
+          const themeName = highlighter.getLoadedThemes().includes(theme) ? theme : DEFAULT_THEME
+          return highlighter.codeToHtml(String(code), {
             lang: language,
             theme: themeName,
             structure: 'inline',
           })
         },
-      })
+      }
+    },
+  }
+}
 
+/** @type {import('@mkadoc/plugin-host').MkadocPluginFactory} */
+export default function shikiPlugin(rawOptions = {}, host) {
+  const { theme, langs } = parsePluginOptions('mkadoc:shiki', OptionsSchema, rawOptions)
+  const { key, onRelease, provider } = syntaxHighlightProvider(theme, langs)
+
+  host.provide('syntax-highlight', provider, { key, onRelease })
+
+  // Depends on its own capability so the provider resolves (once per session)
+  // and the memoized service — including the resolved theme colors — is
+  // available to contributeChrome.
+  return host.plugin(['syntax-highlight'], (syntaxHighlight) => ({
+    name: 'shiki',
+
+    async setup(host) {
       const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
       const assetDir = path.posix.dirname(cssAsset.relPath)
       const out = host.config.output.replace(/\\/g, '/').replace(/\/$/, '')
@@ -112,12 +121,13 @@ export default function shikiPlugin(rawOptions = {}) {
 
     async contributeChrome(host) {
       const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
+      const { colors } = syntaxHighlight
       const css = `/* Generated from Shiki theme: ${theme} — do not edit. */
 .listingblock > .content > pre.shiki,
 .listingblock > .content > pre.shiki code,
 pre:has(> code[class*="language-"]) {
-  background: ${shared.colors.bg};
-  color: ${shared.colors.fg};
+  background: ${colors.bg};
+  color: ${colors.fg};
 }
 `
       writeIfChanged(cssAsset.absPath, css)
@@ -125,17 +135,5 @@ pre:has(> code[class*="language-"]) {
         links: [{ rel: 'stylesheet', href: cssAsset.href }],
       })
     },
-
-    async dispose() {
-      // Called when the plugin is unloaded (config change under serve): drop
-      // the shared highlighter so it does not linger after removal. Idempotent
-      // — a subsequent build with the same config never disposes between
-      // rebuilds, so the expensive highlighter is still reused.
-      shared.highlighter?.dispose()
-      shared.highlighter = null
-      shared.key = null
-      shared.theme = DEFAULT_THEME
-      shared.colors = { bg: '#ffffff', fg: '#1f2328' }
-    },
-  }
+  }))
 }

@@ -68,15 +68,16 @@ function collectAssets(tokens, absPath, root) {
 }
 
 /**
- * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
+ * Build a markdown-it instance wired to the (optional) `syntax-highlight`
+ * capability. No service lookup: the value comes from the injected deps.
  * @param {boolean} allowHtml
+ * @param {{ highlight: (code: string, lang: string) => string }} [syntaxHighlight]
  */
-function createMarkdownIt(host, allowHtml) {
+function createMarkdownIt(allowHtml, syntaxHighlight) {
   const md = new MarkdownIt({ html: allowHtml })
-  const hl = host.getService('syntax-highlight')
-  if (hl) {
+  if (syntaxHighlight) {
     md.set({
-      highlight: (code, lang) => hl.highlight(String(code), String(lang || '')),
+      highlight: (code, lang) => syntaxHighlight.highlight(String(code), String(lang || '')),
     })
   }
   return md
@@ -86,7 +87,7 @@ function createMarkdownIt(host, allowHtml) {
 export default function markdownRenderer(rawOptions = {}, host) {
   const { html } = parsePluginOptions('mkadoc:markdown', OptionsSchema, rawOptions)
 
-  return {
+  return host.plugin(['syntax-highlight?'], (syntaxHighlight) => ({
     name: 'markdown',
     kind: 'renderer',
     extensions: ['.md', '.markdown'],
@@ -108,7 +109,7 @@ export default function markdownRenderer(rawOptions = {}, host) {
      */
     render({ sourceText, absPath }) {
       const { frontmatter, body } = splitFrontmatter(sourceText)
-      const md = createMarkdownIt(host, html)
+      const md = createMarkdownIt(html, syntaxHighlight)
       const tokens = md.parse(body, {})
       const htmlBody = md.renderer.render(tokens, md.options, {})
 
@@ -131,7 +132,7 @@ export default function markdownRenderer(rawOptions = {}, host) {
       const { body } = splitFrontmatter(sourceText)
       // baseDir/linkPrefix: markdown has no includes and no fragment
       // consumers yet (_nav.md doesn't exist) — accepted for contract shape.
-      return createMarkdownIt(host, html).render(body)
+      return createMarkdownIt(html, syntaxHighlight).render(body)
     },
-  }
+  }))
 }
