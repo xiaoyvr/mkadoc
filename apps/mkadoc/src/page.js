@@ -1,9 +1,6 @@
 import { escapeHtml, escapeHtmlAttr } from './html-utils.js'
 import { THEME_CSS_HREF } from './theme.js'
 
-const FONT_LINK =
-  'https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CNoto+Sans+Mono:400,700'
-
 function renderLinkTag(link) {
   const attrs = Object.entries(link)
     .map(([k, v]) => (v === true ? k : `${k}="${escapeHtmlAttr(v)}"`))
@@ -62,7 +59,6 @@ export function assemblePage({
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
-<link rel="stylesheet" href="${FONT_LINK}">
 <link rel="stylesheet" href="${escapeHtmlAttr(themeCssHref)}">
 ${extras}${extras ? '\n' : ''}</head>
 <body class="${escapeHtmlAttr(bodyClass)}" data-doc-title="${escapeHtmlAttr(title)}">

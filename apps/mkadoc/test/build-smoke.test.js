@@ -140,6 +140,40 @@ MARKER_INDEX_V1
     })
   })
 
+  it('never reads include targets outside the project root (containment)', async () => {
+    await withTempProject(
+      {
+        'mkadoc.yaml': yamlConfig(`sources:
+  - docs
+output: site
+`),
+        'docs/index.adoc': '= Home\n\ninclude::PLACEHOLDER[]\n',
+      },
+      async (root) => {
+        // a file the project could otherwise read: a sibling of the temp root
+        const outside = path.join(path.dirname(root), 'mkadoc-outside-secret.txt')
+        fs.writeFileSync(outside, 'SECRET-MARKER\n')
+        const page = path.join(root, 'docs/index.adoc')
+        fs.writeFileSync(page, fs.readFileSync(page, 'utf8').replace('PLACEHOLDER', outside))
+
+        const warnings = []
+        const originalWarn = console.warn
+        console.warn = (msg) => warnings.push(String(msg))
+        let html = ''
+        try {
+          const cfg = await loadConfig('mkadoc.yaml', root)
+          await build(cfg, { forceFull: true })
+          html = read(root, 'site/docs/index.html')
+        } finally {
+          console.warn = originalWarn
+        }
+
+        assert.ok(!html.includes('SECRET-MARKER'), 'outside file is never read or embedded')
+        assert.ok(warnings.some((w) => /include outside project root ignored/.test(w)))
+      },
+    )
+  })
+
   it('renders admonition icons as font classes by default (icons: font)', async () => {
     await withTempProject(
       {

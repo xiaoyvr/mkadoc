@@ -17,10 +17,11 @@ function read(root, rel) {
 async function startServe(cfg) {
   /** @type {{ opts: object, mode: string }[]} */
   const calls = []
-  let serverOpts = null
+  /** @type {{ opts: object | null }} stable holder — `opts` updates when serve recreates the server */
+  const server = { opts: null }
   const { close } = await serve(cfg, {
     createServer: async (opts) => {
-      serverOpts = opts
+      server.opts = opts
       return {
         close: async () => {},
         reload: () => {},
@@ -33,7 +34,7 @@ async function startServe(cfg) {
       return mode
     },
   })
-  return { close, calls, serverOpts }
+  return { close, calls, server }
 }
 
 describe('serve smoke (watch → build wiring)', () => {
@@ -93,10 +94,10 @@ plugins:
       }),
       async (root) => {
         const cfg = await loadConfig('mkadoc.yaml', root)
-        const { close, serverOpts } = await startServe(cfg)
+        const { close, server } = await startServe(cfg)
         try {
-          assert.equal(typeof serverOpts.rootRedirect, 'function')
-          assert.equal(serverOpts.rootRedirect(), '/docs/index.html')
+          assert.equal(typeof server.opts.rootRedirect, 'function')
+          assert.equal(server.opts.rootRedirect(), '/docs/index.html')
         } finally {
           await close()
         }
@@ -107,9 +108,9 @@ plugins:
   it('has no root redirect when nav is disabled', async () => {
     await withTempProject(smokeFixture(), async (root) => {
       const cfg = await loadConfig('mkadoc.yaml', root)
-      const { close, serverOpts } = await startServe(cfg)
+      const { close, server } = await startServe(cfg)
       try {
-        assert.equal(serverOpts.rootRedirect(), null)
+        assert.equal(server.opts.rootRedirect(), null)
       } finally {
         await close()
       }
@@ -135,5 +136,81 @@ plugins:
         await close()
       }
     })
+  })
+
+  it('recreates watchers + dev server when sources/output change under serve', async () => {
+    await withTempProject(
+      smokeFixture({
+        'docs2/index.md': '# Two\n',
+      }),
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        const { close, calls, server } = await startServe(cfg)
+        try {
+          await sleep(400)
+          assert.equal(server.opts.root, path.join(root, 'site'))
+
+          // config change: add a source + move the output dir
+          fs.writeFileSync(
+            path.join(root, 'mkadoc.yaml'),
+            yamlConfig(`sources:
+  - docs
+  - docs2
+output: site2
+`),
+          )
+          await waitFor(() => calls.length >= 2)
+          assert.equal(calls[1].opts.forceFull, true)
+          assert.equal(
+            server.opts.root,
+            path.join(root, 'site2'),
+            'dev server follows the new output',
+          )
+
+          // the newly added source is now watched: an edit there rebuilds
+          await sleep(400)
+          fs.writeFileSync(path.join(root, 'docs2/index.md'), '# Two\n\nMARKER_TWO_V2\n')
+          await waitFor(() => calls.length >= 3)
+          const third = calls[2]
+          assert.ok(
+            third.opts.paths.some((p) => String(p).replace(/\\/g, '/').endsWith('docs2/index.md')),
+            'edit in the added source is watched',
+          )
+          assert.equal(third.mode, 'incremental')
+          assert.match(read(root, 'site2/docs2/index.html'), /MARKER_TWO_V2/)
+        } finally {
+          await close()
+        }
+      },
+    )
+  })
+
+  it('excludes the output dir from the watcher (no rebuild livelock)', async () => {
+    await withTempProject(
+      smokeFixture({
+        'mkadoc.yaml': yamlConfig(`sources:\n  - docs\noutput: docs/_site\n`),
+      }),
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        const { close, calls } = await startServe(cfg)
+        try {
+          await sleep(400)
+          // sanity: an edit under the source still rebuilds
+          fs.writeFileSync(path.join(root, 'docs/index.adoc'), `= Smoke Index\n\nMARKER_INDEX_V3\n`)
+          await waitFor(() => calls.length >= 2)
+
+          // let the post-flush ignoreUntil window lapse, then write into the
+          // output dir (docs/_site lives inside the watched docs source) —
+          // without the explicit exclusion this schedules another rebuild.
+          await sleep(400)
+          const count = calls.length
+          fs.appendFileSync(path.join(root, 'docs/_site/docs/index.html'), '\n<!-- touched -->\n')
+          await sleep(700)
+          assert.equal(calls.length, count, 'output-dir writes must not trigger rebuilds')
+        } finally {
+          await close()
+        }
+      },
+    )
   })
 })

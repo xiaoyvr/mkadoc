@@ -6,3 +6,8 @@ Asciidoctor default stylesheet (theme-default.css) from Asciidoctor / Asciidocto
 License: MIT — https://github.com/asciidoctor/asciidoctor/blob/main/LICENSE
 Snapshot used as mkadoc's default site theme; core wraps renderer output with this
 stylesheet so AsciiDoc pages keep Asciidoctor's default look.
+
+Web fonts (Open Sans, Noto Serif, Noto Sans Mono) from Google Fonts.
+License: SIL Open Font License 1.1 — https://openfontlicense.org
+Variable-font woff2 files (latin subset) served locally under /styles/fonts/;
+previously linked from fonts.googleapis.com at view time.

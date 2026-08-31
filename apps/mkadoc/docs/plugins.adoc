@@ -8,7 +8,7 @@ Plugins are enabled from config by **locator**:
 
 * `mkadoc:<name>` — built-in factories shipped with mkadoc (allow-listed)
 * `file:./path/to/plugin` (or `./path`, absolute paths) — **external** local-folder plugins (installed into `.mkadoc/plugins/` on first use)
-* registry specs (`name@range`), `git:…`, `github:user/repo`, `https://…` tarballs — accepted by the config schema, not implemented yet
+* registry specs (`name@range`), `git:…`, `github:user/repo`, `https://…` tarballs — rejected at config parse time as not supported yet (use `file:`/`./` local folder plugins)
 
 Use the builtins under `src/builtins/` as reference implementations, and
 `apps/mkadoc-plugin-kroki` as the reference *external* plugin.

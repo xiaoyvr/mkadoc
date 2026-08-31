@@ -34,12 +34,24 @@ const PluginsSchema = z.preprocess(
         }
         continue
       }
+      let spec
       try {
-        npa(key)
+        spec = npa(key)
       } catch (err) {
         ctx.addIssue({
           code: 'custom',
           message: `Invalid plugin locator "${key}": ${err?.message || err}`,
+          path: [key],
+        })
+        continue
+      }
+      // Registry ranges, git/github, remote tarballs parse fine (npa grammar)
+      // but the loader does not implement them — reject early for a better
+      // error than the load-time "not supported yet".
+      if (spec.type !== 'file' && spec.type !== 'directory') {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Plugin locator "${key}" (${spec.type}) is not supported yet — use a local folder plugin ("file:./path/to/plugin" or "./path")`,
           path: [key],
         })
       }

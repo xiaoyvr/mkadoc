@@ -81,7 +81,8 @@ export function sourceForRepoPath(sources, relPath) {
 /**
  * Repo-relative page path → output href path (no leading site/, with .html).
  * Any renderer extension is normalized to `.html`.
- * `apps/mkadoc/docs/guide.adoc` + mount `/apps/mkadoc` → `apps/mkadoc/guide.html`
+ * `apps/mkadoc/docs/guide.adoc` + mount `/apps/mkadoc/docs` (mounts are the
+ * source path verbatim, see `mountFromSourcePath`) → `apps/mkadoc/docs/guide.html`
  * @param {MkadocSource} source
  * @param {string} pageRel repo-relative source path
  */

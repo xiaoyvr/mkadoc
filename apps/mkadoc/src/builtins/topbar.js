@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import { resolveSiteAsset, writeIfChanged } from '../fs-utils.js'
-import { escapeHtmlAttr } from '../html-utils.js'
+import { escapeHtml, escapeHtmlAttr } from '../html-utils.js'
 import { parsePluginOptions } from '../plugin/options.js'
 import { readThemeOverride, themeDirForSource } from '../theme.js'
 
@@ -73,14 +73,6 @@ export const TOPBAR_JS = `(function () {
   updateBrand();
 })();
 `
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
 
 /**
  * Site logo: first-source `_assets/logo.svg` or `logo.png`, else package default.

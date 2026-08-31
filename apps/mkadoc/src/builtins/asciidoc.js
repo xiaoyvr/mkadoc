@@ -30,7 +30,10 @@ function includeResolveDir(reader, fallbackBaseDir) {
   return fallbackBaseDir
 }
 
-function registerIncludeCollector(registry) {
+function registerIncludeCollector(registry, root) {
+  const rootAbs = path.resolve(root)
+  const rootPrefix = rootAbs.endsWith(path.sep) ? rootAbs : rootAbs + path.sep
+
   registry.includeProcessor(function () {
     this.handles((target) => !isUriTarget(target))
     this.process((doc, reader, target, attrs) => {
@@ -45,6 +48,16 @@ function registerIncludeCollector(registry) {
 
       const base = includeResolveDir(reader, fallback)
       const resolved = path.resolve(base, String(target))
+
+      // Containment: never read outside the project root. With safe: 'unsafe'
+      // and path.resolve, an include:: target can otherwise read any file the
+      // process can — an exfiltration/impact vector when building untrusted
+      // repositories (e.g. in CI). Check before any filesystem access.
+      if (resolved !== rootAbs && !resolved.startsWith(rootPrefix)) {
+        console.warn(`mkadoc: include outside project root ignored: ${target}`)
+        return
+      }
+
       if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
         if (store) console.warn(`mkadoc: unresolved include: ${target}`)
         return
@@ -181,7 +194,7 @@ function baseAttrs(linkPrefix) {
  */
 function asciidocCreate(host, hasSyntaxHighlight, diagram) {
   const registry = Extensions.create()
-  registerIncludeCollector(registry)
+  registerIncludeCollector(registry, host.root)
   let diagramRegistered = false
 
   /**

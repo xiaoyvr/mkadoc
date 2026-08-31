@@ -202,6 +202,26 @@ describe('parseProjectConfig (zod schema)', () => {
     )
   })
 
+  it('rejects not-yet-supported locator protocols at parse time', () => {
+    for (const locator of [
+      'my-registry-plugin',
+      'pkg@1.2.3',
+      'git+https://x/y.git',
+      'github:user/repo',
+    ]) {
+      assert.throws(
+        () =>
+          parseProjectConfig({
+            sources: ['docs'],
+            site: { brand: 'Docs' },
+            plugins: { [locator]: {} },
+          }),
+        /not supported yet.*local folder plugin/,
+        `${locator} rejected early`,
+      )
+    }
+  })
+
   it('accepts known builtin renderer/feature locators and file specs', () => {
     const cfg = parseProjectConfig({
       sources: ['docs'],
