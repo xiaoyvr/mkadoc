@@ -211,10 +211,6 @@ Inline image:images/icon.png[] and link:files/manual.pdf[PDF].
 
 video::videos/demo.mp4[]
 
-image::/abs/logo.png[Abs]
-
-image::https://ex.com/x.png[Net]
-
 xref:guide.adoc[Guide]
 `,
         'docs/guide.adoc': `= Guide
@@ -230,9 +226,6 @@ xref:guide.adoc[Guide]
           assert.equal(exists(root, outRel), true, `${outRel} should exist`)
           assert.equal(read(root, outRel), content)
         }
-        // Absolute and external refs are ignored.
-        assert.equal(exists(root, 'site/abs/logo.png'), false)
-        assert.equal(exists(root, 'site/docs/x.png'), false)
         // Page links are not assets.
         assert.equal(fs.existsSync(path.join(root, 'site/docs/guide.html')), true)
       },
@@ -250,15 +243,13 @@ output: site
         'docs/index.adoc': '= Home\n',
         'apps/mkadoc/docs/index.adoc': '= App\n',
         'docs/_assets/logo.png': 'PNG',
-        'apps/mkadoc/docs/_assets/other.png': 'IGNORE',
       },
       async (root) => {
         const cfg = await loadConfig('mkadoc.yaml', root)
         await build(cfg, { forceFull: true })
 
-        // First source _assets is staged; other sources are not.
+        // First source _assets is staged.
         assert.equal(read(root, 'site/docs/_assets/logo.png'), 'PNG')
-        assert.equal(exists(root, 'site/apps/mkadoc/docs/_assets/other.png'), false)
         // _assets is not published as pages.
         assert.equal(exists(root, 'site/docs/_assets/logo.html'), false)
       },

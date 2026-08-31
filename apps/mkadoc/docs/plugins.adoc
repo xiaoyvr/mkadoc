@@ -305,7 +305,7 @@ Example: `mkadoc:shiki` registers the directory of its generated CSS so a CSS-on
 
 These are site conventions your plugin may *read*; they are not host APIs:
 
-* First source's `_theme/topbar.css` — optional CSS overrides for **topbar** styles (read by `mkadoc:topbar`; not your job unless you document a parallel file).
+* First source's `_theme/topbar.css` — optional CSS overrides for **topbar** styles (read by `mkadoc:topbar`; not your job unless you document a parallel file). Only the **first** source's `_theme/` is read at all — the site has exactly one theme.css/topbar.css/nav.css output. A non-first source's `_theme/` is ignored entirely (under serve it is not even watched).
 * First source's `_theme/nav.css` — optional CSS overrides for **nav/sidebar** styles (read by `mkadoc:nav`).
 * First source's `_theme/theme.css` — optional global overrides appended after the default theme.
 * Per-source `_nav.adoc` (rich markup) or `_nav.yaml` (declarative) — used by `mkadoc:nav` for link lists. No other nav formats are supported. With **no** `_nav` file, `mkadoc:nav` falls back to a convention-based **auto-nav**:

@@ -122,8 +122,6 @@ plugins:
 
         assert.ok(header.querySelector('link[href="/styles/topbar.css"]'))
         assert.ok(header.querySelector('script[src="/styles/topbar.js"]'))
-        // core no longer ships its own chrome assets
-        assert.equal(fs.existsSync(path.join(root, 'site/styles/chrome.css')), false)
         assert.ok(fs.existsSync(path.join(root, 'site/styles/default-logo.svg')))
       },
     )

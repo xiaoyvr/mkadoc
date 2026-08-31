@@ -108,6 +108,20 @@ describe('decideMode + dependency graph', () => {
       assert.deepEqual(decided.pages, ['docs/guide.adoc', 'docs/index.adoc'])
     })
   })
+
+  it('first source _theme/*.css is assets-only (stylesheet rewrite, no reconvert)', async () => {
+    await withTempProject(smokeFixture(), async (root) => {
+      const cfg = await loadConfig('mkadoc.yaml', root)
+      const { plugin, build: host } = createHosts(cfg, { deps: new DependencyGraph(root) })
+      await loadPlugins({}, plugin)
+
+      const decided = await decideMode(cfg, host, {
+        paths: ['docs/_theme/theme.css'],
+        deps: new DependencyGraph(root),
+      })
+      assert.equal(decided.mode, 'assets')
+    })
+  })
 })
 
 describe('build include dependencies', () => {

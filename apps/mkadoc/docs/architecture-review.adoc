@@ -63,24 +63,25 @@ builds in one session (concurrent builds must use separate sessions).
 
 === 2. Serve-mode incremental edge cases (moderate)
 
-. *Page deletion under serve* — `decideMode` classifies a deleted page as an
-"orphan partial" → `noop` → the stale HTML stays in `site/` (and stays in
-`deps.json`, since `noop` returns before `retainPages`/`pruneStaleHtml`) until
-some *other* change triggers a non-noop build.
-. *`_theme/*.css` for non-first sources* — `decideMode` treats it as
-assets-only (`cfg.sources.some(...)`), but theme overrides are only ever
-*read* from the first source (`theme.js`, `topbar.js`, `nav.js` all use
-`sources[0]`). Editing a second source's `_theme/theme.css` is a silent no-op.
+. *Page deletion under serve* — **accepted, not addressed**: `decideMode`
+classifies a deleted page as an "orphan partial" → `noop` → the stale HTML
+stays in `site/` (and stays in `deps.json`) until some *other* change
+triggers a non-noop build. Review decision (2025-08): stale HTML in the
+local `site/` output is not a problem worth extra complexity — a full
+rebuild or clean publish always reconciles it.
+. *`_theme/*.css` for non-first sources* — **RESOLVED**: only the first
+source owns `_theme/` (the site has exactly one theme.css/topbar.css/nav.css
+output), so `isThemeCssPath` now matches `sources[0]` only, and serve does
+not watch a non-first source's `_theme` at all (chokidar `ignored` per
+source + `isWatchedPath` gate).
 . *Config changes under serve are half-applied* — `reloadConfigIfNeeded` swaps
 the config and forces a full rebuild, but the source watchers and the dev
 server's root were created once from the *old* sources/output. Changing
 `sources:` or `output:` under serve rebuilds with new config yet
 watches/serves stale paths.
 
-*Fix direction:* prune stale HTML when the changed path was a previously-known
-page; align `decideMode`'s `_theme` check with the first-source-only
-convention (or honor `_theme/` for all sources); recreate watchers + dev
-server on config change, or document the limitation.
+*Fix direction (remaining):* recreate watchers + dev server on config
+change, or document the limitation.
 
 === 3. Untrusted-source assumption (moderate, conditional)
 
@@ -125,16 +126,17 @@ acting).
 
 == Recommendations (in order of value)
 
-. Fix the serve-mode deletion case (prune stale HTML on `noop` when the path
-was a previously-known page) and the non-first `_theme/` inconsistency (honor
-`_theme/` for all sources or make `decideMode` match the first-source-only
-convention).
+. ~~Fix the serve-mode deletion case and the non-first `_theme/`
+inconsistency~~ — **done (2025-08)**: deletion is accepted as non-issue;
+non-first `_theme/` is now recognized-and-ignored (`noop`) and not watched
+under serve.
 . Containment check in the include processor — reject `include::` targets
 resolving outside the project root.
 . Restart watchers/dev-server root on config change under serve, or document
 the limitation in `serve`'s help/README.
-. Refactor session state (highlighter, nav classifier, plugin disposal) into
-an explicit object with a documented lifetime, to unblock future concurrency.
+. ~~Refactor session state (highlighter, nav classifier, plugin disposal) into
+an explicit object with a documented lifetime, to unblock future
+concurrency.~~ — **done (2025-08)**: see `src/session.js`.
 . Exclude the output dir from the watcher instead of relying on timing
 windows.
 
@@ -145,4 +147,6 @@ and incremental-rebuild engine are designed with care and backed by a real
 test suite and honest documentation. The issues above are edge-case and
 robustness concerns rather than structural ones; items 1–3 in the
 recommendations are small, well-scoped fixes that would close the remaining
-correctness gaps in serve mode and untrusted-input handling.
+correctness gaps in serve mode and untrusted-input handling (items 1–2 are
+now done; the remaining serve-mode gap is the config-change watcher
+limitation).

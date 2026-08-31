@@ -89,7 +89,11 @@ export async function serve(cfg, opts = {}) {
     if (abs === configAbs) return true
     const rel = path.relative(current.root, abs).split(path.sep).join('/')
     if (rel.startsWith('..') || path.isAbsolute(rel)) return false
-    return Boolean(sourceForRepoPath(current.sources, rel))
+    const source = sourceForRepoPath(current.sources, rel)
+    if (!source) return false
+    // Non-first sources' _theme is not watched (chokidar ignores it above) —
+    // keep the event gate consistent as defense in depth.
+    return !(source !== current.sources[0] && rel.split('/').includes('_theme'))
   }
 
   function schedule(filePath) {
@@ -105,11 +109,18 @@ export async function serve(cfg, opts = {}) {
     }, 100)
   }
 
-  const sourceWatchers = current.sources.map((source) =>
+  const sourceWatchers = current.sources.map((source, index) =>
     watch(path.join(current.root, source.path), {
       ignoreInitial: true,
       awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
-      ignored: [/(^|[/\\])\../, '**/node_modules/**'],
+      ignored: [
+        /(^|[/\\])\../,
+        '**/node_modules/**',
+        // Only the first source owns _theme/ (theme/topbar/nav overrides) —
+        // other sources' _theme is read by nothing, so leave it alone: don't
+        // watch it at all.
+        ...(index > 0 ? ['**/_theme/**', '**/_theme'] : []),
+      ],
     }),
   )
 

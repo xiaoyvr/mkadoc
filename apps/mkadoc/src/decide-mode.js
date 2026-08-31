@@ -17,9 +17,16 @@ function isSourceFile(p, cfg, host) {
   return Boolean(sourceForRepoPath(cfg.sources, p))
 }
 
-/** `_theme/*.css` feeds the linked stylesheets (not baked into page HTML). */
+/**
+ * `_theme/*.css` feeds the linked stylesheets (not baked into page HTML).
+ * First source only — the site has exactly one theme.css/topbar.css/nav.css
+ * output, so only `sources[0]/_theme/` is ever read (theme.js, topbar.js,
+ * nav.js). Serve does not watch a non-first source's `_theme` at all.
+ */
 function isThemeCssPath(cfg, p) {
-  return cfg.sources.some((source) => p.startsWith(`${source.path}/_theme/`) && p.endsWith('.css'))
+  const first = cfg.sources[0]
+  if (!first) return false
+  return p.startsWith(`${first.path}/_theme/`) && p.endsWith('.css')
 }
 
 async function needsFullRebuild(p, cfg, host) {
