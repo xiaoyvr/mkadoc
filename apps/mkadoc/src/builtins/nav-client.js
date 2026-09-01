@@ -4,8 +4,8 @@
 
   function mountMatch(mount) {
     var m = mount || '/'
-    var prefix = m.endsWith('/') ? m : m + '/'
-    if (path === m || path === m + '.html') return m.length
+    var prefix = m.endsWith('/') ? m : `${m}/`
+    if (path === m || path === `${m}.html`) return m.length
     if (path.startsWith(prefix)) return m.length
     return -1
   }
@@ -26,7 +26,7 @@
   function updateOffset() {
     ticking = false
     var y = window.scrollY || document.documentElement.scrollTop || 0
-    root.style.setProperty('--mkadoc-scroll-offset', Math.min(Math.max(y, 0), maxOffset) + 'px')
+    root.style.setProperty('--mkadoc-scroll-offset', `${Math.min(Math.max(y, 0), maxOffset)}px`)
   }
   function onScroll() {
     if (ticking) return

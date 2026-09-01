@@ -4,7 +4,8 @@ import { relToRoot, walkDir } from './fs-utils.js'
 /**
  * @typedef {object} MkadocSource
  * @property {string} path  repo-relative source dir (posix)
- * @property {string} mount site mount, e.g. `/` or `/apps/mkadoc`
+ * @property {string} mount site mount, derived verbatim from the source path (e.g.
+ *                          `/apps/mkadoc/docs`); never `/` — root mounts are not configurable
  */
 
 /**

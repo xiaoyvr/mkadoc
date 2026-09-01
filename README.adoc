@@ -43,7 +43,7 @@ first:
 ----
 mkadoc check   # validate config + plugins (reports Kroki reachability)
 mkadoc build   # render site/ (no server needed; diagrams fall back to listings)
-mkadoc serve   # live-reload preview at http://127.0.0.1:8000
+mkadoc serve   # live-reload preview (default port 8000; this repo's mkadoc.yaml sets port 8001)
 ----
 
 Or, with the devShell's `just` (see `justfile`): `just deps` once, then

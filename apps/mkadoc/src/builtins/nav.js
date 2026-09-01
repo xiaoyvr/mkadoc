@@ -56,7 +56,7 @@ const NavItemSchema = z
 const NavFileSchema = z.array(NavItemSchema).min(1)
 
 // ---------------------------------------------------------------------------
-// Nav-model state (module-level) — used by the async classifier to detect
+// Nav-model state (session-scoped) — used by the async classifier to detect
 // `:nav_label:`/title changes on nav-referenced pages without forcing a full
 // rebuild on content-only edits. It is session state that must outlive the
 // per-build plugin instances (the classifier compares against the previous

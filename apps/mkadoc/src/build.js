@@ -59,7 +59,9 @@ export async function build(cfg, opts = {}) {
   fs.mkdirSync(path.join(cfg.root, cfg.output), { recursive: true })
   await plugins.contributeChrome({ mode, pages, paths: touched })
   // Nav-owned home: whichever plugin provides `site-root` decides where / goes.
-  cfg.rootRedirect = () => pluginHost.getService('site-root')?.href ?? null
+  // Carried on the session (not the config object) — serve reads it after
+  // each build; the config stays a pure description of the project.
+  session.rootRedirect = () => pluginHost.getService('site-root')?.href ?? null
   writeThemeCss(cfg.root, cfg.output, cfg.sources)
   copyFirstSourceAssets(cfg)
 

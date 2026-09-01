@@ -22,11 +22,15 @@ import { createRegistry } from './plugin/registry.js'
  * - `plugin` — plugin-set bookkeeping for build orchestration: the previous
  *   load's plugin signature + dispose handle, so a changed `plugins` config
  *   disposes the old set before the new one loads.
+ * - `build` — the latest build's runtime results that must outlive the
+ *   per-build host (e.g. `rootRedirect`, nav's choice of where `/` points),
+ *   read by serve when the dev server handles a request.
  *
  * @returns {{
  *   registry: ReturnType<typeof createRegistry>,
  *   nav: { referenced: Set<string>, labels: Map<string, string> },
  *   plugin: { signature: string | null, dispose: (() => Promise<void>) | null },
+ *   build: { rootRedirect: (() => string | null) | null },
  * }}
  */
 export function createSession() {
@@ -39,6 +43,9 @@ export function createSession() {
     plugin: {
       signature: null,
       dispose: null,
+    },
+    build: {
+      rootRedirect: null,
     },
   }
 }
