@@ -12,15 +12,19 @@ import { listSourcePages, pageToHref } from './sources.js'
  *
  * @param {import('./config.js').MkadocConfig} cfg
  * @param {import('@mkadoc/plugin-host').MkadocBuildHost} host
+ * @param {{ page: string, source: import('./sources.js').MkadocSource }[]} [allPages] precomputed page list (one walk per
+ *   build — see build()); walked here when omitted (e.g. direct calls)
  */
-export async function writeSiteIndex(cfg, host) {
-  const allPages = listSourcePages(cfg.root, cfg.sources, {
-    rendererForPath: host.rendererForPath,
-  })
+export async function writeSiteIndex(cfg, host, allPages) {
+  const pagesBySource =
+    allPages ||
+    listSourcePages(cfg.root, cfg.sources, {
+      rendererForPath: host.rendererForPath,
+    })
 
   const groups = []
   for (const source of cfg.sources) {
-    const pages = allPages.filter(({ source: s }) => s === source)
+    const pages = pagesBySource.filter(({ source: s }) => s === source)
     const items = []
     for (const { page } of pages) {
       const renderer = host.rendererForPath(page)

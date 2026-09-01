@@ -38,16 +38,25 @@ async function needsFullRebuild(p, cfg, host) {
 /**
  * @param {import('./config.js').MkadocConfig} cfg
  * @param {import('@mkadoc/plugin-host').MkadocBuildHost} host
- * @param {{ forceFull?: boolean, paths?: string[], deps?: import('./deps.js').DependencyGraph | null }} [opts]
+ * @param {{ forceFull?: boolean, paths?: string[], deps?: import('./deps.js').DependencyGraph | null, allPages?: { page: string, source: import('./sources.js').MkadocSource }[] | null }} [opts]
  */
-export async function decideMode(cfg, host, { forceFull = false, paths = [], deps = null } = {}) {
+export async function decideMode(
+  cfg,
+  host,
+  { forceFull = false, paths = [], deps = null, allPages = null } = {},
+) {
   if (forceFull || paths.length === 0) {
     return { mode: 'full', pages: [] }
   }
 
-  const livePages = listSourcePages(cfg.root, cfg.sources, {
-    rendererForPath: host.rendererForPath,
-  }).map((p) => p.page)
+  // The caller (build) precomputes the page list once per build; without it
+  // (direct calls, e.g. tests) fall back to a walk here.
+  const livePages = (
+    allPages ||
+    listSourcePages(cfg.root, cfg.sources, {
+      rendererForPath: host.rendererForPath,
+    })
+  ).map((p) => p.page)
 
   /** @type {Set<string>} */
   const pages = new Set()

@@ -51,10 +51,10 @@ Status legend: _open_ — _fixed_ — _won't fix_.
 |===
 | # | Sev | Area | Finding | Status |
 
-| 1 | P1 | perf | External plugins re-packed on every build / serve rebuild | open |
-| 2 | P2 | perf | Source tree walked 4–5× per build | open |
+| 1 | P1 | perf | External plugins re-packed on every build / serve rebuild | won't fix |
+| 2 | P2 | perf | Source tree walked once per build (page list threaded through) | fixed |
 | 3 | P2 | design | Plugin value-sharing converged on DI: service pair + `requires` removed | fixed |
-| 4 | P2 | maint | `builtins/nav.js` is a 674-line monolith | open |
+| 4 | P2 | maint | `builtins/nav.js` split into `nav/model.js` + `nav/html.js` + `nav/state.js` | fixed |
 | 5 | P3 | correctness | Session discipline incomplete: module-global `pageMeta` cache + Asciidoctor global `SyntaxHighlighter.register` | open |
 | 6 | P3 | behavior | `serve` ignores `serve.port`/`serve.remote` edits while running | open |
 | 7 | P3 | lifecycle | `mkadoc check` never disposes plugins | open |
@@ -68,7 +68,7 @@ Status legend: _open_ — _fixed_ — _won't fix_.
 | 15 | P4 | nits | SSE no heartbeat; installer `.tmp` crash leftovers; `test/**/*.test.js` shell glob | open |
 |===
 
-=== 1 (P1) External plugins re-packed on every build
+=== 1 (P1) External plugins re-packed on every build — WON'T FIX
 
 `build()` calls `loadPlugins` on *every* build (including each serve rebuild).
 For `file:`/`directory` locators, `installLocalPlugin` unconditionally runs
@@ -78,16 +78,23 @@ reinstall. The marker avoids reinstall/extract/deps, but **not the pack** — so
 every file save under `serve` re-packs the configured external plugin's source
 tree.
 
-*Fix:* short-circuit on a cheap source stat (mtime/size snapshot of the
-manifest + entry files) before packing, or cache install state on the session.
+*Decision (by design):* external local-folder plugins (`file:./path`) are a
+plugin-development affordance — always re-packing on load guarantees code
+edits are picked up with zero staleness detection to get wrong. The pack cost
+only matters under `serve` while actively developing a plugin, where freshness
+beats the pack time. No short-circuit added.
 
-=== 2 (P2) Source tree walked 4–5× per build
+=== 2 (P2) Source tree walked 4–5× per build — FIXED
 
-`listSourcePages` (full directory walks) runs in `decide-mode` (incremental
-only), `buildPages`, `deps.retainPages`, `writeSiteIndex`, and
-`pruneStaleHtml`; the `buildPages` and `retainPages` inputs are identical.
+`listSourcePages` (full directory walks) used to run in `decide-mode`
+(incremental only), `buildPages`, `deps.retainPages`, `writeSiteIndex`, and
+`pruneStaleHtml`; the `buildPages` and `retainPages` inputs were identical.
 
-*Fix:* compute the page list once in `build()` and thread it through.
+`build()` now computes the page list **once** per build (after plugins load,
+so renderers are registered) and threads it through `decideMode` (new
+`allPages` option, with a fallback walk for direct callers), `writeSiteIndex`
+and `pruneStaleHtml` (both take the list as a parameter), `buildPages`, and
+`deps.retainPages`. `pruneStaleHtml` no longer needs `rendererForPath`.
 
 === 3 (P2) Three coexisting plugin value-sharing mechanisms — FIXED
 
@@ -119,14 +126,23 @@ One model remains: capabilities via `host.provide` (plugins) / `provideCore`
 (core) + deps injected into plugin bodies — the runtime service lookup is
 gone entirely.
 
-=== 4 (P2) `builtins/nav.js` is a 674-line monolith
+=== 4 (P2) `builtins/nav.js` is a 674-line monolith — FIXED
 
-Contains the source bar, article sidebar, `_nav.adoc` fragment rendering,
-`_nav.yaml` parsing/validation, the auto-nav tree builder, session classifier
-state, the CSS bundle, and `check`.
+The nav builtin is split into four files under `src/builtins/nav/`:
 
-*Fix:* split into `nav/model.js` (auto-nav + yaml), `nav/html.js`,
-`nav/state.js`.
+* `nav/model.js` (299 LOC) — data model: auto-nav tree (`buildFolder`),
+  `_nav.yaml` parsing/validation, page-file lookup, label derivation,
+  source-entry resolution.
+* `nav/html.js` (215 LOC) — rendering: source-bar, article sidebar, auto-nav
+  + yaml HTML, the CSS/JS assets (`NAV_JS` still re-exported from `nav.js`
+  for tests).
+* `nav/state.js` (72 LOC) — session-scoped classifier state (referenced
+  pages + last labels) and the warming pass.
+* `nav.js` (138 LOC) — the plugin factory: wires the three into
+  `setup`/`contributeChrome`/`check`.
+
+No behavior change; the `mkadoc:nav` locator, options, and assets are
+identical.
 
 === 5 (P3) Session discipline incomplete
 
@@ -196,10 +212,10 @@ document the prefetch command.
 
 == Recommended priority order
 
-. Skip re-packing unchanged external plugins (1).
-. Compute the page list once per build (2).
+. ~~Skip re-packing unchanged external plugins~~ won't fix — by design (1).
+. ~~Compute the page list once per build~~ done (2).
 . ~~Converge the plugin-authoring model on DI~~ done — service pair + `requires` removed (3).
-. Split `nav.js` (4).
+. ~~Split `nav.js`~~ done (4).
 . Session-ize `pageMeta` + constrain the Asciidoctor global (5).
 . Small fixes: serve port reload (6), check disposal (7), sorted plugin
   signature (8), CI (13).

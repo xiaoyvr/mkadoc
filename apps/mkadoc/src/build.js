@@ -49,7 +49,15 @@ export async function build(cfg, opts = {}) {
     }
   }
 
-  const { mode, pages } = await decideMode(cfg, buildHost, { ...opts, deps })
+  // One source-tree walk per build: renderers are registered by now (plugins
+  // loaded above), so the page list is threaded through decide-mode, page
+  // building, the site index, stale cleanup, and the dep graph instead of
+  // being recomputed by each.
+  const allPages = listSourcePages(cfg.root, cfg.sources, {
+    rendererForPath: buildHost.rendererForPath,
+  })
+
+  const { mode, pages } = await decideMode(cfg, buildHost, { ...opts, deps, allPages })
 
   if (mode === 'noop') {
     console.log('mkadoc: noop')
@@ -75,28 +83,25 @@ export async function build(cfg, opts = {}) {
       await buildPages(
         cfg,
         buildHost,
-        listSourcePages(cfg.root, cfg.sources, { rendererForPath: buildHost.rendererForPath }).map(
-          (p) => p.page,
-        ),
-        { concurrency: opts.concurrency, deps },
+        allPages.map((p) => p.page),
+        {
+          concurrency: opts.concurrency,
+          deps,
+        },
       )
-      await writeSiteIndex(cfg, buildHost)
-      pruneStaleHtml(cfg, buildHost.rendererForPath)
+      await writeSiteIndex(cfg, buildHost, allPages)
+      pruneStaleHtml(cfg, allPages)
       break
     case 'incremental':
       console.log(`mkadoc: incremental ${pages.join(' ')}`)
       await buildPages(cfg, buildHost, pages, { concurrency: opts.concurrency, deps })
-      await writeSiteIndex(cfg, buildHost)
-      pruneStaleHtml(cfg, buildHost.rendererForPath)
+      await writeSiteIndex(cfg, buildHost, allPages)
+      pruneStaleHtml(cfg, allPages)
       break
   }
 
   if (mode !== 'assets') {
-    deps.retainPages(
-      listSourcePages(cfg.root, cfg.sources, { rendererForPath: buildHost.rendererForPath }).map(
-        (p) => p.page,
-      ),
-    )
+    deps.retainPages(allPages.map((p) => p.page))
     deps.save()
   }
 
@@ -198,12 +203,12 @@ function copyFirstSourceAssets(cfg) {
   })
 }
 
-function pruneStaleHtml(cfg, rendererForPath) {
+function pruneStaleHtml(cfg, allPages) {
   const outRoot = path.join(cfg.root, cfg.output)
   const stylesPrefix = path.join(cfg.output, 'styles').split(path.sep).join('/')
   const live = new Set()
 
-  for (const { page, source } of listSourcePages(cfg.root, cfg.sources, { rendererForPath })) {
+  for (const { page, source } of allPages) {
     live.add(pageToOutRel(source, page))
   }
   // Core-generated site map at the output root.
