@@ -212,7 +212,9 @@ export async function serve(cfg, opts = {}) {
     if (Date.now() < ignoreUntil) return
     if (!isWatchedPath(filePath)) return
     const ext = path.extname(filePath).toLowerCase()
-    if (ext && !watchExts.has(ext)) return
+    // Extensionless files (LICENSE, Makefile, …) are not build inputs — skip
+    // them the same as any non-watched extension.
+    if (!ext || !watchExts.has(ext)) return
     pending.add(filePath)
     clearTimeout(timer)
     timer = setTimeout(() => {

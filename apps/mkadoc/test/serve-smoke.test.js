@@ -213,4 +213,20 @@ output: site2
       },
     )
   })
+
+  it('ignores extensionless files (no rebuild on edit)', async () => {
+    await withTempProject(smokeFixture({ 'docs/LICENSE': 'MIT\n' }), async (root) => {
+      const cfg = await loadConfig('mkadoc.yaml', root)
+      const { close, calls } = await startServe(cfg)
+      try {
+        await sleep(400)
+        const count = calls.length
+        fs.writeFileSync(path.join(root, 'docs/LICENSE'), 'MIT\n\nupdated\n')
+        await sleep(700)
+        assert.equal(calls.length, count, 'extensionless file edits must not trigger rebuilds')
+      } finally {
+        await close()
+      }
+    })
+  })
 })

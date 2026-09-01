@@ -75,10 +75,19 @@ function navState(host) {
 const CSS_HREF = '/styles/nav.css'
 const JS_HREF = '/styles/nav.js'
 
+/** Is `relPath` the first source's `_theme/nav.css` override? */
+function isNavCssPath(cfg, relPath) {
+  const first = cfg.sources[0]
+  if (!first) return false
+  return relPath === `${themeDirForSource(first)}/nav.css`
+}
+
 /**
  * Level-1 source bar: one link per top-level source (`data-mount`), rendered
- * as a bar under the topbar. Core theme.css loads after this asset in the
- * head, so `_theme/theme.css` overrides still win the cascade.
+ * as a bar under the topbar. Plugin chrome stylesheets are linked *after*
+ * the core theme.css in the head, so this asset's own rules win ties with
+ * theme.css defaults — including `_theme/theme.css` overrides (which theme.js
+ * appends at the end of the theme.css bundle).
  */
 const SOURCES_CSS = `/* mkadoc:nav — level-1 source bar */
 :root {
@@ -584,11 +593,21 @@ export default function navPlugin(rawOptions = {}, host) {
       })
     },
 
-    async contributeChrome(host, { mode }) {
-      if (mode === 'assets') return
-
+    async contributeChrome(host, { mode, paths = [] }) {
       const cssAsset = resolveSiteAsset(host.root, host.config.output, CSS_HREF)
       const jsAsset = resolveSiteAsset(host.root, host.config.output, JS_HREF)
+
+      // `_theme/nav.css` only changes the linked stylesheet — rewrite the CSS
+      // bundle without a full header/page rebuild on an assets-only pass
+      // (mirrors mkadoc:topbar's handling of `_theme/topbar.css`).
+      if (mode === 'assets') {
+        const relPaths = paths.map((p) => host.relToRoot(p))
+        if (relPaths.some((p) => isNavCssPath(host.config, p))) {
+          writeIfChanged(cssAsset.absPath, await readNavCssBundle(host))
+        }
+        return
+      }
+
       writeIfChanged(cssAsset.absPath, await readNavCssBundle(host))
       writeIfChanged(jsAsset.absPath, `${NAV_JS}\n`)
       host.contributeHead({

@@ -42,4 +42,36 @@ plugins:
       },
     )
   })
+
+  it('rewrites /styles/nav.css on a first-source _theme/nav.css edit (assets-only pass)', async () => {
+    await withTempProject(
+      smokeFixture({
+        'mkadoc.yaml': yamlConfig(`sources:
+  - docs
+output: site
+plugins:
+  mkadoc:nav: {}
+`),
+        'docs/_theme/nav.css': '.mkadoc-articles a { color: #123456; }\n',
+      }),
+      async (root) => {
+        const cfg = await loadConfig('mkadoc.yaml', root)
+        await build(cfg, { forceFull: true })
+        const navCss = path.join(root, 'site/styles/nav.css')
+        assert.match(fs.readFileSync(navCss, 'utf8'), /#123456/)
+
+        // Editing only the override must rewrite the linked stylesheet via an
+        // assets-only pass — no page reconversion, no stale nav.css.
+        fs.writeFileSync(
+          path.join(root, 'docs/_theme/nav.css'),
+          '.mkadoc-articles a { color: #654321; }\n',
+        )
+        const mode = await build(cfg, { paths: [path.join(root, 'docs/_theme/nav.css')] })
+        assert.equal(mode, 'assets')
+        const css = fs.readFileSync(navCss, 'utf8')
+        assert.match(css, /#654321/)
+        assert.ok(!css.includes('#123456'))
+      },
+    )
+  })
 })
