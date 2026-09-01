@@ -276,6 +276,10 @@ function createBuildHost(state) {
     get root() {
       return cfg.root
     },
+    /** @internal core-internal session access (same surface as the plugin host) */
+    get session() {
+      return state.session
+    },
     get headLinks() {
       return state.headLinks
     },

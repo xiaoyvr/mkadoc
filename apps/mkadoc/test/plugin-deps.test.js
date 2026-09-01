@@ -466,4 +466,58 @@ plugins: {}
       },
     )
   })
+
+  it('reordering plugins config keys does NOT dispose/reload the plugin set', async () => {
+    const reorderDisposable = pluginFiles(
+      'reorder-disposable',
+      `export default function reorderDisposablePlugin(rawOptions = {}, host) {
+        return host.plugin([], () => ({
+          name: 'reorder-disposable',
+          async dispose() {
+            const fs = await import('node:fs')
+            fs.writeFileSync(new URL('./disposed.txt', import.meta.url), 'disposed')
+          },
+        }))
+      }
+      `,
+    )
+    await withTempProject(
+      {
+        ...reorderDisposable,
+        'mkadoc.yaml': yamlConfig(`sources:
+  - docs
+output: site
+plugins:
+  file:./plugins/reorder-disposable:
+    a: 1
+    b: 2
+`),
+        'docs/index.md': '# Index\n',
+      },
+      async (root) => {
+        const session = createSession()
+        const cfgA = await loadConfig('mkadoc.yaml', root)
+        await build(cfgA, { forceFull: true, session })
+        const disposedPath = path.join(root, '.mkadoc/plugins/reorder-disposable/disposed.txt')
+        assert.equal(fs.existsSync(disposedPath), false)
+
+        // Same plugin set, plugin + option keys reordered — the signature is
+        // canonical, so the set is unchanged and must not dispose + reload.
+        fs.writeFileSync(
+          path.join(root, 'mkadoc.yaml'),
+          yamlConfig(`sources:
+  - docs
+output: site
+plugins:
+  file:./plugins/reorder-disposable:
+    b: 2
+    a: 1
+`),
+        )
+        const cfgB = await loadConfig('mkadoc.yaml', root)
+        await build(cfgB, { forceFull: true, session })
+        assert.equal(fs.existsSync(disposedPath), false, 'no dispose on key reorder')
+      },
+    )
+  })
 })

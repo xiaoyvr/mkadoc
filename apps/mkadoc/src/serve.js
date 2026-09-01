@@ -49,6 +49,16 @@ export async function serve(cfg, opts = {}) {
     if (!touched) return
     current = await loadConfig(configPath, current.root)
     console.log('mkadoc: reloaded config')
+
+    // serve.port / serve.remote are bound once at startup; a config edit that
+    // changes them cannot take effect without a restart — say so instead of
+    // silently ignoring it (watchers + dev server keep the old binding).
+    const next = resolveServeListen(current.serve)
+    if (next.host !== host || next.port !== port) {
+      console.warn(
+        `mkadoc: serve.port/serve.remote changed in config — restart 'mkadoc serve' to apply; still serving on ${host}:${port}`,
+      )
+    }
   }
 
   /** Do the current watchers + dev server match the (possibly reloaded) config? */

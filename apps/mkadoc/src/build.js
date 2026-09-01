@@ -5,7 +5,6 @@ import { decideMode } from './decide-mode.js'
 import { loadDependencyGraph } from './deps.js'
 import { copyFileIfChanged, relToRoot, walkDir, writeIfChanged } from './fs-utils.js'
 import { defaultPoolConcurrency, mapPool } from './map-pool.js'
-import { resetPageMetaCache } from './meta-cache.js'
 import { assemblePage } from './page.js'
 import { createHosts } from './plugin/host.js'
 import { loadPlugins } from './plugin/load.js'
@@ -14,12 +13,35 @@ import { writeSiteIndex } from './sitemap.js'
 import { listSourcePages, pageToOutRel, sourceForRepoPath } from './sources.js'
 import { writeThemeCss } from './theme.js'
 
+/**
+ * Canonical JSON of the plugin set for change detection — key order must not
+ * count (a config rewrite that reorders `plugins:` keys, or an option object's
+ * keys, is the same set and must not dispose + reload the plugins).
+ * @param {Record<string, Record<string, unknown>> | null | undefined} plugins
+ */
+function pluginSetSignature(plugins) {
+  const canonical = (value) => {
+    if (Array.isArray(value)) return value.map(canonical)
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.keys(value)
+          .sort()
+          .map((key) => [key, canonical(value[key])]),
+      )
+    }
+    return value
+  }
+  return JSON.stringify(canonical(plugins ?? {}))
+}
+
 export async function build(cfg, opts = {}) {
   // One explicit session per CLI invocation, or the serve session passed in —
   // the home of all cross-build state (dependency registry memoization, plugin
   // disposal bookkeeping). See src/session.js.
   const session = opts.session ?? createSession()
-  resetPageMetaCache()
+  // Per-build page-metadata cache lives on the session; clear it here so nav
+  // and the site map re-parse every page this build.
+  session.pageMeta.clear()
 
   if (opts.clean) {
     fs.rmSync(path.join(cfg.root, cfg.output), { recursive: true, force: true })
@@ -27,8 +49,10 @@ export async function build(cfg, opts = {}) {
   }
 
   // Same plugin set → the cached resources are reused; different set → the
-  // previous build's plugins are released before the new ones load.
-  const pluginSignature = JSON.stringify(cfg.plugins ?? {})
+  // previous build's plugins are released before the new ones load. The
+  // signature is canonical (key order ignored), so a config rewrite that
+  // reorders `plugins:` keys is the same set and does not dispose/reload.
+  const pluginSignature = pluginSetSignature(cfg.plugins)
   if (session.plugin.dispose && pluginSignature !== session.plugin.signature) {
     await session.plugin.dispose()
   }
@@ -40,7 +64,6 @@ export async function build(cfg, opts = {}) {
   const plugins = await loadPlugins(cfg.plugins, pluginHost)
   session.plugin.signature = pluginSignature
   session.plugin.dispose = plugins.dispose
-
   // Report loaded renderer extensions to the caller (serve's watcher), so a
   // new renderer format is watched without core knowing its extensions.
   for (const renderer of buildHost.renderers) {

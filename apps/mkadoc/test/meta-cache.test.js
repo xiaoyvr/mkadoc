@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import { describe, it } from 'node:test'
-import { pageMeta, resetPageMetaCache } from '../src/meta-cache.js'
+import { createPageMetaCache } from '../src/meta-cache.js'
 import { withTempProject } from './helpers/project.js'
 
 describe('pageMeta cache (per build)', () => {
@@ -15,16 +15,17 @@ describe('pageMeta cache (per build)', () => {
           return { title: 'A', navLabel: undefined }
         },
       }
+      const cache = createPageMetaCache()
 
-      const first = await pageMeta(abs, renderer)
-      const second = await pageMeta(abs, renderer)
+      const first = await cache.get(abs, renderer)
+      const second = await cache.get(abs, renderer)
       assert.equal(calls, 1, 'same build parses once')
       assert.deepEqual(first, second)
       assert.deepEqual(first, { title: 'A', navLabel: undefined })
     })
   })
 
-  it('resetPageMetaCache clears between builds', async () => {
+  it('clear() between builds re-parses', async () => {
     await withTempProject({ 'docs/a.adoc': '= A\n' }, async (root) => {
       const abs = path.join(root, 'docs/a.adoc')
       let calls = 0
@@ -34,11 +35,12 @@ describe('pageMeta cache (per build)', () => {
           return { title: 'A', navLabel: undefined }
         },
       }
+      const cache = createPageMetaCache()
 
-      await pageMeta(abs, renderer)
-      await pageMeta(abs, renderer)
-      resetPageMetaCache()
-      await pageMeta(abs, renderer)
+      await cache.get(abs, renderer)
+      await cache.get(abs, renderer)
+      cache.clear()
+      await cache.get(abs, renderer)
       assert.equal(calls, 2, 'a fresh build re-parses')
     })
   })
@@ -51,8 +53,28 @@ describe('pageMeta cache (per build)', () => {
           return { title: '  Long Title  ', navLabel: '  ' }
         },
       }
-      const meta = await pageMeta(abs, renderer)
+      const cache = createPageMetaCache()
+      const meta = await cache.get(abs, renderer)
       assert.deepEqual(meta, { title: 'Long Title', navLabel: undefined })
+    })
+  })
+
+  it('independent caches do not share entries (per-session)', async () => {
+    await withTempProject({ 'docs/a.adoc': '= A\n' }, async (root) => {
+      const abs = path.join(root, 'docs/a.adoc')
+      let calls = 0
+      const renderer = {
+        async extractMeta() {
+          calls += 1
+          return { title: 'A', navLabel: undefined }
+        },
+      }
+
+      const one = createPageMetaCache()
+      const two = createPageMetaCache()
+      await one.get(abs, renderer)
+      await two.get(abs, renderer)
+      assert.equal(calls, 2, 'each session cache parses independently')
     })
   })
 })

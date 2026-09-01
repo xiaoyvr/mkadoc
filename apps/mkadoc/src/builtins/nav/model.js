@@ -4,7 +4,6 @@ import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
 import { formatConfigZodError } from '../../config-schema.js'
 import { relToRoot } from '../../fs-utils.js'
-import { pageMeta } from '../../meta-cache.js'
 import { mountPrefix, pageToHref } from '../../sources.js'
 
 /**
@@ -93,7 +92,7 @@ export async function buildFolder(host, source, dirRel) {
   let rel = null
   if (index) {
     rel = relToRoot(index.abs, host.root)
-    label = (await metaLabelFor(index.abs, index.renderer)) || dirName
+    label = (await metaLabelFor(host, index.abs, index.renderer)) || dirName
     href = pageToHref(source, rel)
   }
 
@@ -115,7 +114,7 @@ export async function buildFolder(host, source, dirRel) {
         r.extensions?.includes(path.extname(e.name).toLowerCase()),
       )
       const pageLabel =
-        (await metaLabelFor(abs, renderer)) || path.basename(e.name, path.extname(e.name))
+        (await metaLabelFor(host, abs, renderer)) || path.basename(e.name, path.extname(e.name))
       children.push({
         label: pageLabel,
         href: pageToHref(source, pageRel),
@@ -168,11 +167,13 @@ export function findPageFile(host, source, page) {
 
 /**
  * Read a page's metadata label (`:nav_label:` → title), or '' when absent.
+ * Cached per build in the session's pageMeta cache.
+ * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
  * @param {string} absPath
  * @param {import('@mkadoc/plugin-host').MkadocRenderer} renderer
  */
-export async function metaLabelFor(absPath, renderer) {
-  const meta = await pageMeta(absPath, renderer)
+export async function metaLabelFor(host, absPath, renderer) {
+  const meta = await host.session.pageMeta.get(absPath, renderer)
   return String(meta.navLabel || meta.title || '').trim()
 }
 
@@ -186,7 +187,7 @@ export async function metaLabelFor(absPath, renderer) {
 export async function derivePageLabel(host, source, page) {
   const found = findPageFile(host, source, page)
   if (!found) return ''
-  return metaLabelFor(found.abs, found.renderer)
+  return metaLabelFor(host, found.abs, found.renderer)
 }
 
 /**
@@ -201,7 +202,7 @@ export async function pageLabelForRel(host, relPath) {
     r.extensions?.includes(path.extname(relPath).toLowerCase()),
   )
   if (!renderer) return ''
-  return metaLabelFor(abs, renderer)
+  return metaLabelFor(host, abs, renderer)
 }
 
 /** First leaf href in a `_nav.yaml` item tree (depth-first). */

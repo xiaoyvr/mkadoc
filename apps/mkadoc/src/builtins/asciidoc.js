@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import fs from 'node:fs'
 import path from 'node:path'
-import { Extensions, load, SyntaxHighlighter, SyntaxHighlighterBase } from '@asciidoctor/core'
+import { Extensions, load, SyntaxHighlighterBase } from '@asciidoctor/core'
 import { parse } from 'node-html-parser'
 import { z } from 'zod'
 import { relToRoot } from '../fs-utils.js'
@@ -88,15 +88,17 @@ async function withIncludeCollector(ctx, fn) {
 // ---------------------------------------------------------------------------
 
 /**
- * Per-instance syntax-highlight bridge: the class closes over the resolved
+ * Per-load syntax-highlight bridge: the class closes over the resolved
  * `syntax-highlight` capability (injected via host.plugin deps), so the
- * adapter never does a service lookup. Registered with Asciidoctor under
- * `mkadoc-syntax`; re-registering replaces the previous class (builds are
- * sequential, so the current build's class is always the active one).
+ * adapter never does a service lookup. It is **never registered globally** —
+ * each conversion passes it through Asciidoctor's `syntax_highlighters`
+ * option (a per-load override hash), so every build uses its own class and
+ * the global `SyntaxHighlighter` registry is never mutated across builds.
  * @param {{ highlight: (code: string, lang: string) => string }} syntaxHighlight
+ * @returns {typeof SyntaxHighlighterBase}
  */
-function registerServiceSyntaxHighlighter(syntaxHighlight) {
-  class ServiceSyntaxHighlighter extends SyntaxHighlighterBase {
+function serviceSyntaxHighlighter(syntaxHighlight) {
+  return class ServiceSyntaxHighlighter extends SyntaxHighlighterBase {
     constructor(name, backend, opts = {}) {
       super(name, backend, opts)
       this.name = 'mkadoc-syntax'
@@ -104,9 +106,6 @@ function registerServiceSyntaxHighlighter(syntaxHighlight) {
     }
 
     highlight(_node, source, lang) {
-      if (!syntaxHighlight) {
-        throw new Error('mkadoc:asciidoc: syntax-highlight capability is not available')
-      }
       return syntaxHighlight.highlight(String(source), String(lang || ''))
     }
 
@@ -114,7 +113,6 @@ function registerServiceSyntaxHighlighter(syntaxHighlight) {
       return true
     }
   }
-  SyntaxHighlighter.register(ServiceSyntaxHighlighter, 'mkadoc-syntax')
 }
 
 // ---------------------------------------------------------------------------
@@ -189,10 +187,11 @@ function baseAttrs(linkPrefix) {
 
 /**
  * @param {import('@mkadoc/plugin-host').MkadocPluginHost} host
- * @param {boolean} hasSyntaxHighlight
+ * @param {typeof SyntaxHighlighterBase | null} syntaxHighlighter per-build highlighter class,
+ *   or null when no `syntax-highlight` capability is loaded
  * @param {{ register?: (registry: unknown) => void, attributes?: Record<string, unknown> }} [diagram]
  */
-function asciidocCreate(host, hasSyntaxHighlight, diagram) {
+function asciidocCreate(host, syntaxHighlighter, diagram) {
   const registry = Extensions.create()
   registerIncludeCollector(registry, host.root)
   let diagramRegistered = false
@@ -244,7 +243,7 @@ function asciidocCreate(host, hasSyntaxHighlight, diagram) {
       // Icons default: the bundled theme ships Font Awesome glyph rules, so
       // admonition/icon markup renders as font classes on every conversion.
       let attrs = { icons: 'font' }
-      if (hasSyntaxHighlight) {
+      if (syntaxHighlighter) {
         attrs['source-highlighter'] = 'mkadoc-syntax'
       }
       attrs = applyDiagramService(attrs)
@@ -259,6 +258,11 @@ function asciidocCreate(host, hasSyntaxHighlight, diagram) {
             extension_registry: registry,
             attributes: attrs,
             catalog_assets: true,
+            // Per-load highlighter registry — never touches the global
+            // SyntaxHighlighter (see serviceSyntaxHighlighter).
+            ...(syntaxHighlighter
+              ? { syntax_highlighters: { 'mkadoc-syntax': syntaxHighlighter } }
+              : {}),
           })
           const converted = String(await doc.convert())
           return {
@@ -287,7 +291,7 @@ function asciidocCreate(host, hasSyntaxHighlight, diagram) {
      */
     async renderFragment({ sourceText, baseDir, linkPrefix }) {
       let attrs = baseAttrs(linkPrefix)
-      if (hasSyntaxHighlight) {
+      if (syntaxHighlighter) {
         attrs['source-highlighter'] = 'mkadoc-syntax'
       }
       attrs = applyDiagramService(attrs)
@@ -297,6 +301,9 @@ function asciidocCreate(host, hasSyntaxHighlight, diagram) {
         standalone: false,
         extension_registry: registry,
         attributes: attrs,
+        ...(syntaxHighlighter
+          ? { syntax_highlighters: { 'mkadoc-syntax': syntaxHighlighter } }
+          : {}),
       })
       return String(await doc.convert())
     },
@@ -329,7 +336,7 @@ export default function asciidocRenderer(rawOptions = {}, host) {
   parsePluginOptions('mkadoc:asciidoc', OptionsSchema, rawOptions)
 
   return host.plugin(['syntax-highlight?', 'diagram?'], (syntaxHighlight, diagram) => {
-    if (syntaxHighlight) registerServiceSyntaxHighlighter(syntaxHighlight)
-    return asciidocCreate(host, Boolean(syntaxHighlight), diagram)
+    const highlighter = syntaxHighlight ? serviceSyntaxHighlighter(syntaxHighlight) : null
+    return asciidocCreate(host, highlighter, diagram)
   })
 }

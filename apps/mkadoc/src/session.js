@@ -1,3 +1,4 @@
+import { createPageMetaCache } from './meta-cache.js'
 import { createRegistry } from './plugin/registry.js'
 
 /**
@@ -27,12 +28,15 @@ import { createRegistry } from './plugin/registry.js'
  *   when the dev server handles a request. Written by the core-provided
  *   `site-root` capability (a command plugins call — see `provideCore`),
  *   never by plugins reaching into the session directly.
+ * - `pageMeta` — the per-build page-metadata cache (shared by nav and the
+ *   site map); cleared at the start of each build (see build.js).
  *
  * @returns {{
  *   registry: ReturnType<typeof createRegistry>,
  *   nav: { referenced: Set<string>, labels: Map<string, string> },
  *   plugin: { signature: string | null, dispose: (() => Promise<void>) | null },
  *   build: { siteRoot: string | null },
+ *   pageMeta: ReturnType<typeof createPageMetaCache>,
  * }}
  */
 export function createSession() {
@@ -49,6 +53,7 @@ export function createSession() {
     build: {
       siteRoot: null,
     },
+    pageMeta: createPageMetaCache(),
   }
 
   // Core-provided command capability: `site-root` lets plugins set where `/`

@@ -31,16 +31,22 @@ export async function check(cfg) {
   }
 
   if (plugins) {
-    const results = await plugins.check()
+    try {
+      const results = await plugins.check()
 
-    for (const result of results) {
-      const label = result.locator
-      if (result.ok) {
-        console.log(`mkadoc check: ${label}: ${result.message || 'ok'}`)
-      } else {
-        console.error(`mkadoc check: ${label}: ${result.message || 'failed'}`)
-        failed = true
+      for (const result of results) {
+        const label = result.locator
+        if (result.ok) {
+          console.log(`mkadoc check: ${label}: ${result.message || 'ok'}`)
+        } else {
+          console.error(`mkadoc check: ${label}: ${result.message || 'failed'}`)
+          failed = true
+        }
       }
+    } finally {
+      // Honor the plugin lifecycle: release resources (e.g. shiki's
+      // highlighter) before the command exits.
+      await plugins.dispose()
     }
   }
 

@@ -45,7 +45,7 @@ export async function collectNavReferenced(host, source) {
       if (!found) continue
       const rel = relToRoot(found.abs, host.root)
       navState(host).referenced.add(rel)
-      const label = await metaLabelFor(found.abs, found.renderer)
+      const label = await metaLabelFor(host, found.abs, found.renderer)
       navState(host).labels.set(rel, label)
     }
     return

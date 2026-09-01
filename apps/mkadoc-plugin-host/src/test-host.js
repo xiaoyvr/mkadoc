@@ -97,6 +97,17 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
       nav: { referenced: new Set(), labels: new Map() },
       plugin: { signature: null, dispose: null },
       build: { siteRoot: null },
+      pageMeta: {
+        clear() {},
+        async get(absPath, renderer) {
+          const text = fs.readFileSync(absPath, 'utf8')
+          const meta = await renderer.extractMeta(text, absPath)
+          return {
+            title: String(meta.title ?? '').trim(),
+            navLabel: String(meta.navLabel ?? '').trim() || undefined,
+          }
+        },
+      },
     },
 
     async plugin(deps, create) {

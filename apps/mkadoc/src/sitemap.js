@@ -1,7 +1,6 @@
 import path from 'node:path'
 import { writeIfChanged } from './fs-utils.js'
 import { escapeHtml, escapeHtmlAttr } from './html-utils.js'
-import { pageMeta } from './meta-cache.js'
 import { assemblePage } from './page.js'
 import { listSourcePages, pageToHref } from './sources.js'
 
@@ -32,7 +31,7 @@ export async function writeSiteIndex(cfg, host, allPages) {
       let title = path.basename(page, path.extname(page))
       if (renderer) {
         try {
-          const meta = await pageMeta(abs, renderer)
+          const meta = await host.session.pageMeta.get(abs, renderer)
           if (meta.title) title = meta.title
         } catch {
           // unreadable page — keep the basename fallback
