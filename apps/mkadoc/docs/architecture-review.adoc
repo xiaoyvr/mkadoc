@@ -62,7 +62,7 @@ Status legend: _open_ — _fixed_ — _won't fix_.
 | 9 | P3 | behavior | Output pruning handles only `.html`; deleted assets accumulate | won't fix |
 | 10 | P3 | robustness | Error classification by `mkadoc:` message prefix | won't fix |
 | 11 | P3 | deployment | `mkadoc build` in CI needs network + mutates `.mkadoc/` (external plugin install) | won't fix |
-| 12 | P3 | tooling | Hardcoded `npmDepsHash` in `apps/mkadoc/flake.nix` | open |
+| 12 | P3 | tooling | `npmDepsHash` recomputed via `just flake-hash` after dependency changes | fixed |
 | 13 | P4 | tooling | No CI configuration in the repo | open |
 | 14 | P4 | design | Mounts derived verbatim from source paths (deep URLs) | open |
 | 15 | P4 | nits | SSE no heartbeat; installer `.tmp` crash leftovers; `test/**/*.test.js` shell glob | open |
@@ -206,11 +206,15 @@ affordance (see #1) — build-time install into the gitignored `.mkadoc/` and
 the arborist/pacote/libnpmpack runtime footprint are accepted; CI can warm
 `.mkadoc/` or use `publish` on a machine that has run `build` once.
 
-=== 12 (P3) Hardcoded `npmDepsHash`
+=== 12 (P3) Hardcoded `npmDepsHash` — FIXED
 
-Any npm dependency bump requires manually updating `npmDepsHash` in
-`apps/mkadoc/flake.nix`. Use `pkgs.fetchNpmDeps` with a committed derivation or
-document the prefetch command.
+`just flake-hash` recomputes `npmDepsHash` in `apps/mkadoc/flake.nix` from
+`apps/mkadoc/package-lock.json` (via `nix run nixpkgs#prefetch-npm-deps`) and
+patches the flake in place; a `test -n "$hash"` guard refuses to write an
+empty hash on failure. The README documents the workflow: run `just flake-hash`
+after any `apps/mkadoc` dependency change, then `nix flake check` to validate.
+The flake itself points at the recipe with a comment. (The recipe was verified
+against the existing hash — same input, same output.)
 
 === 13–15 (P4) Minor
 
@@ -232,4 +236,5 @@ document the prefetch command.
 . ~~mkadoc check disposes plugins~~ done (7).
 . ~~Canonical plugin-set signature (key order ignored)~~ done (8).
 . Declined: 9 (pruning), 10 (error prefix), 11 (deployment purity).
+. ~~npmDepsHash recompute recipe (`just flake-hash`)~~ done (12).
 . Remaining open: CI (13), mounts (14), nits (15).

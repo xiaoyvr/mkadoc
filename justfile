@@ -17,3 +17,9 @@ build: # render site/ (no server needed; diagrams fall back to listings)
 
 serve *args: # live-reload preview; extra args forwarded (e.g. --port 9000)
     node apps/mkadoc/bin/mkadoc.js serve {{args}}
+
+flake-hash: # recompute npmDepsHash in apps/mkadoc/flake.nix after a dependency change
+    @hash=$(nix run nixpkgs#prefetch-npm-deps -- apps/mkadoc/package-lock.json 2>/dev/null | tail -1) && \
+    test -n "$hash" && \
+    sed -i "s|npmDepsHash = \"sha256-[^\"]*\"|npmDepsHash = \"$hash\"|" apps/mkadoc/flake.nix && \
+    echo "npmDepsHash updated in apps/mkadoc/flake.nix: $hash"

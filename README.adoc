@@ -67,3 +67,9 @@ fails and diagram blocks fall back to their source listing.
   works), or invoke `node apps/mkadoc/bin/mkadoc.js` directly. Requires
   `npm install` in `apps/mkadoc` first.
 * `nix flake check` at the repo root runs the mkadoc test suite and checks.
+* When you change `apps/mkadoc`'s npm dependencies (`package.json` /
+  `package-lock.json`), the flake's `npmDepsHash` goes stale and `nix build`
+  fails with a hash mismatch. Run `just flake-hash` to recompute it into
+  `apps/mkadoc/flake.nix`, then `nix flake check` to validate. (Manual form:
+  `nix run nixpkgs#prefetch-npm-deps -- apps/mkadoc/package-lock.json` and
+  paste the printed `sha256-…` into `npmDepsHash`.)

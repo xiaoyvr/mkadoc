@@ -22,6 +22,8 @@
         };
 
         version = "1.0.0";
+        # Recompute after dependency changes (package.json/package-lock.json):
+        # `just flake-hash` — the hash is the prefetch-npm-deps output for the lockfile.
         npmDepsHash = "sha256-gAwJneesYIVyJrX58bG7lgzNs8F8YgIe9IcMz5YSSZ8=";
 
         packageFileset = lib.fileset.unions [
