@@ -1,0 +1,205 @@
+= Architecture review — 2025-09-01
+
+Review of the whole monorepo (core `apps/mkadoc`, `apps/mkadoc-plugin-host`,
+`apps/mkadoc-plugin-kroki`, root flake / site config). All 141 tests pass at
+review time.
+
+Verdict: solid. The plugin DI container + session-scoped registry and the
+incremental-build model are genuinely well-designed. Findings below are mostly
+perf, convergence, and small correctness-under-evolution items — nothing
+blocking.
+
+== Scope reviewed
+
+* `apps/mkadoc/src` — CLI, config, build/serve orchestration, plugin host +
+  loader + registry + installer, incremental-mode decision, dep graph, and the
+  five builtin plugins (topbar, nav, shiki, asciidoc, markdown).
+* `apps/mkadoc-plugin-host` — contract (JSDoc types) + test host.
+* `apps/mkadoc-plugin-kroki` — reference external plugin.
+* `apps/mkadoc/flake.nix`, root `flake.nix`, `justfile`, `mkadoc.yaml`.
+
+== Strengths
+
+* **Session discipline.** All cross-build state (registry memoization, nav
+  classifier state, plugin disposal bookkeeping, `site-root` redirect) lives in
+  one explicit `session` object threaded through `createHosts` — no
+  module-global mutable state, easy to reason about under `serve`.
+* **Session-scoped dependency registry.** Providers run at most once per
+  session while `key` is unchanged (shiki's highlighter builds once per serve
+  session); generation-based pruning releases removed providers via
+  `onRelease`; a reentrancy guard catches concurrent builds.
+* **Security as first-class.** `include::` containment (never reads outside the
+  project root), asset-path escape validation, plugin core-module whitelist,
+  `ignoreScripts`/`omit:dev` in plugin installs, `.strict()` zod schemas, and
+  the deliberate *no HTML rewriting* rule (`chrome-design.adoc` documents why).
+* **Deterministic output.** `writeIfChanged`/`copyFileIfChanged` everywhere —
+  no mtime churn, stable sorted output.
+* **Error ergonomics.** zod-formatted config errors, `mkadoc:`-prefixed user
+  errors, load errors listing *every* missing dependency at once.
+* **Incremental model.** Mode decision (full/incremental/assets/noop) × dep
+  graph × site-wide deps × classifiers × assets-only passes; nav's
+  label-staleness classifier is a subtle, well-handled case.
+* **Documentation.** `plugins.adoc` is a genuine extension guide with a
+  lifecycle timeline; code comments explain *why*.
+* **Testing.** 25 files / 141 tests / ~6s, covering external plugins, serve
+  smoke tests, and client-JS DOM stubs.
+
+== Findings
+
+Status legend: _open_ — _fixed_ — _won't fix_.
+
+|===
+| # | Sev | Area | Finding | Status |
+
+| 1 | P1 | perf | External plugins re-packed on every build / serve rebuild | open |
+| 2 | P2 | perf | Source tree walked 4–5× per build | open |
+| 3 | P2 | design | Plugin value-sharing converged on DI: service pair + `requires` removed | fixed |
+| 4 | P2 | maint | `builtins/nav.js` is a 674-line monolith | open |
+| 5 | P3 | correctness | Session discipline incomplete: module-global `pageMeta` cache + Asciidoctor global `SyntaxHighlighter.register` | open |
+| 6 | P3 | behavior | `serve` ignores `serve.port`/`serve.remote` edits while running | open |
+| 7 | P3 | lifecycle | `mkadoc check` never disposes plugins | open |
+| 8 | P3 | behavior | `pluginSignature` uses `JSON.stringify` — key order triggers spurious plugin reload | open |
+| 9 | P3 | behavior | Output pruning handles only `.html`; deleted assets accumulate | open |
+| 10 | P3 | robustness | Error classification by `mkadoc:` message prefix | open |
+| 11 | P3 | deployment | `mkadoc build` in CI needs network + mutates `.mkadoc/` (external plugin install) | open |
+| 12 | P3 | tooling | Hardcoded `npmDepsHash` in `apps/mkadoc/flake.nix` | open |
+| 13 | P4 | tooling | No CI configuration in the repo | open |
+| 14 | P4 | design | Mounts derived verbatim from source paths (deep URLs) | open |
+| 15 | P4 | nits | SSE no heartbeat; installer `.tmp` crash leftovers; `test/**/*.test.js` shell glob | open |
+|===
+
+=== 1 (P1) External plugins re-packed on every build
+
+`build()` calls `loadPlugins` on *every* build (including each serve rebuild).
+For `file:`/`directory` locators, `installLocalPlugin` unconditionally runs
+`packPlugin` (`libnpmpack` packs the whole plugin source and writes a tarball
+to `.mkadoc/plugins/.tmp`) before the sha512 marker decides whether to
+reinstall. The marker avoids reinstall/extract/deps, but **not the pack** — so
+every file save under `serve` re-packs the configured external plugin's source
+tree.
+
+*Fix:* short-circuit on a cheap source stat (mtime/size snapshot of the
+manifest + entry files) before packing, or cache install state on the session.
+
+=== 2 (P2) Source tree walked 4–5× per build
+
+`listSourcePages` (full directory walks) runs in `decide-mode` (incremental
+only), `buildPages`, `deps.retainPages`, `writeSiteIndex`, and
+`pruneStaleHtml`; the `buildPages` and `retainPages` inputs are identical.
+
+*Fix:* compute the page list once in `build()` and thread it through.
+
+=== 3 (P2) Three coexisting plugin value-sharing mechanisms — FIXED
+
+The service pair (`provideService`/`getService`) and the legacy
+`requires` array on direct-object plugins were **removed entirely**. What
+happened:
+
+* `site-root` (nav's choice of where `/` redirects — genuinely build-time,
+  derived from current `_nav.adoc` content) is now a **core-provided command
+  capability**: the session seeds it via `registry.provideCore('site-root',
+  () => (href) => { session.build.siteRoot = href ?? null })`. The injected
+  value is a function, not a holder — stable per session (memoized once),
+  only its argument changes per build. `mkadoc:nav` declares
+  `host.plugin(['site-root'], (setSiteRoot) => …)` and calls it at chrome
+  time with its first nav entry's href; `build.js` resets the slot before
+  each chrome pass (a plugin removed from config cannot leave a stale
+  redirect); `serve`'s dev server reads it per request. Core capabilities
+  are a new registry source kind (`core-cap`): never pruned, not shadowable,
+  resolvable as DI deps but **not** importable via `host.import`.
+* The plugin factory contract now **requires** a `host.plugin(deps, create)`
+  declaration — returning a plugin object directly is no longer accepted.
+* `provideService`/`getService` removed from `host.js`, the
+  `@mkadoc/plugin-host` contract (`contract.js`, `test-host.js`), and
+  `plugins.adoc`; the loader's `requires` verification is gone.
+* The `session.build.rootRedirect` dead slot (created but never written) is
+  replaced by the real `siteRoot` slot.
+
+One model remains: capabilities via `host.provide` (plugins) / `provideCore`
+(core) + deps injected into plugin bodies — the runtime service lookup is
+gone entirely.
+
+=== 4 (P2) `builtins/nav.js` is a 674-line monolith
+
+Contains the source bar, article sidebar, `_nav.adoc` fragment rendering,
+`_nav.yaml` parsing/validation, the auto-nav tree builder, session classifier
+state, the CSS bundle, and `check`.
+
+*Fix:* split into `nav/model.js` (auto-nav + yaml), `nav/html.js`,
+`nav/state.js`.
+
+=== 5 (P3) Session discipline incomplete
+
+Two module-global leaks:
+
+* `meta-cache.js` — module-level `Map`, cleared per build. Correct today, but
+  the one piece of mutable module state; breaks a future concurrent-build story
+  in one process. Move into the session.
+* `asciidoc.js` — `SyntaxHighlighter.register(...)` mutates Asciidoctor's
+  *global* registry, re-registering a new class per build ("builds are
+  sequential"). A hidden cross-build coupling the session can't contain.
+  Document as a hard sequential constraint or use a fresh registry per build.
+
+=== 6 (P3) `serve` ignores `serve.port`/`serve.remote` config edits
+
+`serve.js` destructures `resolveServeListen(current.serve)` once at startup;
+`syncInfrastructure` only resets watchers/dev-server on `sources`/`output`
+change. Editing `serve:` under a running server silently does nothing.
+
+*Fix:* rebind `host`/`port` on infra reset, or warn that a restart is needed.
+
+=== 7 (P3) `mkadoc check` never disposes plugins
+
+`check.js` loads plugins but never calls `plugins.dispose()`. Harmless today
+(kroki's `check` is a fetch), but every command should honor the lifecycle.
+
+=== 8 (P3) `pluginSignature` is `JSON.stringify(cfg.plugins)`
+
+Key order matters — reordering `plugins:` keys under serve triggers a spurious
+full dispose + reload of the plugin set. Normalize (sorted keys) before hashing.
+
+=== 9 (P3) Output pruning only handles `.html`
+
+Deleted `_assets/` files, images, and renderer-reported assets accumulate in
+`output/` across incremental builds. `publish` (clean) covers deployments;
+either track the copied-asset manifest or document the behavior.
+
+=== 10 (P3) Error classification by message prefix
+
+`errors.js` treats `mkadoc:`-prefixed messages as user errors, everything else
+as stack traces. A library error that happens to start with `mkadoc:` (or a
+future missing prefix) misclassifies. Use custom error classes.
+
+=== 11 (P3) Deployment purity
+
+External plugins are installed at *build time* into the gitignored
+`.mkadoc/plugins/` — a fresh-checkout `build` runs arborist reify (network
+fetch) and writes the cache. `mkadoc build` is not hermetic and CI can't share
+the cache. Also a heavy runtime footprint (`arborist`/`pacote`/`libnpmpack`/
+`npm-package-arg`) for a docs tool, needed only when external plugins are
+configured.
+
+=== 12 (P3) Hardcoded `npmDepsHash`
+
+Any npm dependency bump requires manually updating `npmDepsHash` in
+`apps/mkadoc/flake.nix`. Use `pkgs.fetchNpmDeps` with a committed derivation or
+document the prefetch command.
+
+=== 13–15 (P4) Minor
+
+* No CI workflow despite 141 tests + full nix `checks`.
+* Mounts derive verbatim from source paths (this site lives at
+  `/apps/mkadoc/docs/...`); a configurable `mount:` option would remove the
+  `linkPrefix` special-casing.
+* Dev-server SSE has no heartbeat; `installLocalPlugin`'s `.tmp` staging can
+  leave strays on crash; `npm test` uses a bash-only `test/**/*.test.js` glob.
+
+== Recommended priority order
+
+. Skip re-packing unchanged external plugins (1).
+. Compute the page list once per build (2).
+. ~~Converge the plugin-authoring model on DI~~ done — service pair + `requires` removed (3).
+. Split `nav.js` (4).
+. Session-ize `pageMeta` + constrain the Asciidoctor global (5).
+. Small fixes: serve port reload (6), check disposal (7), sorted plugin
+  signature (8), CI (13).

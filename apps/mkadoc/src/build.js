@@ -57,11 +57,12 @@ export async function build(cfg, opts = {}) {
   }
 
   fs.mkdirSync(path.join(cfg.root, cfg.output), { recursive: true })
+  // Per-build chrome state: plugins may publish build-time values (nav sets
+  // `site-root` — where `/` redirects — via the core-provided command
+  // capability) during the chrome pass. Clear it before the pass so a plugin
+  // removed from config doesn't leave a stale value behind.
+  session.build.siteRoot = null
   await plugins.contributeChrome({ mode, pages, paths: touched })
-  // Nav-owned home: whichever plugin provides `site-root` decides where / goes.
-  // Carried on the session (not the config object) — serve reads it after
-  // each build; the config stays a pure description of the project.
-  session.rootRedirect = () => pluginHost.getService('site-root')?.href ?? null
   writeThemeCss(cfg.root, cfg.output, cfg.sources)
   copyFirstSourceAssets(cfg)
 

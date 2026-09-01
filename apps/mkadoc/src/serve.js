@@ -129,7 +129,7 @@ export async function serve(cfg, opts = {}) {
       host,
       port,
       open: opts.open ?? false,
-      rootRedirect: () => session.rootRedirect?.() ?? null,
+      rootRedirect: () => session.build.siteRoot ?? null,
     })
 
     infraFor = {

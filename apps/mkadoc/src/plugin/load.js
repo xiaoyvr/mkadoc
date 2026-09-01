@@ -65,10 +65,9 @@ async function resolveFactory(locator, host) {
 }
 
 /**
- * Run one factory and append its plugin (or declaration) to `loaded` in
- * config order. DI factories return a `host.plugin(...)` declaration; legacy
- * factories return a plugin object directly — both are supported so existing
- * external plugins keep working unchanged.
+ * Run one factory and append its `host.plugin(...)` declaration to `loaded`
+ * in config order. Factories must return a declaration — plugin objects are
+ * created later, in config order, after every dependency resolves.
  *
  * @typedef {{ owner: string, deps: { name: string, optional: boolean }[], create: (deps: unknown[]) => import('@mkadoc/plugin-host').MkadocPlugin | Promise<import('@mkadoc/plugin-host').MkadocPlugin> }} PluginDeclaration
  *
@@ -82,18 +81,12 @@ async function constructPlugin(locator, factory, options, host, acc) {
   host.setOwner(locator)
   const result = await factory(options, host)
   const declaration = result?.[DECLARATION]
-  if (declaration) {
-    acc.declarations.push(declaration)
-    return
+  if (!declaration) {
+    throw new Error(
+      `mkadoc: plugin "${locator}" must return a host.plugin(deps, create) declaration (got ${typeof result})`,
+    )
   }
-  if (result && typeof result === 'object' && !Array.isArray(result)) {
-    result.locator = locator
-    acc.loaded.push({ locator, plugin: result })
-    return
-  }
-  throw new Error(
-    `mkadoc: plugin "${locator}" must return a plugin object or a host.plugin(deps, create) declaration (got ${typeof result})`,
-  )
+  acc.declarations.push(declaration)
 }
 
 /**
@@ -252,30 +245,8 @@ async function loadPluginsInner(pluginsConfig, host) {
   }
 
   // The registry is complete — every provider has run in config order. From
-  // here on `getService` is resolvable and the load-time phase gate is open.
+  // here on the load-time phase gate is open.
   host.setPhase('ready')
-
-  // Legacy hard service dependencies (runtime `provideService` values): fail
-  // fast (and list every missing one) so a misconfigured plugin set is a loud
-  // error, not a silent degradation. DI plugins declare deps instead and are
-  // covered by the resolution check above.
-  const missing = []
-  for (const { locator, plugin } of loaded) {
-    const requires = plugin.requires
-    if (requires != null && !Array.isArray(requires)) {
-      throw new Error(
-        `mkadoc: ${locator}: \`requires\` must be an array of service names (got ${typeof requires})`,
-      )
-    }
-    for (const name of requires ?? []) {
-      if (host.getService(name) === undefined) {
-        missing.push(`  - ${locator} requires service "${name}", which no loaded plugin provides`)
-      }
-    }
-  }
-  if (missing.length) {
-    throw new Error(`mkadoc: plugin dependency check failed:\n${missing.join('\n')}`)
-  }
 
   return createPluginRunner(loaded, host)
 }

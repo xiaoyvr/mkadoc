@@ -38,21 +38,20 @@
  *   when a consumer depends on `name`. Factory-phase only (throws afterwards). `opts.key` retains
  *   the memoized value across rebuilds while unchanged (expensive construction runs once per serve
  *   session); `opts.onRelease` runs when the value is replaced or the provider leaves config.
+ *   Core seeds some capabilities of its own (`site-root` — a command function plugins call to set
+ *   where `/` redirects); they resolve exactly like plugin-provided ones and cannot be shadowed.
  * @property {(deps: string[], create: (deps: unknown[]) => MkadocPlugin | Promise<MkadocPlugin>) => MkadocPluginDeclaration} plugin declare
  *   dependencies (names from the registry; trailing `?` = optional, resolved to `undefined`) and the
  *   plugin body. The loader resolves every dependency after all plugins declare, then calls `create`
  *   with the values **positionally, in declared order**, in config order. Factory-phase only. `create`
  *   may close over the resolved values.
- * @property {(name: string, service: unknown) => void} provideService publish a *runtime* value
- *   (escape hatch only for values that cannot exist at load time, e.g. nav's `site-root`)
- * @property {(name: string) => unknown} getService resolve a runtime value; throws during plugin
- *   load/creation — only callable after all plugins finished setup. Prefer injected deps.
  * @property {(relOrAbs: string) => string} ensureDir
  * @property {(name: string) => string} cacheDir
  * @property {(p: string) => string} relToRoot
  * @property {object} [session] **core-internal** session-scoped state (builtins only; not a plugin
- *   contract surface). Slots: `registry` (DI container), `nav` (classifier state), `plugin`
- *   (disposal bookkeeping).
+ *   contract surface). Slots: `registry` (DI container incl. core capabilities), `nav` (classifier
+ *   state), `plugin` (disposal bookkeeping), `build` (per-build results — written only via the
+ *   core-provided `site-root` capability, never by plugins directly).
  * @property {(specifier: string) => Promise<Record<string, unknown>>} import resolve a module from
  *   mkadoc's core whitelist (single shared instance; factory-time needs like option parsing — e.g.
  *   `host.import('zod')`). Plugin-provided capabilities resolve via `host.plugin([...])` instead.
@@ -105,13 +104,12 @@
  * @property {string} name
  * @property {'feature' | 'renderer'} [kind] default `feature`
  * @property {string} [locator] set by the loader
- * @property {string[]} [requires] hard service dependencies — verified after every plugin finishes setup
  * @property {(host: MkadocPluginHost) => void | Promise<void>} [setup]
  * @property {(host: MkadocPluginHost, ctx: BuildContext) => void | Promise<void>} [contributeChrome]
  * @property {(host: MkadocPluginHost) => CheckResult | Promise<CheckResult>} [check]
  * @property {(host: MkadocPluginHost) => void | Promise<void>} [dispose] release resources when the plugin is unloaded (config change under serve)
  *
- * @typedef {(options?: Record<string, unknown>, host?: MkadocPluginHost) => MkadocPlugin | MkadocPluginDeclaration | Promise<MkadocPlugin | MkadocPluginDeclaration>} MkadocPluginFactory
+ * @typedef {(options?: Record<string, unknown>, host?: MkadocPluginHost) => MkadocPluginDeclaration | Promise<MkadocPluginDeclaration>} MkadocPluginFactory
  */
 
 export {}

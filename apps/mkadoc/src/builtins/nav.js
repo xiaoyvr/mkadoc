@@ -574,7 +574,10 @@ ${lists.join('\n')}
 export default function navPlugin(rawOptions = {}, host) {
   parsePluginOptions('mkadoc:nav', OptionsSchema, rawOptions)
 
-  return host.plugin([], () => ({
+  // `site-root` is a core-provided command capability: nav decides where `/`
+  // redirects and calls it at chrome time with the current first nav entry.
+  // The injected value is a function, not a holder — see plugins.adoc.
+  return host.plugin(['site-root'], (setSiteRoot) => ({
     name: 'nav',
 
     async setup(host) {
@@ -628,9 +631,9 @@ export default function navPlugin(rawOptions = {}, host) {
         await collectNavReferenced(host, source)
       }
 
-      // Nav-owned home: where `/` redirects, published as a service.
-      const first = entries[0]
-      host.provideService('site-root', { href: first?.href ?? null })
+      // Nav-owned home: where `/` redirects — via the core-provided
+      // `site-root` command. Serve reads the session slot after each build.
+      setSiteRoot(entries[0]?.href ?? null)
 
       host.contributeChromeBody(
         `<nav class="mkadoc-sources" aria-label="Sources">\n${sourcesBarHtml(entries)}\n</nav>\n${await buildArticlesHtml(host)}`,

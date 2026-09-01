@@ -23,11 +23,20 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
     classifiers: [],
     siteWideDeps: [],
     assetPrefixes: [],
-    services: new Map(),
     /** @type {Map<string, () => unknown>} DI providers (name → provider factory) */
     provides: new Map(),
     renderers: [],
+    /** Last value passed to the `site-root` command capability. */
+    siteRoot: null,
   }
+
+  // Core-provided command capability (mirrors src/plugin/registry.js
+  // provideCore seeding): plugins consume it via host.plugin(['site-root'],
+  // (setSiteRoot) => …) and call it to set where `/` redirects. Recorded so
+  // tests can assert what was set.
+  state.provides.set('site-root', () => (href) => {
+    state.siteRoot = href ?? null
+  })
 
   function ensureDir(relOrAbs) {
     const abs = path.isAbsolute(relOrAbs) ? relOrAbs : path.join(root, relOrAbs)
@@ -87,18 +96,11 @@ export function createTestHost({ config = {}, imports = {}, root = process.cwd()
     session: {
       nav: { referenced: new Set(), labels: new Map() },
       plugin: { signature: null, dispose: null },
+      build: { siteRoot: null },
     },
 
     async plugin(deps, create) {
       return create(...(await resolveDeps(deps)))
-    },
-
-    provideService(name, service) {
-      state.services.set(name, service)
-    },
-
-    getService(name) {
-      return state.services.get(name)
     },
 
     contributeHead({ links = [], scripts = [] } = {}) {

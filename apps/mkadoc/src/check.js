@@ -14,7 +14,7 @@ export async function check(cfg) {
   try {
     plugins = await loadPlugins(cfg.plugins, pluginHost)
   } catch (err) {
-    // e.g. a missing `requires` service or a plugin option error — source
+    // e.g. a plugin option error or an unresolved dependency — source
     // checks below still run, but per-plugin checks cannot.
     console.error(`mkadoc check: ${err?.message || err}`)
     failed = true

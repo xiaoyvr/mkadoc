@@ -123,25 +123,32 @@ return host.plugin(['syntax-highlight?'], (syntaxHighlight) => ({
   `syntax-highlight` ✓, `shiki` ✗. Well-known names are listed in
   xref:plugins.adoc[this guide]; check it before picking a name.
 
-=== Runtime services (escape hatch)
+=== Core-provided capabilities
 
-Some values cannot exist at load time — they are derived *during* the build.
-`mkadoc:nav` publishes `site-root` at chrome time (from the first `_nav.adoc`
-link). For those, the legacy runtime pair remains:
+Core seeds the registry with capabilities of its own, resolvable exactly like
+plugin-provided ones (`host.plugin(['name'], ...)`); they are core-owned and
+cannot be shadowed by a plugin's `provide`.
 
-[source,js]
-----
-// provider (at chrome time)
-host.provideService('site-root', { href: first?.href ?? null })
+* `site-root` — a **command**, not a holder: the injected value is a function
+  `(href: string | null) => void` that sets where the site's `/` redirects.
+  Call it at chrome time, when the value is actually known — `mkadoc:nav`
+  passes its first nav entry's href (or `null` to disable the redirect). Core
+  resets the value before each chrome pass, so a plugin removed from config
+  cannot leave a stale redirect.
 
-// consumer (core's dev server, after chrome)
-const root = host.getService('site-root')  // only callable after setup — never during load
-----
+  [source,js]
+  ----
+  return host.plugin(['site-root'], (setSiteRoot) => ({
+    name: 'my',
+    async contributeChrome(host) {
+      // decide where `/` should point…
+      setSiteRoot(myHrefOrNull)
+    },
+  }))
+  ----
 
-`getService` throws during plugin load/creation — the registry is incomplete
-until every plugin finished setup. Prefer injected deps for anything that is
-knowable at load time; keep `provideService`/`getService` for build-time
-values only.
+Unlike the module whitelist, core capabilities are **not** importable via
+`host.import` — they resolve only as DI dependencies.
 
 == What you cannot extend (core-owned)
 
@@ -158,9 +165,7 @@ Export a factory: `(options, host) => declaration` (may be async).
 Validate `options` in the factory (Zod + `parsePluginOptions`). Reject unknown keys.
 Declare capabilities with `host.provide` and dependencies with `host.plugin`.
 The factory returns whatever `host.plugin(deps, create)` returns; the loader
-calls `create` with the resolved values and gets your plugin. (A legacy plugin
-may still return the plugin object directly; `requires`/`provideService` are
-honored for those.)
+calls `create` with the resolved values and gets your plugin.
 
 Return:
 
@@ -169,8 +174,7 @@ Return:
 | Field | Purpose
 
 | `name` | Short id (e.g. `nav`)
-| `requires` | Optional `string[]` of *runtime* service names this plugin hard-depends on (legacy; verified after load). Load-time capabilities are declared as deps in `host.plugin([...])` instead.
-| `setup(host)` | Optional. Runs once after the plugin is created, **before** rebuild mode is decided. Register extensions, classifiers, asset prefixes here. `getService` is **not** available yet — it throws.
+| `setup(host)` | Optional. Runs once after the plugin is created, **before** rebuild mode is decided. Register extensions, classifiers, asset prefixes here.
 | `contributeChrome(host, ctx)` | Optional. Runs each build after mode is known (not called for `noop`). Emit CSS/JS/HTML. `ctx`: `{ mode, pages, paths }` (`mode` is `full` \| `incremental` \| `assets`).
 | `check(host)` | Optional. Used by `mkadoc check` only. Keep it cheap.
 | `dispose(host)` | Optional. Called when the plugin is unloaded — currently when the `plugins` config changes under `serve`. Release module-level resources (e.g. shiki's highlighter).
@@ -178,10 +182,10 @@ Return:
 
 Lifecycle order that matters to you:
 
-. Your factory runs — options validated, `host.provide` + `host.plugin` declarations collected. `getService` is **not** available.
+. Your factory runs — options validated, `host.provide` + `host.plugin` declarations collected.
 . All factories have run — the container resolves every declared dependency (coverage check, then provider factories), then calls each `create(...)` in config order. Injected values are plain closure variables from here on.
-. `setup(host)` — classifiers / prefixes must be registered here to affect this build's mode. Still no `getService`; legacy `requires` + `provideService` work here.
-. All plugins have loaded — `getService` becomes resolvable, `requires` is verified.
+. `setup(host)` — classifiers / prefixes must be registered here to affect this build's mode.
+. All plugins have loaded — every dependency resolved, every `create` returned a plugin.
 . Core decides `full` / `incremental` / `assets` / `noop`.
 . `contributeChrome(host, ctx)` — skipped entirely for `noop`; skip heavy work when `ctx.mode === 'assets'` if you only care about HTML chrome.
 . Pages convert (renderers apply their own defaults — e.g. `icons: font` — plus any per-call options like `linkPrefix`).

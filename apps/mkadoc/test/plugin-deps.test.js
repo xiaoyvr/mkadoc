@@ -127,67 +127,6 @@ const DI_GARBAGE = pluginFiles(
 `,
 )
 
-// --- legacy fixtures: plain plugin objects, setup-time provideService, requires
-
-const LEGACY_PROVIDER = pluginFiles(
-  'legacy-provider',
-  `export default function legacyProviderPlugin() {
-  return {
-    name: 'legacy-provider',
-    async setup(host) {
-      host.provideService('legacy-cap', { ok: true })
-    },
-  }
-}
-`,
-)
-
-const LEGACY_CONSUMER = pluginFiles(
-  'legacy-consumer',
-  `export default function legacyConsumerPlugin() {
-  return {
-    name: 'legacy-consumer',
-    requires: ['legacy-cap'],
-  }
-}
-`,
-)
-
-const LOADTIME_READER = pluginFiles(
-  'loadtime-reader',
-  `export default function loadtimeReaderPlugin() {
-  return {
-    name: 'loadtime-reader',
-    async setup(host) {
-      host.getService('my-cap')
-    },
-  }
-}
-`,
-)
-
-const NEEDS_MISSING = pluginFiles(
-  'needs-missing',
-  `export default function needsMissingPlugin() {
-  return {
-    name: 'needs-missing',
-    requires: ['no-such-service'],
-  }
-}
-`,
-)
-
-const BAD_REQUIRES = pluginFiles(
-  'bad-requires',
-  `export default function badRequiresPlugin() {
-  return {
-    name: 'bad-requires',
-    requires: 'my-cap',
-  }
-}
-`,
-)
-
 const SESSION_COUNTED = pluginFiles(
   'session-counted',
   `import fs from 'node:fs'
@@ -214,9 +153,9 @@ export default function sessionCountedPlugin(rawOptions = {}, host) {
 
 const DISPOSABLE = pluginFiles(
   'disposable',
-  `export default function disposablePlugin() {
+  `export default function disposablePlugin(rawOptions = {}, host) {
   let disposed = false
-  return {
+  return host.plugin([], () => ({
     name: 'disposable',
     async dispose() {
       disposed = true
@@ -224,7 +163,7 @@ const DISPOSABLE = pluginFiles(
     get wasDisposed() {
       return disposed
     },
-  }
+  }))
 }
 `,
 )
@@ -343,7 +282,7 @@ describe('plugin DI lifecycle', () => {
       const { plugin: host } = createHosts(cfg(root))
       await assert.rejects(
         () => loadPlugins({ 'file:./plugins/di-garbage': {} }, host),
-        /must return a plugin object or a host\.plugin\(deps, create\) declaration/,
+        /must return a host\.plugin\(deps, create\) declaration/,
       )
     })
   })
@@ -416,77 +355,76 @@ plugins:
   })
 })
 
-describe('plugin service lifecycle (legacy runtime services)', () => {
-  it('getService during setup throws (services only resolve after load)', async () => {
-    await withTempProject(LOADTIME_READER, async (root) => {
+describe('core-provided capabilities', () => {
+  it('site-root is injectable and sets the session build slot when called', async () => {
+    const SR_SETTER = pluginFiles(
+      'sr-setter',
+      `export default function srSetterPlugin(rawOptions = {}, host) {
+        return host.plugin(['site-root'], (setSiteRoot) => ({
+          name: 'sr-setter',
+          async setup() {
+            setSiteRoot('/docs/index.html')
+          },
+        }))
+      }
+      `,
+    )
+    await withTempProject(SR_SETTER, async (root) => {
+      const session = createSession()
+      const { plugin: host } = createHosts(cfg(root), { session })
+      const runner = await loadPlugins({ 'file:./plugins/sr-setter': {} }, host)
+      assert.equal(session.build.siteRoot, '/docs/index.html')
+      assert.equal(
+        runner.list.find((e) => e.locator === 'file:./plugins/sr-setter').plugin.name,
+        'sr-setter',
+      )
+    })
+  })
+
+  it('site-root cannot be shadowed by a plugin provide', async () => {
+    const SHADOW = pluginFiles(
+      'shadow-site-root',
+      `export default function shadowSiteRootPlugin(rawOptions = {}, host) {
+        host.provide('site-root', () => () => {})
+        return host.plugin([], () => ({ name: 'shadow-site-root' }))
+      }
+      `,
+    )
+    await withTempProject(SHADOW, async (root) => {
       const { plugin: host } = createHosts(cfg(root))
       await assert.rejects(
-        () => loadPlugins({ 'file:./plugins/loadtime-reader': {} }, host),
-        /getService\('my-cap'\) during plugin/,
+        () => loadPlugins({ 'file:./plugins/shadow-site-root': {} }, host),
+        /tries to provide "site-root" but it is reserved by mkadoc core/,
       )
     })
   })
+})
 
-  it('runtime services resolve after load, regardless of config order', async () => {
-    await withTempProject({ ...LEGACY_PROVIDER, ...LEGACY_CONSUMER }, async (root) => {
+describe('plugin dispose lifecycle', () => {
+  it('dispose runs plugin hooks in reverse load order', async () => {
+    await withTempProject(DISPOSABLE, async (root) => {
       const { plugin: host } = createHosts(cfg(root))
-      const runner = await loadPlugins(
-        { 'file:./plugins/legacy-consumer': {}, 'file:./plugins/legacy-provider': {} },
-        host,
-      )
-      assert.deepEqual(host.getService('legacy-cap'), { ok: true })
-      assert.equal(runner.list.length, 4)
-    })
-  })
-
-  it('requires a missing service → loadPlugins rejects with the locator', async () => {
-    await withTempProject(NEEDS_MISSING, async (root) => {
-      const { plugin: host } = createHosts(cfg(root))
-      await assert.rejects(
-        () => loadPlugins({ 'file:./plugins/needs-missing': {} }, host),
-        /needs-missing requires service "no-such-service"/,
-      )
-    })
-  })
-
-  it('rejects a non-array requires', async () => {
-    await withTempProject(BAD_REQUIRES, async (root) => {
-      const { plugin: host } = createHosts(cfg(root))
-      await assert.rejects(
-        () => loadPlugins({ 'file:./plugins/bad-requires': {} }, host),
-        /bad-requires: `requires` must be an array of service names \(got string\)/,
-      )
-    })
-  })
-
-  it('dispose runs plugin hooks and disables further service reads', async () => {
-    await withTempProject({ ...LEGACY_PROVIDER, ...DISPOSABLE }, async (root) => {
-      const { plugin: host } = createHosts(cfg(root))
-      const runner = await loadPlugins(
-        { 'file:./plugins/legacy-provider': {}, 'file:./plugins/disposable': {} },
-        host,
-      )
+      const runner = await loadPlugins({ 'file:./plugins/disposable': {} }, host)
 
       const disposable = runner.list.find((e) => e.locator === 'file:./plugins/disposable')
       assert.equal(disposable.plugin.wasDisposed, false)
 
       await runner.dispose()
       assert.equal(disposable.plugin.wasDisposed, true)
-      assert.throws(() => host.getService('legacy-cap'), /after plugins were disposed/)
     })
   })
 
   it('build disposes the previous plugin set when the plugins config changes', async () => {
     const buildDisposable = pluginFiles(
       'disposable',
-      `export default function disposablePlugin() {
-        return {
+      `export default function disposablePlugin(rawOptions = {}, host) {
+        return host.plugin([], () => ({
           name: 'disposable',
           async dispose() {
             const fs = await import('node:fs')
             fs.writeFileSync(new URL('./disposed.txt', import.meta.url), 'disposed')
           },
-        }
+        }))
       }
       `,
     )

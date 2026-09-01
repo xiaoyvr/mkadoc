@@ -9,12 +9,12 @@ import { createRegistry } from './plugin/registry.js'
  * own session.
  *
  * Owned slots:
- * - `registry` — the dependency registry (core module whitelist + plugin
- *   capabilities + memoized resolution). Providers may declare a `key`; the
- *   registry retains a memoized value across rebuilds while the key is
- *   unchanged (e.g. shiki's highlighter) and releases it on key change or
- *   removal from config. `beginLoad`/`endLoad` guard against re-entrant
- *   builds in one session.
+ * - `registry` — the dependency registry (core module whitelist + core
+ *   capabilities + plugin capabilities + memoized resolution). Providers may
+ *   declare a `key`; the registry retains a memoized value across rebuilds
+ *   while the key is unchanged (e.g. shiki's highlighter) and releases it on
+ *   key change or removal from config. `beginLoad`/`endLoad` guard against
+ *   re-entrant builds in one session.
  * - `nav` — mkadoc:nav's classifier state: repo-relative pages whose label
  *   feeds the nav, and their last resolved labels. Warmed by each chrome
  *   pass, read by the next rebuild's classifier (nav-label detection without
@@ -23,18 +23,20 @@ import { createRegistry } from './plugin/registry.js'
  *   load's plugin signature + dispose handle, so a changed `plugins` config
  *   disposes the old set before the new one loads.
  * - `build` — the latest build's runtime results that must outlive the
- *   per-build host (e.g. `rootRedirect`, nav's choice of where `/` points),
- *   read by serve when the dev server handles a request.
+ *   per-build host (e.g. `siteRoot`, where `/` redirects), read by serve
+ *   when the dev server handles a request. Written by the core-provided
+ *   `site-root` capability (a command plugins call — see `provideCore`),
+ *   never by plugins reaching into the session directly.
  *
  * @returns {{
  *   registry: ReturnType<typeof createRegistry>,
  *   nav: { referenced: Set<string>, labels: Map<string, string> },
  *   plugin: { signature: string | null, dispose: (() => Promise<void>) | null },
- *   build: { rootRedirect: (() => string | null) | null },
+ *   build: { siteRoot: string | null },
  * }}
  */
 export function createSession() {
-  return {
+  const session = {
     registry: createRegistry(),
     nav: {
       referenced: new Set(),
@@ -45,7 +47,18 @@ export function createSession() {
       dispose: null,
     },
     build: {
-      rootRedirect: null,
+      siteRoot: null,
     },
   }
+
+  // Core-provided command capability: `site-root` lets plugins set where `/`
+  // redirects (mkadoc:nav calls it at chrome time with its first nav entry's
+  // href, or null to disable). The injected value is a **function**, not a
+  // holder — stable per session (memoized once), only its argument changes
+  // per build. Resolved like any DI dep: host.plugin(['site-root'], (set) => …).
+  session.registry.provideCore('site-root', () => (href) => {
+    session.build.siteRoot = href ?? null
+  })
+
+  return session
 }

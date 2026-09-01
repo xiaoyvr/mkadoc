@@ -30,7 +30,7 @@ export function normalizeDeps(deps) {
  * Shared mutable state behind the plugin and build hosts.
  * Core is renderer-agnostic: it holds no markup-specific concepts — renderers
  * own their conversion state; feature plugins share capabilities via the
- * dependency registry (load-time values) and services (runtime values).
+ * dependency registry (load-time values injected into plugin bodies).
  * @param {import('../config.js').MkadocConfig} cfg
  * @param {ReturnType<typeof createSession>} session
  */
@@ -42,11 +42,10 @@ function createHostState(cfg, deps, session) {
     session,
     /**
      * Plugin lifecycle phase. Gates the DI surface:
-     * - `loading` — factories run; `provide`/`plugin` are callable,
-     *   `getService` throws (registry/services incomplete)
+     * - `loading` — factories run; `provide`/`plugin` are callable
      * - `resolving` — declarations collected; `provide`/`plugin` throw (too
-     *   late — the graph is fixed), `getService` still throws
-     * - `ready` — all plugins created + set up; `getService` resolvable
+     *   late — the graph is fixed)
+     * - `ready` — all plugins created + set up
      * - `disposed` — everything throws
      */
     phase: 'loading',
@@ -62,8 +61,6 @@ function createHostState(cfg, deps, session) {
     assetPrefixes: [],
     /** @type {string[]} */
     chromeBody: [],
-    /** @type {Map<string, unknown>} runtime services (provideService/getService) */
-    services: new Map(),
     /** @type {import('@mkadoc/plugin-host').MkadocRenderer[]} */
     renderers: [],
   }
@@ -184,47 +181,6 @@ function createPluginHost(state) {
      */
     get session() {
       return state.session
-    },
-
-    /**
-     * Resolve a capability registered by another plugin at runtime.
-     *
-     * Runtime escape hatch: only for values that do not exist at load time
-     * (e.g. `mkadoc:nav` publishes `site-root` at chrome time, derived from
-     * build output). Load-time-stable capabilities should be injected via
-     * `host.plugin(['name'], ...)` instead.
-     *
-     * Only callable after every plugin finished setup — during load the
-     * registry is incomplete (providers run in config order), so a lookup
-     * could only ever be order-dependent or miss a provider that hasn't run
-     * yet. The loader flips the phase to `ready` before returning the runner;
-     * `dispose` flips it to `disposed`.
-     * @param {string} name
-     * @returns {unknown}
-     */
-    getService(name) {
-      if (state.phase === 'loading' || state.phase === 'resolving') {
-        throw new Error(
-          `mkadoc: getService('${name}') during plugin ${state.phase === 'resolving' ? 'creation' : 'load'} — services are only resolvable after every plugin finished setup. Inject the value instead: host.plugin(['${name}'], (value) => ...), or defer the lookup to render time / contributeChrome / check.`,
-        )
-      }
-      if (state.phase === 'disposed') {
-        throw new Error(
-          `mkadoc: getService('${name}') after plugins were disposed — services are no longer available`,
-        )
-      }
-      return state.services.get(name)
-    },
-
-    /**
-     * Publish a runtime value (see `getService`). Unlike `provide`, this is
-     * not part of the dependency graph — use it only for values that cannot
-     * exist at load time.
-     * @param {string} name
-     * @param {unknown} service
-     */
-    provideService(name, service) {
-      state.services.set(name, service)
     },
 
     /**

@@ -21,7 +21,7 @@ const FIXTURE_PLUGIN = {
     2,
   ),
   'plugins/my-plugin/index.js': `export default function myPlugin(rawOptions = {}, host) {
-  return {
+  return host.plugin([], () => ({
     name: 'my',
     async contributeChrome(host, { mode }) {
       if (mode === 'assets') return
@@ -30,7 +30,7 @@ const FIXTURE_PLUGIN = {
     async check() {
       return { ok: true, message: 'my ok' }
     },
-  }
+  }))
 }
 `,
 }

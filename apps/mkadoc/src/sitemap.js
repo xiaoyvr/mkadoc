@@ -7,8 +7,8 @@ import { listSourcePages, pageToHref } from './sources.js'
 
 /**
  * Core default home: generate `<output>/index.html` as a site map — every
- * page grouped by source. Nav (via `site-root`) redirects `/` away from this
- * when enabled; without nav, `/` serves this page.
+ * page grouped by source. Nav redirects `/` away from this when enabled;
+ * without nav, `/` serves this page.
  *
  * @param {import('./config.js').MkadocConfig} cfg
  * @param {import('@mkadoc/plugin-host').MkadocBuildHost} host
